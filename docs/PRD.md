@@ -1,2070 +1,492 @@
-MANAGEX
-Product Requirements Document (PRD)
-Multi-Tenant Modular Organisation Management SaaS Platform
-Document version: 1.0
+ManageX — Product Requirements Document (Canonical, Prompt-Pack-Aligned)
+Document ID: MX-PRD-001
+Version: 1.1
+Date: 16 October 2026
+Status: Canonical implementation baseline for Phase 0 review
 Product name: ManageX
-Document status: Initial implementation specification
-Product type: Multi-tenant B2B SaaS web application
-Primary UI direction: Clean Enterprise
-Primary theme: Light
-Initial modules: Events & Hackathons, Meetings, Projects & Tasks
-Target implementation: End-to-end production-oriented application
-Primary backend: Node.js + Express.js
-Primary database: PostgreSQL
-Frontend: React + TypeScript
-Architecture: Modular monolith with shared-database multi-tenancy, configurable RBAC, and PostgreSQL Row-Level Security (RLS)
-________________________________________
-1. Purpose of This Document
-This PRD is the single product-level source of truth for building ManageX.
-An AI coding assistant or development team must use this document to understand:
-•	What ManageX is and what problem it solves.
-•	Who will use the product.
-•	How platform, organisation and module-level access control works.
-•	How the user interface and user experience should look and behave.
-•	How the initial three modules work.
-•	How organisations, memberships, roles, permissions, modules and subscriptions relate to one another.
-•	How multi-tenancy and database isolation must be enforced.
-•	How APIs, validation, database migrations, testing and deployment are organised.
-•	Which features belong to the MVP and which must wait until later.
-•	How to implement the product through controlled, testable phases.
-The implementation must follow this document instead of independently inventing product behaviour, access rules, UI conventions or database structures.
-If a requirement is ambiguous, the coding assistant must document the ambiguity, inspect the existing implementation and choose the safest option consistent with this PRD. It must not silently weaken security or introduce major architectural changes.
-If a change to the architecture becomes necessary, it must be documented with its reason, consequences and migration plan before implementation.
-2. Product Overview
-2.1 What Is ManageX?
-ManageX is a modular, multi-tenant organisation management platform.
-It enables different organisations to use a common application while keeping their users, data, resources, settings and permissions isolated from one another.
-An organisation can activate the modules it needs and manage them through a unified workspace.
-The initial product contains:
-1.	Events & Hackathons Management
-2.	Meetings Management
-3.	Projects & Tasks Management
-Additional modules, such as Employee Management and Recruitment Management, may be added after the initial version without redesigning the entire platform.
-2.2 Core Product Concept
-ManageX separates the product into three access-control levels:
-Level 1 — Platform: Controls the SaaS platform itself.
-Level 2 — Organisation: Controls a customer's organisation, its members, settings and module subscriptions or entitlements.
-Level 3 — Module: Controls what a user can do inside a particular module and, when applicable, a particular resource.
-These are distinct permission scopes. Having a role at one level must not automatically grant unrestricted access at another level.
-2.3 Example
-Suppose ManageX has these organisations:
-•	Alpha Technologies
-•	Beta Innovations
-•	Gamma Foundation
-Each organisation uses the same ManageX application.
-Alpha Technologies activates Events and Projects. Beta Innovations activates Meetings and Projects. Gamma Foundation activates all three modules.
-Alpha's administrators must not access Beta's meetings, projects or member data simply by modifying a URL or supplying another organisation's ID.
-A user may belong to multiple organisations. The interface must make the currently selected organisation clear, and all protected operations must use a verified organisation context.
-3. Product Vision
-Make organisation management simpler by providing one secure, flexible workspace in which teams can activate only the modules they need and manage their work without using unrelated, disconnected tools.
-3.1 Product Principles
-1.	Security first: Tenant isolation and server-side authorization are mandatory.
-2.	Simple UX: Users should understand where they are and what they can do.
-3.	Consistent design: All modules must follow the same design system.
-4.	Modular architecture: Modules must be independent enough to develop and evolve separately.
-5.	Least privilege: Users receive only the access necessary for their work.
-6.	Explicit configuration: Roles, permissions and module activation must be managed through defined records and policies.
-7.	Auditability: Important administrative and security-sensitive operations must be traceable.
-8.	Maintainability: Prefer understandable code and a modular monolith over unnecessary microservices.
-9.	Progressive development: Build, test and verify one implementation phase at a time.
-10.	No fake functionality: Controls must work as described, or be clearly marked unavailable.
-4. Goals and Non-Goals
-4.1 MVP Goals
-The first release must provide:
-•	A professional marketing website.
-•	Secure registration, login, logout, email verification and password recovery.
-•	Organisation creation and switching.
-•	Invitations and organisation membership management.
-•	The three-level access model.
-•	Module catalogue and module activation.
-•	Configurable role-based access control.
-•	Events and hackathon workflows.
-•	Meeting scheduling and action-item tracking.
-•	Project, task, status and assignment management.
-•	Organisation-scoped PostgreSQL data access with RLS.
-•	Platform administration.
-•	Audit logs for sensitive actions.
-•	A responsive Clean Enterprise interface.
-•	Automated tests, environment configuration and deployment documentation.
-4.2 Non-Goals for MVP
-Do not implement the following unless explicitly approved in a later version:
-•	Microservices.
-•	Kubernetes-based infrastructure.
-•	Native Android or iOS apps.
-•	Integrated live video conferencing.
-•	A complete HR/payroll platform.
-•	Full recruitment and applicant-tracking workflows.
-•	AI agents or AI-generated work summaries.
-•	Complex workflow builders.
-•	A public extension marketplace.
-•	Customer-defined arbitrary SQL or executable code.
-•	Full payment-provider integration.
-•	Enterprise single sign-on or SCIM provisioning.
-•	Real-time collaborative editing of documents.
-•	Complex cross-organisation sharing of private resources.
-The architecture should make future development possible without implementing every future feature now.
-5. Target Users and Personas
-5.1 Platform Super Admin
-Manages ManageX itself.
-Typical responsibilities:
-•	View and manage organisations.
-•	Configure the module catalogue.
-•	Manage platform-level settings.
-•	Manage platform support access.
-•	Review security and audit activity.
-•	Disable organisations or modules when authorised.
-A Super Admin must not receive an unlogged, unrestricted ability to browse private tenant data.
-5.2 Platform Support Agent
-Helps users resolve account and configuration problems.
-Typical responsibilities:
-•	Review support requests.
-•	Inspect appropriate platform and operational metadata.
-•	Guide users through account recovery.
-•	Escalate incidents to authorised administrators.
-Support access must follow least-privilege principles. Private tenant content is not accessible by default. Any later support-access mechanism must be explicit, time-limited, reason-bound and audited.
-5.3 Organisation Owner
-Owns the organisation's ManageX workspace.
-Typical responsibilities:
-•	Configure organisation ownership.
-•	Manage organisation-wide settings.
-•	Assign or delegate administration.
-•	Control membership and module administration.
-•	Transfer ownership.
-•	Request organisation closure.
-Ownership transfer and closure are high-impact actions and require explicit confirmation and appropriate reauthentication.
-5.4 Organisation Admin
-Manages day-to-day organisation administration.
-Typical responsibilities:
-•	Invite and remove members.
-•	Assign organisation and module roles within permitted limits.
-•	Activate or deactivate available modules.
-•	Manage organisation settings.
-•	Review appropriate organisation audit activity.
-An Organisation Admin cannot automatically access the platform administration console.
-5.5 Organisation Member
-Uses the workspace and activated modules according to assigned permissions.
-Examples include event organisers, meeting participants, project managers and team members.
-5.6 External Event Participant
-A registered participant may take part in an eligible public event without automatically becoming a full member of the organisation hosting that event.
-External participants must have access only to the public event information and their specifically authorised event resources.
-This is a restricted event-scoped access path. It must never grant unrestricted organisation membership or organisation-wide data access.
-6. Scope of the Three Initial Modules
-6.1 Module 1: Events & Hackathons Management
-Module key: events
-The module must support organising events and hackathons through a consistent workflow.
-Functional requirements
-EVT-001: Event creation
-An authorised user can create an event with:
-•	Title.
-•	Description.
-•	Event type: general event or hackathon.
-•	Start and end date/time.
-•	Time zone.
-•	Venue or online event URL, where applicable.
-•	Registration opening and closing times.
-•	Maximum participant count, when applicable.
-•	Event status.
-•	Organising team or responsible users.
-•	Configurable participant instructions.
-EVT-002: Event lifecycle
-Support these statuses:
-•	Draft
-•	Published
-•	Registration Closed
-•	In Progress
-•	Completed
-•	Cancelled
-•	Archived
-State transitions must be validated on the server. A status cannot be changed simply by submitting an arbitrary string.
-EVT-003: Event publishing
-Only an authorised organiser can publish an event.
-A published public event may expose explicitly designated public fields. Drafts and private events must not appear to unauthorised users.
-EVT-004: Registration
-For eligible events, authenticated users can register during the permitted registration period.
-The system must validate:
-•	Event publication and registration status.
-•	Registration opening and closing times.
-•	Capacity limits.
-•	Duplicate registrations.
-•	Participant eligibility rules when configured.
-•	Required fields and their validation.
-Registration limits must be enforced transactionally to reduce overbooking under concurrent requests.
-EVT-005: Participants
-Authorised event staff can view, search and manage participants within their permitted event scope.
-Participants must be able to view their own registration and permitted event information.
-EVT-006: Teams
-For hackathons that enable teams:
-•	Participants can create a team if permitted.
-•	Team owners can invite or add eligible participants.
-•	Team size limits are configurable.
-•	Duplicate membership must be prevented.
-•	Team membership changes must be validated.
-•	A participant must not join teams contrary to the event's rules.
-EVT-007: Submissions
-Eligible participants or teams can submit:
-•	Submission title.
-•	Description.
-•	Repository URL.
-•	Demo URL.
-•	Relevant metadata.
-For MVP, URL-based submissions are sufficient. Arbitrary file uploads are deferred until secure storage, scanning, access control and retention policies are implemented.
-The submission window must be enforced on the server.
-EVT-008: Judges and evaluation
-Event managers can assign judges to eligible events or submissions.
-Judges can access only the events and submissions they are authorised to evaluate.
-When scoring is enabled, the system supports:
-•	A configurable set of judging criteria.
-•	Scores within defined ranges.
-•	Comments or feedback.
-•	Submission and score timestamps.
-•	A controlled submission/editing period.
-EVT-009: Results
-Authorised event administrators can review evaluation results and publish results where appropriate.
-Unpublished scores must not be exposed to participants or unrelated users.
-EVT-010: Views and filters
-Provide:
-•	Event list.
-•	Event detail.
-•	Calendar or date-based view where practical.
-•	Registration list.
-•	Team list.
-•	Submission list.
-•	Judge assignment view.
-•	Evaluation/results view.
-EVT-011: Event audit
-Log security-sensitive actions such as publication, cancellation, registration administration, judge assignment and result publication.
-Event module permissions
-Examples of permission keys:
-•	event.view
-•	event.create
-•	event.update
-•	event.publish
-•	event.cancel
-•	event.archive
-•	event.manage_registrations
-•	team.manage
-•	submission.create
-•	submission.update_own
-•	submission.view_assigned
-•	judging.assign
-•	score.submit
-•	results.publish
-The actual permission catalogue must be seeded centrally and referenced by role-permission assignments.
-6.2 Module 2: Meetings Management
-Module key: meetings
-The module supports planning and documenting meetings.
-Functional requirements
-MTG-001: Meeting creation
-An authorised user can create a meeting containing:
-•	Title.
-•	Description or objective.
-•	Start and end date/time.
-•	Time zone.
-•	Location or meeting URL.
-•	Organiser.
-•	Attendees.
-•	Agenda.
-•	Visibility.
-•	Meeting status.
-MTG-002: Meeting lifecycle
-Support:
-•	Scheduled
-•	In Progress
-•	Completed
-•	Cancelled
-Expired meetings must not silently change in a way that contradicts their actual state. Any automatic transition rules must be defined and tested.
-MTG-003: Attendees
-The organiser can add or invite eligible attendees. Attendee lists must be visible only to authorised users.
-Attendees can view the meetings they are entitled to access and their own participation information.
-MTG-004: Agenda
-Meeting organisers can define an ordered agenda with optional item descriptions and time allocations.
-MTG-005: Notes and minutes
-Authorised users can save meeting notes and minutes.
-Confidential notes must not be returned to ordinary participants unless their permissions permit it.
-MTG-006: Action items
-Meetings can produce action items with:
-•	Title and description.
-•	Assigned user.
-•	Due date.
-•	Priority.
-•	Status.
-•	Optional source agenda item.
-An action item must remain scoped to its organisation and meeting.
-MTG-007: Search and calendar
-Provide:
-•	Upcoming meetings.
-•	Past meetings.
-•	Meeting detail.
-•	Agenda.
-•	Attendee list.
-•	Action-item list.
-•	Filters by date, status and organiser.
-•	Calendar-style presentation.
-MTG-008: Notifications
-Where email notifications are enabled, send meeting invitations and relevant meeting updates through a configured email provider.
-The product must not report an email as sent unless the configured provider confirms acceptance of the send request. Provider acceptance does not guarantee final delivery.
-MTG-009: Auditing
-Log meeting creation, cancellation, attendee changes, and changes to protected notes when relevant.
-Meeting module permissions
-Examples:
-•	meeting.view
-•	meeting.create
-•	meeting.update
-•	meeting.cancel
-•	meeting.manage_attendees
-•	meeting.manage_agenda
-•	meeting.notes.view
-•	meeting.notes.create
-•	meeting.notes.update
-•	meeting.action_items.manage
-6.3 Module 3: Projects & Tasks Management
-Module key: projects
-The module provides lightweight project and task coordination.
-Functional requirements
-PRJ-001: Project creation
-An authorised user can create a project with:
-•	Name.
-•	Description.
-•	Project owner.
-•	Start and target completion dates.
-•	Status.
-•	Priority.
-•	Project members.
-•	Optional labels.
-PRJ-002: Project lifecycle
-Support:
-•	Planning
-•	Active
-•	On Hold
-•	Completed
-•	Archived
-Server-side validation must prevent invalid transitions.
-PRJ-003: Task management
-A task contains:
-•	Title.
-•	Description.
-•	Project.
-•	Assignee.
-•	Creator.
-•	Status.
-•	Priority.
-•	Start date, where relevant.
-•	Due date.
-•	Creation and update timestamps.
-•	Optional labels.
-PRJ-004: Task statuses
-The initial workflow is:
-•	Backlog
-•	To Do
-•	In Progress
-•	Blocked
-•	Done
-Statuses are controlled by the backend domain rules. The UI may present a Kanban board, but moving a card must invoke an authorised API operation.
-PRJ-005: Assignment
-Project managers can assign tasks to eligible project members.
-A user must not be assigned a task in a project to which they are not authorised to contribute, unless the product explicitly supports and validates that arrangement.
-PRJ-006: Task views
-Provide:
-•	List view.
-•	Kanban view.
-•	Assigned-to-me view.
-•	Due-soon view.
-•	Overdue view.
-•	Project detail and member list.
-PRJ-007: Comments and activity
-If task comments are implemented in MVP, each comment must record its author and timestamps and follow the task's tenant and resource permissions.
-An activity feed may record selected changes, such as assignment, status changes and due-date changes. Do not expose internal security metadata in a general activity feed.
-PRJ-008: Search and filters
-Support filtering tasks and projects by:
-•	Status.
-•	Assignee.
-•	Priority.
-•	Due date.
-•	Project.
-•	Labels where implemented.
-Pagination must be server-side.
-PRJ-009: Auditing
-Log changes to project membership, project permissions and other high-impact project operations.
-Project module permissions
-Examples:
-•	project.view
-•	project.create
-•	project.update
-•	project.archive
-•	project.manage_members
-•	task.view
-•	task.create
-•	task.update
-•	task.assign
-•	task.delete
-•	task.comment
-Future modules
-HR, Recruitment and other future modules must use the same shared conventions for:
-•	Tenant context.
-•	Authentication.
-•	Organisation membership.
-•	Module activation.
-•	RBAC.
-•	Audit logging.
-•	Validation.
-•	API responses.
-•	Database migrations.
-•	UI components.
-A future module must not require a separate login system or a new tenant-isolation design.
-7. Three-Level Access-Control Architecture
-7.1 Level 1: Platform
-Platform permissions govern the SaaS platform itself.
-Platform Super Admin
-Can:
-•	Manage the module catalogue.
-•	Manage organisations.
-•	Configure platform settings.
-•	Manage platform roles, within safeguards.
-•	Disable an organisation or module when authorised.
-•	Review platform-wide operational and security logs.
-•	Manage support access policies.
-Cannot:
-•	Use unrestricted tenant-data access as an implicit consequence of the role.
-•	Read private tenant content without an explicit authorised workflow.
-•	Modify or erase audit records through ordinary administrative screens.
-Platform Support Agent
-Can:
-•	View support requests.
-•	Access permitted account and operational metadata.
-•	Assist with configuration and login issues.
-•	Escalate incidents.
-Cannot by default:
-•	Access private organisation content.
-•	Assign themselves tenant permissions.
-•	Make billing, platform-security or Super Admin changes without a separately granted permission.
-Future platform roles
-Billing Admin and Platform Auditor may be added later. They are not required to deliver the MVP.
-7.2 Level 2: Organisation
-Organisation Owner
-Can:
-•	Manage organisation-wide settings.
-•	Manage organisation membership and administrative delegation.
-•	Transfer ownership.
-•	Initiate organisation closure.
-•	Manage module access within permitted plan and platform restrictions.
-Critical actions must have explicit confirmation, authorisation and audit events.
-Organisation Admin
-Can:
-•	Invite, suspend or remove members, subject to ownership protections.
-•	Manage organisation settings.
-•	Activate available modules.
-•	Assign approved module roles.
-•	Review permitted organisation administration information.
-Cannot:
-•	Change platform-level configuration.
-•	Transfer ownership unless the explicit ownership-transfer workflow allows it.
-•	Access another organisation's data.
-•	Grant themselves platform privileges.
-Organisation Member
-Has basic organisation membership and receives access to modules through explicit role assignments or approved default assignments.
-Membership alone does not automatically grant permission to see every record in every module.
-7.3 Level 3: Module
-Each module defines its own roles and permission catalogue.
-Initial example roles:
-Module	Role	Primary access
-Events	Event Admin	Manage permitted event-module configuration and resources
-Events	Event Manager	Manage assigned events and their workflows
-Events	Judge	Evaluate assigned submissions
-Events	Participant	Access own registration, team and submission scope
-Events	Event Viewer	Read explicitly permitted event information
-Meetings	Meeting Admin	Manage permitted meeting-module resources
-Meetings	Meeting Organiser	Create and manage authorised meetings
-Meetings	Meeting Participant	Access meetings in which the user participates
-Meetings	Meeting Viewer	Read explicitly permitted meeting information
-Projects	Project Admin	Manage permitted project-module resources
-Projects	Project Manager	Manage assigned projects, members and tasks
-Projects	Team Member	Work on authorised projects and tasks
-Projects	Project Viewer	Read explicitly permitted project information
-Role names are meaningful defaults, not fixed authorisation logic. The actual rights must derive from the permissions assigned to each role and the resource scope of the current operation.
-7.4 Independent scopes
-The following are different concepts:
-1.	Authentication: Who is the current user?
-2.	Organisation membership: Does this user belong to the selected organisation?
-3.	Module entitlement: Is the module available to that organisation?
-4.	Permission: Is this user allowed to perform the action?
-5.	Resource scope: May this user act on this particular event, meeting, project, task or submission?
-6.	Tenant isolation: Is every relevant data operation restricted to the authorised tenant or explicitly allowed guest scope?
-All applicable checks must pass.
-7.5 Authorisation evaluation order
-For protected organisation operations:
-1.	Validate the user's authenticated session.
-2.	Resolve the selected organisation from a trusted route or request context.
-3.	Validate current organisation membership and membership status.
-4.	Confirm that the target module is active and available to the organisation.
-5.	Resolve the user's permissions for the requested action.
-6.	Verify resource ownership, assignment, participation or other resource-level restrictions.
-7.	Execute the operation within an appropriate tenant-scoped database transaction.
-8.	Write audit records when required.
-External event participants use a separate, restricted event-scoped authorisation path. They must not be treated as ordinary organisation members simply because they registered for an event.
-7.6 Configurable RBAC
-Do not implement logic such as:
-if (user.role === "admin")
-as the general authorisation mechanism.
-Instead, use explicit permissions, such as task.assign or event.publish, and evaluate them through shared authorisation utilities or policies.
-Suggested relationship:
-User → Organisation Membership → Role Assignment → Role → Permission
-For module roles, role assignments must identify the relevant organisation membership and module or resource scope.
-Any custom-role feature must restrict assignment to approved permissions and prevent a user from granting permissions they are not authorised to delegate.
-8. Product Information Architecture and URL Structure
-Use clear, predictable URL conventions.
-Suggested public routes:
-•	/
-•	/product
-•	/modules
-•	/security
-•	/pricing
-•	/login
-•	/register
-•	/verify-email
-•	/forgot-password
-•	/reset-password
-Suggested authenticated routes:
-•	/app
-•	/app/organisations
-•	/app/organisations/:organisationId
-•	/app/organisations/:organisationId/dashboard
-•	/app/organisations/:organisationId/modules
-•	/app/organisations/:organisationId/members
-•	/app/organisations/:organisationId/roles
-•	/app/organisations/:organisationId/settings
-•	/app/organisations/:organisationId/audit-logs
-Events:
-•	/app/organisations/:organisationId/events
-•	/app/organisations/:organisationId/events/new
-•	/app/organisations/:organisationId/events/:eventId
-•	/app/organisations/:organisationId/events/:eventId/participants
-•	/app/organisations/:organisationId/events/:eventId/teams
-•	/app/organisations/:organisationId/events/:eventId/submissions
-•	/app/organisations/:organisationId/events/:eventId/judging
-Meetings:
-•	/app/organisations/:organisationId/meetings
-•	/app/organisations/:organisationId/meetings/new
-•	/app/organisations/:organisationId/meetings/:meetingId
-Projects and tasks:
-•	/app/organisations/:organisationId/projects
-•	/app/organisations/:organisationId/projects/:projectId
-•	/app/organisations/:organisationId/tasks
-•	/app/organisations/:organisationId/my-tasks
-Platform administration:
-•	/platform
-•	/platform/organisations
-•	/platform/modules
-•	/platform/users
-•	/platform/audit-logs
-•	/platform/settings
-The frontend must not assume that a user can access a route just because a navigation link is visible. Every protected API request must independently enforce authorisation.
-Use a consistent naming convention in the actual implementation. Do not mix /org, /organisation and /workspace without a deliberate decision.
-9. UI/UX Requirements — Clean Enterprise
-9.1 Design Direction
-ManageX must use a Clean Enterprise interface.
-Visual characteristics:
-•	White surfaces.
-•	Very light neutral page background.
-•	Restrained blue/indigo primary accents.
-•	Clear typography.
-•	Thin, subtle borders.
-•	Moderate corner radii.
-•	Consistent spacing.
-•	Compact but readable tables.
-•	Restrained shadows.
-•	Professional status indicators.
-•	Minimal decorative effects.
-The product should feel trustworthy, mature, efficient and suitable for real organisations.
-Avoid:
-•	Excessive gradients.
-•	Neon colours.
-•	Heavy glassmorphism.
-•	Large decorative illustrations inside work screens.
-•	Too many dashboard cards.
-•	Unnecessary animation.
-•	Different visual languages across modules.
-•	Emoji used as the primary icon system.
-•	UI elements that imitate functionality but do not work.
-9.2 Initial design tokens
-Use these as starting tokens. Keep them centralised so the design can be adjusted without editing individual components.
-Token	Initial value	Purpose
-Primary	#4F46E5	Primary actions and selected states
-Primary hover	#4338CA	Hover or stronger primary state
-Page background	#F8FAFC	Main application canvas
-Surface	#FFFFFF	Cards, panels and dialogs
-Main text	#0F172A	Headings and body text
-Secondary text	#64748B	Supporting information
-Border	#E2E8F0	Dividers and component outlines
-Success	#15803D	Success status
-Warning	#B45309	Warning status
-Error	#B91C1C	Error status
-Info	#1D4ED8	Informational status
-Do not communicate status through colour alone. Use text labels, icons or other accessible indicators where needed.
-9.3 Typography
-Use a consistent, readable type system.
-Preferred font: Inter or a comparable professional sans-serif with a reliable system-font fallback.
-Suggested hierarchy:
-•	Page title: 26–32 px.
-•	Section heading: 18–22 px.
-•	Card heading: 15–17 px.
-•	Standard body text: 14–16 px.
-•	Supporting labels: 12–14 px.
-•	Table text: approximately 13–14 px.
-Do not use tiny text to fit more data on screen. Prefer pagination, filters and well-designed detail views.
-9.4 Layout
-Desktop application:
-•	Left sidebar approximately 240–260 px, collapsible.
-•	Top header approximately 60–68 px.
-•	Main content with adequate padding.
-•	Content width and table width adapted to screen size.
-•	Consistent page title, description and action placement.
-Suggested desktop structure:
-Sidebar | Top header + Workspace switcher + User menu | Main content
-The header must provide:
-•	Current organisation/workspace selector.
-•	Page or contextual navigation where appropriate.
-•	Notification entry point when implemented.
-•	Profile menu.
-•	Account settings and logout.
-The selected organisation must remain visually obvious.
-9.5 Sidebar structure
-Within an organisation workspace:
-•	Overview
-•	Modules
-o	Events & Hackathons
-o	Meetings
-o	Projects & Tasks
-•	Organisation
-o	Members
-o	Roles & Permissions
-o	Module Access
-o	Audit Logs, when authorised
-o	Settings
-Only show relevant navigation entries. However, hiding a navigation entry is a UX convenience, not the authorisation mechanism.
-Module activation and permissions must determine which screens are available.
-For platform administrators, use a separate platform administration navigation structure.
-For regular users, use a reduced navigation structure reflecting the active organisation, module availability and permissions.
-9.6 Reusable components
-Create a central design system for:
-•	Buttons.
-•	Text inputs.
-•	Textareas.
-•	Selects and comboboxes.
-•	Checkboxes and switches.
-•	Radio groups.
-•	Date and time inputs.
-•	Cards.
-•	Tables.
-•	Badges.
-•	Dropdown menus.
-•	Tabs.
-•	Breadcrumbs.
-•	Modals and confirmation dialogs.
-•	Tooltips.
-•	Pagination.
-•	Search and filter bars.
-•	Empty states.
-•	Skeleton loaders.
-•	Toast notifications.
-•	Alert banners.
-•	Avatar and profile menus.
-•	Form validation messages.
-•	Permission-denied and not-found states.
-All modules must use these shared components.
-9.7 Interaction requirements
-Every interactive component must have:
-•	A clear label.
-•	Defined loading behaviour.
-•	A visible success state where applicable.
-•	A visible failure state.
-•	Keyboard accessibility.
-•	Disabled state where an action is temporarily unavailable.
-•	Confirmation for destructive or high-impact operations.
-•	Prevention of accidental duplicate submissions.
-No button may silently do nothing.
-No form may display a success message before a successful response is received.
-9.8 Responsive behaviour
-Desktop:
-•	Full workspace navigation.
-•	Rich tables, side panels and multi-column layouts when useful.
-Tablet:
-•	Collapsible sidebar.
-•	Reduced card columns.
-•	Scrollable tables or deliberate alternative layouts.
-Mobile:
-•	Navigation drawer.
-•	Single-column forms.
-•	Stacked information panels.
-•	Touch-friendly controls.
-•	Horizontally scrollable tables only where a better mobile presentation is not practical.
-•	Destructive actions protected against accidental taps.
-The application must remain usable at narrow viewport widths without overlapping content or hiding essential controls.
-9.9 Accessibility
-Target WCAG 2.2 AA where applicable.
-Requirements include:
-•	Adequate colour contrast.
-•	Keyboard navigation.
-•	Visible focus states.
-•	Correct form labels.
-•	Meaningful page headings.
-•	Appropriate accessible names for icon buttons.
-•	Error summaries or clear field-level error messages.
-•	Dialog focus handling.
-•	Usable controls for assistive technologies.
-Reference: https://www.w3.org/TR/WCAG22/
-10. Required Screens and Their Behaviour
-10.1 Public landing page
-Sections:
-•	Navigation with ManageX branding.
-•	Hero headline and supporting description.
-•	Primary CTA to register.
-•	Secondary CTA to explore modules.
-•	Overview of the three initial modules.
-•	Benefits of a unified workspace.
-•	Security and organisation-isolation explanation.
-•	Simple how-it-works section.
-•	Pricing or plan information only when supported by real configuration.
-•	Footer with product, legal and contact links.
-Avoid fabricated testimonials, customer logos, usage statistics or security certifications.
-10.2 Registration and authentication
-Registration:
-•	Name.
-•	Email address.
-•	Password.
-•	Password confirmation if used.
-•	Acceptance of applicable terms and privacy notice.
-Requirements:
-•	Validate input on the server.
-•	Normalise email addresses consistently.
-•	Store only properly hashed passwords.
-•	Verify email ownership before enabling sensitive account operations.
-•	Do not reveal whether an arbitrary email address already has an account through password recovery responses.
-•	Rate-limit login, registration, verification and reset operations.
-•	Provide clear generic errors without exposing secrets.
-Login, logout, verification and password reset must work end to end.
-10.3 First-time onboarding
-Suggested flow:
-1.	User creates an account.
-2.	User verifies their email.
-3.	User signs in.
-4.	User chooses to create an organisation or accept an invitation.
-5.	If creating an organisation, user enters the organisation name and other required fields.
-6.	The system creates the organisation and owner membership transactionally.
-7.	The owner reviews available modules.
-8.	The owner activates eligible modules.
-9.	The owner invites initial members.
-10.	ManageX opens the organisation dashboard.
-A failed or interrupted onboarding operation must not leave duplicate organisations or orphaned owner assignments.
-10.4 Organisation switcher
-The user can switch between organisations to which they belong.
-On switching:
-•	Update the active organisation context.
-•	Refresh organisation-specific navigation and dashboard data.
-•	Revalidate access on the backend.
-•	Prevent cached or stale data from the previous organisation appearing in the new context.
-•	Reset or segregate client-side caches by organisation ID.
-A previously selected organisation ID must never be treated as proof of membership.
-10.5 Organisation dashboard
-Include only useful, permission-appropriate information:
-•	Welcome and organisation context.
-•	Active module summary.
-•	Upcoming meetings.
-•	Assigned and overdue tasks.
-•	Upcoming or active events.
-•	Recent relevant activity.
-•	Quick actions the current user can perform.
-Dashboard widgets must not query data from inactive modules or expose content the current user cannot access.
-Do not fill the dashboard with arbitrary charts just to make it look impressive.
-10.6 Module catalogue
-Show:
-•	Module name.
-•	Description.
-•	Icon.
-•	Availability.
-•	Activation status.
-•	Relevant features.
-•	An activation or configuration action when authorised.
-Separate these states:
-•	Available to the platform.
-•	Included or enabled for the organisation's plan, where plans are implemented.
-•	Activated for the organisation.
-•	Accessible to the current user.
-These states are not interchangeable.
-10.7 Member management
-Provide:
-•	Member list.
-•	Search and filtering.
-•	Pending invitations.
-•	Member status.
-•	Organisation role.
-•	Assigned module roles.
-•	Invite member.
-•	Resend invitation.
-•	Revoke pending invitation.
-•	Suspend or remove membership, where authorised.
-Membership removal must not accidentally delete historical audit records or content that belongs to the organisation.
-10.8 Roles and permissions
-Provide:
-•	Role list filtered by organisation/module scope.
-•	Role detail.
-•	Assigned permissions.
-•	Assigned members.
-•	Permission assignment controls when authorised.
-•	Clear descriptions of sensitive permissions.
-The interface must make the scope obvious: platform role, organisation role or module role.
-Do not allow an organisation administrator to assign platform permissions.
-10.9 Module screens
-Use a consistent screen pattern:
-1.	Breadcrumb.
-2.	Page title and concise description.
-3.	Primary action.
-4.	Search and filters.
-5.	Main content area.
-6.	Pagination or loading mechanism.
-7.	Detail screen with clearly grouped information.
-8.	Empty, error and access-denied states.
-The three initial modules must share visual patterns without forcing every workflow into an identical layout.
-11. Technical Architecture
-11.1 Architectural style
-Use a modular monolith.
-The initial system must be one deployable application with clearly separated platform, identity, organisation, access-control and module domains.
-Do not split the initial product into microservices.
-The architecture must allow individual modules to be developed and tested independently while reusing shared infrastructure.
-11.2 Recommended technology stack
-Frontend
-•	React
-•	TypeScript
-•	Vite
-•	Tailwind CSS
-•	Reusable and accessible UI components
-•	React Router for navigation
-•	TanStack Query or an equivalent library for server-state management, where appropriate
-•	Zod or an equivalent validation library for client-side form validation
-•	A consistent API client for communicating with the backend
-Frontend rule: All new frontend components, pages, hooks, API integrations, and shared UI logic must use TypeScript (.ts and .tsx files). Avoid introducing JavaScript files for new application logic unless a tool configuration specifically requires them.
-Backend
-•	Node.js
-•	Express.js
-•	JavaScript only, using ES Modules (import and export)
-•	PostgreSQL
-•	pg (node-postgres) for database access and transaction management
-•	Zod for runtime request and data validation
-•	Centralised authentication and authorisation middleware
-•	Centralised error handling and structured logging
-•	Version-controlled SQL database migrations
-Backend rule: All backend application logic must use JavaScript (.js files). Do not configure TypeScript compilation for the backend, and do not create backend .ts files. Use runtime validation, clear module boundaries, consistent naming and optional JSDoc annotations where they improve maintainability.
-Database and Infrastructure
-•	PostgreSQL with Row-Level Security (RLS)
-•	SQL migrations stored in version control
-•	Docker Compose for local development where appropriate
-•	Environment-variable-based configuration
-•	Git-based version control
-•	Automated linting, tests and CI checks
-The frontend and backend must remain separate application workspaces while following the same documented API contracts.
-2. Updated Backend Project Structure
-Use the following JavaScript-based structure as the starting point:
-server/
-  src/
-    app.js
-    server.js
+Document owner: Product owner
+Intended implementation tool: Google Antigravity
+Purpose and precedence
+This document is the single source of truth for ManageX product scope, behaviour, roles, workflows, acceptance criteria and non-goals. Save this document as docs/PRD.md. The separate Antigravity prompt pack defines execution discipline, phase prompts and reporting. AGENTS.md defines repository-wide coding guardrails. These documents must be consistent: the PRD defines what the product must do; the prompt pack and AGENTS.md define how implementation is staged and controlled. No document may silently override the other. If a genuine conflict is discovered, stop the affected work, record it in docs/decisions/, and resolve it before coding that area.
 
-    config/
-      env.js
+1. Executive summary
+ManageX is a modular, multi-tenant organisation-management SaaS. An organisation can activate the available product modules it needs while sharing one account system, organisation/membership system, permission framework, audit mechanism, API conventions and design system. The initial modules are Events & Hackathons, Meetings, and Projects & Tasks.
+ManageX is a modular monolith, not a microservice platform. The initial version uses one PostgreSQL database and schema with strict tenant isolation. Organisation-owned data is scoped to an organisation and protected by backend authorization plus PostgreSQL Row-Level Security (RLS). Platform operations, organisation administration and module permissions are separate scopes.
+The MVP prioritises a coherent, secure product over breadth. Features explicitly excluded in this document must not be added just because they are common in other SaaS products.
+2. Product goals and success criteria
+2.1 Goals
+- G-01 — One shared platform: identity, sessions, organisations, memberships, authorization, tenant context, module catalogue, audit, API client and UI primitives are built once and reused.
+- G-02 — Tenant isolation: one organisation must not be able to access another organisation's private data by changing a URL, request body, query, identifier, role claim or client state.
+- G-03 — Least privilege: permissions are explicit and scoped. Hiding a UI control is never treated as authorization.
+- G-04 — Practical modules: users with permission can manage events/hackathons, meetings, projects and tasks through usable end-to-end workflows.
+- G-05 — Free-tier-conscious delivery: the initial product can be developed and prepared for deployment using Vercel, Render and Neon without requiring paid infrastructure or AWS.
+- G-06 — Verifiable implementation: every requirement is mapped to a phase and test evidence; phase reports state the actual result, not intended or assumed success.
+2.2 MVP success criteria
+The MVP is accepted only when:
+1. A user can create and verify an account, sign in and out, recover access, and maintain a revocable session.
+2. A user can create or join more than one organisation and switch between them without seeing stale data from the previous organisation.
+3. An organisation has a protected owner, member management and expiring, single-use invitations.
+4. Platform, organisation and module access are separately evaluated by the backend using a shared permission system.
+5. PostgreSQL RLS protects tenant-owned tables when queries run under a least-privilege runtime database role.
+6. The organisation can activate/deactivate the approved modules while platform-level availability is respected.
+7. Events & Hackathons supports event lifecycle, registration, teams, URL-based submissions, judge assignment, scoring and controlled result publication.
+8. Meetings supports scheduling, attendees, agendas, confidential minutes/notes and action items.
+9. Projects & Tasks supports project membership/lifecycle, tasks, assignment, List/Kanban views, filters, comments/activity and due-date visibility.
+10. Platform administration is separated from organisation administration, with no unrestricted platform-support access to private tenant content.
+11. Cross-tenant, unauthorized-resource, session, permission-revocation and concurrency-sensitive tests pass.
+12. Deployment instructions and preflight checks accurately describe Vercel, Render and Neon, including free-tier limitations.
+3. Fixed technical and delivery contract
+These constraints are locked for MVP and must not be independently changed by an AI coding assistant.
+Area	Canonical requirement
+Frontend	React + TypeScript + Vite. TypeScript is required in the frontend.
+Backend	Node.js + Express.js + JavaScript ES Modules. Backend source files use .js; no backend TypeScript source or backend TypeScript compilation.
+Database	PostgreSQL. Neon is the intended hosted PostgreSQL option.
+Frontend hosting	Vercel.
+Backend hosting	Render.
+Architecture	Modular monolith; one application backend and one shared PostgreSQL database/schema for the initial multi-tenant model. No microservices.
+API	/api/v1 base path; resource-oriented routes, Zod runtime validation and consistent error responses.
+UI	Clean Enterprise, light theme.
+Modules	events = Events & Hackathons; meetings = Meetings; projects = Projects & Tasks. Use these exact stable keys.
+Authorization	Platform → Organisation → Module, plus resource-specific authorization where relevant.
+Tenant security	Backend authorization and PostgreSQL RLS; no client-trusted tenant or role values.
+Deployment objective	Free-tier-conscious; no AWS requirement, no paid provider requirement.
+Repository folders	frontend/, backend/, database/, tests/, docs/, with root AGENTS.md, README.md, .gitignore and .env.example. Do not replace these with client/ or server/.
+Delivery	One approved phase at a time. No next phase until the product owner has reviewed the prior phase report and approved continuation.
 
-    db/
-      pool.js
-      transaction.js
-      migrations/
 
-    middleware/
-      authenticate.js
-      validate.js
-      error-handler.js
-      rate-limit.js
+3.1 Production request routing and session cookies
+For the default Vercel + Render deployment, the browser must call a same-origin frontend path such as /api/v1/.... Configure a Vercel rewrite/proxy to forward /api/* to the Render backend, preserving request paths, relevant headers, status codes, response headers and Set-Cookie headers. In local development, configure the Vite development proxy to forward /api/* to the local Express server. The browser API client must use relative /api/v1 paths by default. Do not rely on third-party cookies between unrelated vercel.app and onrender.com sites as the only production session strategy.
+Session cookies must be HttpOnly, Secure in production, SameSite=Lax, Path=/, and must not set a broad Domain attribute unless a reviewed custom-domain deployment ADR requires it. State-changing requests must have CSRF protection, such as a server-validated CSRF token sent in a custom header, in addition to cookie and Origin checks. Exact framework mechanics are implementation details, but the resulting security properties are mandatory. Phase 0 must verify that the hosting rewrite supports this design; if not, document the safest viable alternative and obtain approval before implementation.
+3.2 Source-of-truth rules
+- This PRD defines product behaviour and scope.
+- docs/architecture.md, docs/database.md, docs/security.md and docs/api-contracts.md record implementation decisions derived from this PRD. They cannot expand product scope silently.
+- AGENTS.md and the prompt pack enforce stack, safety, repository conventions and phase gates. They cannot turn backend JavaScript into TypeScript or change hosting targets.
+- Code and tests are evidence of implementation; they are not authority to redefine a product requirement.
+- If an existing repository contains valid working code, inspect it and preserve useful work unless a documented conflict or defect requires a change.
+4. Scope
+4.1 In scope for MVP
+Shared platform: account lifecycle, sessions, organisation creation/switching, memberships and invitations, scoped RBAC, permission catalogue, module catalogue and organisation module activation, tenant context/RLS, audit logs for sensitive actions, common API/error/validation conventions, shared design system, responsive application shell, email delivery abstraction for required emails, platform operations and release documentation.
+Events & Hackathons: event creation/management and lifecycle, public/published event details, registration and participant management, capacity controls, teams, URL-only submissions, judge assignments, criteria-based scoring, private/unpublished scores and controlled result publication.
+Meetings: meeting scheduling and lifecycle, timezone-aware display, attendees, visibility rules, ordered agenda items, confidential notes/minutes, action items and configured email invitations/updates.
+Projects & Tasks: project creation/lifecycle, project membership, tasks and assignment, task statuses/priorities/due dates, List and Kanban views, assigned-to-me/due-soon/overdue filters, comments and activity history within the approved project/task scope.
+Platform operations: manage platform accounts and organisation metadata, manage availability of the three approved modules, inspect permitted operational metadata, and manage approved baseline platform configuration. Support access is restricted as defined in Section 8.6.
+4.2 Explicitly out of scope
+The following are not MVP requirements and must not be implemented without a separately documented product-owner approval and a PRD version change:
+- Billing, payments, invoicing, pricing administration, subscription checkout, payment-provider integration or paid plan enforcement.
+- A customer support ticketing portal, support inbox, ticket queues, or unrestricted support-agent access to tenant data.
+- File uploads or document storage in event submissions; submissions are URLs only.
+- Event ticket sales, waitlists, livestreaming, built-in video conferencing, certificates or payment collection.
+- Built-in meeting video/audio, transcripts, chat, recording, or real-time collaborative note editing.
+- Automatic creation of Projects tasks from meeting action items.
+- Jira-like sprint planning, time tracking, Gantt charts, project dependency engines, workload/capacity planning, arbitrary status/workflow builders, or complex automation rules.
+- Microservices, Kubernetes, AWS-only architecture, paid monitoring services, or paid vendor requirements.
+- User-created custom modules or arbitrary plugin marketplace.
+- A native mobile application.
+- Unapproved AI features, generative content, analytics dashboards, customer-usage claims, seeded fake customers or fabricated product activity.
+- Public multi-tenant data browsing, cross-organisation collaboration or cross-tenant resource sharing.
+Phase 0 may record optional future ideas in docs/future-suggestions.md, but must not pull them into implementation scope.
+5. User types, identities and terminology
+5.1 Terminology
+- User account: a ManageX identity that can authenticate. It may be a member of zero, one or multiple organisations.
+- Platform operator: an account assigned a platform-scoped role. Platform role does not automatically grant organisation membership or private data access.
+- Organisation: a customer workspace and the tenant boundary for organisation-owned data.
+- Membership: the relationship between a user and an organisation, with an explicit lifecycle state.
+- Module: an independently activatable product area: events, meetings or projects.
+- Module entitlement: whether a module is available to an organisation. It is not the same as the current user's permission.
+- Role: a named collection of permission assignments at one scope. Authorization is based on assigned permissions and resource policies, not role-name string comparisons alone.
+- Resource scope: restrictions to a particular event, meeting, project, task, assignment or other record in addition to module permission.
+- External event participant: an authenticated ManageX user participating in a public event without being granted general membership in the organising organisation solely because they registered.
+- Audit event: a protected record of a sensitive action and its outcome.
+5.2 User personas
+1. Unaffiliated account holder: can manage their account, join organisations by invitation, and register for public events where eligible; has no access to an organisation until they have active membership or an explicitly granted event-scoped capability.
+2. Organisation Owner: accountable for the workspace; owns membership and core organisation settings and must not be accidentally removed as the final active owner.
+3. Organisation Admin: manages allowed workspace operations but cannot bypass platform, tenant or permission boundaries.
+4. Organisation Member: has only permissions granted through scoped assignments.
+5. Event Manager / Judge / Participant: can act only within the assigned event and permitted operations.
+6. Meeting Organiser / Attendee: has access according to meeting visibility, attendance and note/action-item policy.
+7. Project Manager / Team Member / Viewer: can act only within a project and assigned capabilities.
+8. Platform Super Admin: manages platform-level operational settings and catalogue availability; tenant-private content is not automatically visible merely due to this role.
+9. Platform Support Agent: can view limited account and operational metadata for support purposes, but not private event/meeting/project contents by default. The MVP does not include a support-ticketing product.
+6. Functional requirements — shared platform
+All requirements below are mandatory unless explicitly marked conditional. Every requirement must be mapped to a phase, UI surface, API/data/security implementation and test in docs/requirements-traceability.md during Phase 0.
+6.1 Account, authentication and session lifecycle
+AUTH-001 — Registration. A visitor can create a ManageX account with name, normalized email and password. Server-side validation is authoritative. Email must be unique under a documented case-normalization policy. Passwords must be hashed using a modern password-hashing algorithm and must never be stored/logged in plaintext.
+AUTH-002 — Email verification. New accounts must verify email before receiving access to protected organisation or event-participant actions. Verification tokens must be unpredictable, purpose-bound, time-limited, stored safely (e.g. hashed), single-use and invalidated after success.
+AUTH-003 — Login/logout. A verified, active user can log in and log out. Login failures must not disclose whether an email exists. Logout revokes the current session server-side.
+AUTH-004 — Password recovery. A user can request a password reset and complete it using a time-limited, single-use token. The request response must not reveal whether an account exists. Resetting a password revokes all existing sessions server-side; the user must authenticate again.
+AUTH-005 — Session lifecycle. Sessions must be server-side and revocable, with a 30-minute idle timeout and a 7-day absolute lifetime. Rotate the session after authentication and privilege changes. Session identifiers/tokens must not be stored in localStorage or printed in logs. A disabled/suspended account cannot continue making authenticated requests. Reauthentication is required for ownership transfer and other high-impact operations, and must have occurred within the previous 10 minutes.
+AUTH-006 — Rate limiting. Apply appropriate rate limits to login, registration, email-verification resend and password-recovery endpoints. Limits must not make simple account-targeted denial of service easy. Return a consistent safe error response.
+AUTH-007 — Cookie and CSRF security. Meet Section 3.1. State-changing cookie-authenticated requests must validate CSRF protections and the request origin policy. No wildcard credentialed CORS.
+AUTH-008 — Email provider unavailable. Email sending is routed through one shared provider abstraction. Development can use a documented local-only test mail approach. In production, if provider configuration is absent or delivery fails, the UI/API must not claim the email was sent; return a clear recoverable error and log safe operational details. Do not silently mark verification/reset/invitation/meeting emails as delivered.
+Acceptance: verification and recovery tokens expire and cannot be reused; inactive sessions are rejected; invalid authentication does not leak secrets or account existence; logout/password reset revokes sessions as documented; cookie/CSRF tests pass.
+6.2 Organisation lifecycle and membership
+ORG-001 — Create organisation. A signed-in, verified user can create an organisation with required name and validated slug/identifier. The organisation and initial Owner membership/role assignment must be created in one transaction so neither can exist without the other.
+ORG-002 — Multiple memberships. One user may belong to multiple organisations. The active organisation is application context only and is never proof of authorization. Every request must validate requested organisation access server-side.
+ORG-003 — Organisation switch. UI shows the active organisation clearly. Switching resets or rekeys organisation-scoped client caches and reloads the new organisation context. Old data must not flash or remain accessible through cached screens after a switch or logout.
+ORG-004 — Membership status. Support explicit states at minimum: invited, active, suspended, removed. Only active membership grants ordinary organisation access. The allowed transitions must be documented and tested.
+ORG-005 — Invitations. An authorised owner/admin can invite by email and assign only the permitted initial scope/role. Invitations must be unpredictable, expire after 7 days, be revocable and single-use. Accepting an invitation requires authenticated email identity matching the invitation's normalized email. Acceptance must be safe under concurrent requests and retries.
+ORG-006 — Existing/new users. Existing accounts can authenticate and accept matching invitations. New invitees must complete registration and email verification before acceptance. An invitation does not authorize access until successfully accepted and a valid active membership exists.
+ORG-007 — Membership management. Permitted administrators can list members, change allowed roles, suspend/reactivate members and remove members. Every action is enforced server-side and audited. A user cannot grant themselves additional privileges.
+ORG-008 — Owner invariants. An organisation must always have at least one active owner. The final active owner cannot be suspended, removed or demoted unless another active owner is atomically established. Ownership transfer is a high-impact action requiring explicit confirmation and reauthentication or another documented step-up control.
+ORG-009 — Organisation settings. Authorised users can update approved organisation profile/settings fields only. No arbitrary settings or custom workflow configuration is added without approval.
+ORG-010 — Leave organisation. A member may leave where policy permits, but the last-owner invariant must be preserved. UI must explain when an action cannot be completed.
+Acceptance: concurrent invitation acceptance cannot duplicate membership; expired/revoked/replayed/wrong-email invitations fail; the final owner cannot be removed; switching organisations yields no cross-tenant cache leakage; membership revocation takes effect on the next protected request.
+6.3 Role-based access control (RBAC), permissions and resource scope
+RBAC-001 — Scope separation. Authorization scopes are platform, organisation, module, and resource where applicable. A platform role is not an organisation role. An organisation role is not automatically a module role. A module role does not bypass event/meeting/project resource restrictions.
+RBAC-002 — Central permission catalogue. Permissions use stable machine-readable keys, descriptions and scope definitions. Permission keys are assigned to roles through persisted relationships. Use shared authorization helpers; do not scatter role-name conditionals throughout handlers.
+RBAC-003 — Default roles. Seed only documented baseline roles and permission assignments:
+- Platform: Platform Super Admin, Platform Support Agent.
+- Organisation: Owner, Admin, Member.
+- Events module: Event Admin, Event Manager, Judge, Participant, Viewer.
+- Meetings module: Meeting Admin, Organiser, Participant, Viewer.
+- Projects module: Project Admin, Project Manager, Team Member, Viewer.
+  These labels are defaults, not security logic. Exact permissions must be enumerated in docs/security.md and docs/api-contracts.md during Phase 0. The AI must not give every default role full access merely to make a UI work.
+RBAC-004 — Permission checks. Every protected backend operation checks identity, organisation context, active membership (where required), module entitlement, permission and resource/assignment/participation policy. Client-side route guards and hidden controls are usability only.
+RBAC-005 — Delegation. Users may only grant permissions/roles they are allowed to delegate. No user can create platform roles, alter the protected system permission catalogue or elevate themselves through request payloads.
+RBAC-006 — Immediate revocation. Role, membership, account or module-entitlement revocation must affect subsequent requests without relying on a long-lived, stale client role claim.
+RBAC-007 — Testability. Permission tests must cover allowed and denied cases at both API and database levels, including direct identifier tampering and resource IDs belonging to another tenant.
+6.4 Module catalogue and activation
+MOD-001 — Stable catalogue. The MVP catalogue contains exactly events, meetings and projects, with human-readable names, descriptions, platform availability and documented metadata. Event registration opens at first publication when no opening time is configured and closes at event start when no closing time is configured. Team mode requires configured min/max size as defined in EVT-006.
+MOD-002 — Organisation activation. An organisation can activate a module only if that module is platform-available. Only authorised organisation administrators can change activation. Deactivation blocks ordinary module requests and hides module navigation but does not delete or mutate historical module data.
+MOD-003 — Independent checks. Module platform availability, organisation activation, current user's permissions and resource scope are separate checks. Passing one does not imply the others.
+MOD-004 — Disabled module behaviour. Requests to a disabled module return a consistent forbidden/unavailable response. Data cannot be read or modified through guessed API URLs, legacy UI routes or direct calls.
+MOD-005 — No billing dependency. Module activation in MVP is not a payment or paid subscription workflow. No subscription provider, billing plan, pricing tier or checkout UI is required. Do not invent an internal plan/limits system unless separately approved.
+Acceptance: module activation/deactivation is audited, server-enforced, and does not delete data; unavailable modules cannot be accessed by direct API calls.
+6.5 Audit logs
+AUD-001 — Shared audit infrastructure. Use one append-oriented audit mechanism for sensitive platform, organisation, membership, role/permission, module activation, event, meeting, project, participant and other high-impact actions.
+AUD-002 — Fields. Store actor identity when known, scope/organisation, action key, resource type and ID, outcome, timestamp, request/correlation ID and safe metadata. Capture before/after differences only for non-sensitive fields where useful and permitted.
+AUD-003 — Sensitive data exclusion. Never log passwords, raw session identifiers/cookies, access/reset/invitation tokens, secrets, full payment-like credentials or confidential meeting note contents. Avoid copying entire request bodies into audit metadata.
+AUD-004 — Read and integrity controls. Normal product users cannot edit/delete audit events. Access to viewing audit data is permission-controlled. Retention policy and any database immutability guarantees must be documented; do not claim tamper-proof storage unless technically implemented.
+AUD-005 — Outcomes. Record success and security-relevant denial/failure events where appropriate without creating unbounded noisy logs or leaking data.
+6.6 Shared API conventions
+API-001 — Base path. All product endpoints use /api/v1.
+API-002 — Validation. Validate path parameters, query parameters, request bodies and relevant headers with Zod at the backend boundary. Frontend validation improves usability but is not authoritative.
+API-003 — Response format. Use a consistent JSON success/error structure. Document the exact schemas in docs/api-contracts.md; do not mix response envelopes between modules. Do not return stack traces or SQL details in production.
+API-004 — Pagination. Collections use server-side pagination with a default page size of 20 and maximum page size of 100 unless a documented endpoint-specific reason requires otherwise. Search, sort and filter fields are allowlisted, bounded and validated.
+API-005 — HTTP semantics. Use appropriate status codes for validation, unauthenticated, forbidden, not found, conflict, rate limit and server error. Do not report successful writes before database commit/provider acceptance.
+API-006 — Database access. Use parameterized SQL (or a reviewed library that guarantees parameterization), explicit transactions for multi-step security-sensitive changes and predictable error mapping. Do not build SQL from untrusted string fragments.
+API-007 — Request tracing. Include a request/correlation ID in structured server logs and suitable error responses. Redact secrets.
+API-008 — API inventory. Every protected endpoint is documented with authentication requirement, scope, permissions, entitlement requirement, resource constraints, expected errors and tests.
+6.7 Shared UI, data layer and accessibility
+UI-001 — Design direction. Use a Clean Enterprise light UI: white/light neutral surfaces, restrained blue/indigo accents, readable typography, subtle borders, moderate corner radii, restrained shadows and minimal animation. Avoid excessive gradients, glassmorphism, noisy backgrounds or ornamental motion.
+UI-002 — Shared design system. Establish central design tokens and reusable components for buttons, form fields, selects/comboboxes, checkboxes/switches, date/time inputs, tables, cards, badges, menus, tabs, breadcrumbs, dialogs, tooltips, pagination, search/filter bars, avatars, toasts/alerts, skeletons, empty states, loading states, error states, forbidden states and not-found states. Reuse shared components in all modules.
+UI-003 — Shared shell. Provide a responsive organisation workspace shell with organisation switcher, active-organisation indicator, profile/account controls, permission-aware navigation, breadcrumbs and consistent page headers. Platform administration uses a separate shell and route namespace.
+UI-004 — Frontend API client. One shared API client handles base path, credentials, JSON parsing, typed contracts, request IDs where applicable, normalized errors and session expiry. Modules must not create independent fetch wrappers or incompatible error handling.
+UI-005 — Cache isolation. Organisation-specific cache keys must include organisation ID. On organisation switch/logout, segregate, invalidate or clear protected cached data. Do not expose prior-org data in the new-org UI.
+UI-006 — Form behaviour. Disable duplicate submissions, show server-confirmed success only, preserve safe user input when recoverable, surface field errors clearly and confirm destructive/high-impact actions.
+UI-007 — Accessibility. Target WCAG 2.2 AA. Support keyboard interaction, visible focus, semantic headings, labelled controls, accessible dialog focus management, reasonable contrast, error association and status indicators not based on colour alone.
+UI-008 — Responsive states. Main flows must work on desktop, tablet and mobile widths. Tables may switch to a suitable compact/card presentation on narrow viewports without losing actions or labels.
+UI-009 — Real data only. Do not fabricate testimonials, customers, events, usage metrics, recent activity, email-send confirmations or dashboard statistics. Development seed data must be clearly identified and isolated to development/test environments.
+6.8 Operational foundation
+OPS-001 — Health and readiness. Provide a minimal health endpoint and a readiness check that reports whether the application can serve requests without disclosing credentials, internal stack traces or sensitive infrastructure data.
+OPS-002 — Configuration. Validate required environment variables on startup and display names of missing variables only. Commit .env.example with names and safe placeholder values; never commit actual secrets.
+OPS-003 — Migrations. Database changes are versioned migrations with documented order, rollback/forward-fix strategy and environment safety. Production migrations must not run automatically without the deployment/release process defined in Section 14.
+OPS-004 — Logs. Use structured logs with secret redaction and request correlation. No raw passwords, cookies, tokens, database URLs or confidential record contents.
+OPS-005 — Seeds. Seed data is explicit and limited to local/test environments. Never seed default production credentials or a fake customer dataset.
+OPS-006 — Recovery documentation. Document backup/restore assumptions and procedures appropriate to Neon and the selected plan. Do not claim backups were tested unless a restore test was executed and evidence recorded.
+7. Functional requirements — Events & Hackathons (events)
+7.1 Event model, visibility and lifecycle
+EVT-001 — Event model and create/edit. An authorised event manager can create and edit an event with title, description, type (general_event or hackathon; display labels: General Event or Hackathon), start/end date-time, IANA time-zone identifier, venue/location or online URL where applicable, registration opening/closing instants, optional maximum participant count, responsible/organising users, participant instructions, team/submission/judging configuration where applicable, visibility and publication information. Validate required fields, lengths, date ordering, URL scheme/format and time-zone identifier server-side.
+EVT-002 — Canonical event lifecycle. The exact status labels are Draft, Published, Registration Closed, In Progress, Completed, Cancelled, and Archived; use corresponding stable machine values draft, published, registration_closed, in_progress, completed, cancelled, and archived. Implement a server-side transition map. Default allowed transitions are: draft → published or archived; published → registration_closed, in_progress, cancelled, or archived; registration_closed → in_progress, cancelled, or archived; in_progress → completed, cancelled, or archived; completed → archived; cancelled → archived; archived is terminal. Any exception requires a documented product decision before implementation. Registration windows are also enforced by exact timestamps: passing the registration closing instant rejects new registrations even if a manager has not yet changed the displayed event status. Do not silently change persisted status during page rendering.
+EVT-003 — Time, visibility and public data. Persist timestamps as UTC instants and retain the event's IANA time-zone identifier. Only Published events configured as public may appear in public event listings. Public responses include only explicitly approved public fields. Draft/private/internal notes, judge feedback, unpublished scores and private participant data must never be serialized to unauthorised users. A published event does not imply registration is open.
+7.2 Registration and external participants
+EVT-004 — Registration workflow and participant scope. Support eligible authenticated organisation users and external event participants for public events. A registrant must have a verified ManageX account, but registering does not create membership in the organising organisation. Provide a registration form, server-confirmed success state, own-registration status view and authorised event-staff participant table. External participants may access only their own registration and the event-scoped actions expressly permitted to them; they cannot enumerate organisation members, access unrelated organisation modules or view another participant's private data.
+EVT-005 — Registration validation, capacity and uniqueness. Registration is allowed only when the persisted event status is published, the current instant is within the effective registration window, and the participant meets any configured eligibility rules. Statuses registration_closed, in_progress, completed, cancelled, and archived categorically reject new registrations. If registration_opens_at is unset, its effective value is the first publication instant. If registration_closes_at is unset, its effective value is the event start instant. The effective closing instant must be after the opening instant and may not be later than the event start. Show the effective window in the UI and use the same server-side rule in every endpoint. Support registration statuses registered and withdrawn. Active capacity counts registered registrations only. A participant may withdraw while the registration window permits it; withdrawn records are retained for history. If the same participant registers again before the window closes, reactivate the existing registration row instead of creating a duplicate; preserve the original registration timestamp and record the reactivation timestamp. Prevent duplicate registration with database uniqueness constraints and service-level checks. Enforce capacity transactionally under concurrency so simultaneous requests cannot exceed the maximum. No waitlist or payment is included. Public endpoints are rate-limited and must not enumerate registrants. Staff can search/filter/paginate registrations only within their permitted event scope; administrative changes are audited.
+7.3 Teams and URL-based submissions
+EVT-006 — Hackathon teams. Teams are available only for hackathon events where team participation is enabled. Eligible registered participants can create/join teams according to event rules. Store team/event relationships, an explicit team owner, member relationships and timestamps. When team mode is enabled, require event-level team_size_min and team_size_max values; default the minimum to 1, require maximum to be at least the minimum, and cap configured maximum at 100 to protect the service. Enforce uniqueness, event eligibility and restrictions on joining multiple teams. Team owners send invitations that require invitee acceptance; invitations expire after 7 days and are single-use. An event manager may add/remove a participant directly only with explicit event participant-management permission. All team membership changes are validated server-side and sensitive administrative changes are audited. Team owner/manager operations require the relevant permission and resource scope. Invitation/addition/leave/removal operations must not bypass eligibility rules through direct API calls. Use constraints and transactions to prevent concurrent team-size and duplicate-membership violations.
+EVT-007 — URL-based submissions. Support submission records with title, description, repository URL and demo URL where applicable, plus only necessary safe metadata and timestamps. Submissions are allowed only during the configured submission window and only by an eligible individual participant/team for that event. Validate http/https URLs and reasonable lengths. Do not fetch arbitrary user-provided URLs from the backend. Define whether an eligible team has one active submission or supports revisions in docs/database.md; default to one current submission per eligible individual/team with edits permitted during the allowed window, unless an event setting explicitly approved in Phase 0 requires otherwise. Submitters can update only their own eligible submission and only while editing is permitted. Admin overrides require explicit permission and audit. No file uploads or attachments.
+7.4 Judging, scoring and results
+EVT-008 — Judge assignments and scoring. Authorised event managers can assign eligible judges to permitted events/submissions. Judges can list/view only their assigned work and the fields needed to score it. Scoring criteria have name, description/order and maximum score. Judges can submit one score per assigned judge/submission/criterion combination within the allowed numeric range, with an optional comment if enabled. Prevent duplicate/conflicting records with constraints. Score edits are allowed only under the documented judging state. Criteria changes after scoring starts must be blocked or follow a documented audited reset/re-score process. Unpublished scores and private judge feedback are not visible to participants or unrelated judges.
+EVT-009 — Result calculation and publication. Only an authorised event manager can review and publish final results. Use the straight sum of criterion scores; score weights are not part of MVP. Each criterion has a maximum score greater than 0 and no greater than 100. A result is publishable only when all required criteria have a score from every judge assigned to that submission under the event's approved judging configuration. Tied totals share a rank; do not invent a hidden tie-break. Before publication, participants cannot view unpublished score totals, rankings or internal judge feedback. After publication, show only fields designated participant-visible/public. Publish/unpublish actions are audited. Event cancellation/archive must not expose unpublished scores accidentally.
+7.5 Events acceptance criteria
+- Event CRUD, public/private visibility, date/time validation and all seven lifecycle statuses are enforced by API and UI.
+- Published event pages never expose drafts or private fields.
+- Registration open/close boundaries, eligibility, duplicate requests, withdrawal, capacity and concurrent last-slot attempts behave correctly.
+- External participants cannot access organisation members or other modules without separate membership and permission.
+- Team membership enforces event scope, eligibility, configured size limits and concurrency invariants.
+- Submissions include only approved URL/text fields, enforce ownership/deadlines and cannot upload files.
+- Judges can access only assigned work; scores remain private until publication.
+- Unauthorised users cannot publish results; module deactivation or permission revocation blocks operations without deleting historical data.
+8. Functional requirements — Meetings (meetings)
+8.1 Scheduling, attendees, agenda and lifecycle
+MTG-001 — Meeting model and create/edit. An authorised organiser can create/edit a meeting with title, description/objective, start/end instants, IANA time-zone identifier, location or external meeting URL where applicable, organiser, attendees, visibility, ordered agenda and timestamps. Validate all fields server-side. No built-in video conferencing or real-time collaborative editing is provided.
+MTG-002 — Canonical meeting lifecycle. Use exactly these status labels: Scheduled, In Progress, Completed, and Cancelled, stored as scheduled, in_progress, completed, and cancelled. Default allowed transitions are scheduled → in_progress, completed, or cancelled; in_progress → completed or cancelled; completed and cancelled are terminal for ordinary users. Any reopening/other exception requires a documented, approved decision. Do not introduce an archived meeting status or silently change status during page rendering. Validate end after start and retain UTC instants plus the IANA zone for display.
+MTG-003 — Attendees and visibility. Attendees are unique per meeting. Internal attendees must be active members of the same organisation. External attendee email addresses may be recorded for invitation purposes but do not create organisation membership or an external meeting portal. Support visibility values organisation and attendees_only; organisation visibility does not automatically grant every action permission, and attendees_only restricts meeting details to the organiser and authorised attendees/admins. Attendee lists and participation details are exposed only to authorised users. Removing/revoking attendance blocks access on subsequent requests. Meeting visibility is enforced on the backend and through data access policy, not only with a UI checkbox.
+MTG-004 — Ordered agenda and list/calendar. Organisers/authorised users can add, edit, reorder and remove agenda items. Each item supports title, optional description and optional time allocation; sequence is persisted and safely updated. Provide upcoming and past meeting lists with server-side pagination and filters by date range, status and organiser; attendee filters may be used only when permitted. A calendar-style presentation is required where practical; it must use the same permission-enforced data and should not introduce a heavy/inaccessible dependency without review. At minimum, date-filtered lists are mandatory.
+8.2 Notes/minutes and action items
+MTG-005 — Confidential notes/minutes. Notes/minutes have an author and timestamps and a separate access rule from meeting detail/attendance. By default only the organiser and users granted the relevant meeting.notes.read or meeting.notes.manage permission in the appropriate scope can read or edit private notes. Attendee status alone does not grant access. Check permission before querying/serializing note content. Do not put note bodies in audit metadata. If an explicit share-with-attendees feature is needed, document its exact permissions and audit effects before implementation; it is not the default.
+MTG-006 — Action items. Authorised users can create action items linked to a meeting with title, description, eligible assigned user, due date, priority, status, timestamps and optional source agenda item. Assignees must be eligible active organisation members. Validate that a source agenda item belongs to the same meeting and organisation. Canonical statuses are open, in_progress, done, and cancelled. Allowed transitions are open → in_progress, done, or cancelled; in_progress → open, done, or cancelled; done and cancelled are terminal for ordinary users. Enforce transitions and permission checks server-side. Define resource-specific visibility for organisers, authorised attendees and assignees; an action item must not reveal confidential notes. Action items remain meeting records and must not automatically create or change Projects & Tasks tasks.
+8.3 Email and notifications
+MTG-007 — Invitations, updates and cancellations. Where provider configuration is present and the email behaviour is enabled, send meeting invitations, updates and cancellations through the shared email abstraction. Do not add a separate email provider, mandatory queue or notification centre. If provider configuration is absent or a send request fails, do not claim the email was sent. The app may record a provider-accepted request only when the provider actually accepts it; acceptance is not proof of final inbox delivery. Record safe operational failures without logging confidential notes or raw attendee tokens.
+8.4 Meetings acceptance criteria
+- Meeting statuses exactly match the four canonical values; invalid transitions fail.
+- Scheduling, timezone, attendee eligibility, duplicate attendees and visibility are enforced consistently.
+- An attendee cannot read confidential minutes merely because they are invited.
+- External attendee records do not grant organisation membership or an external meeting portal.
+- Action items enforce eligible assignment, due date/priority/status and same-meeting references; no automatic project integration occurs.
+- Disabled module, revoked membership or permission changes block relevant requests.
+- Email success/failure UI reflects the actual configured provider outcome.
+9. Functional requirements — Projects & Tasks (projects)
+9.1 Projects and project membership
+PRJ-001 — Project model, create/edit and membership. An authorised project manager can create/edit a project with name, description, owner/manager, start date, target completion date, status, priority, members and optional labels. Project owners and members must be eligible active users in the same organisation. Membership is resource-scoped: organisation membership alone does not automatically allow access to every project. Only permitted managers/admins can change project membership. The current responsible owner/manager cannot be removed without an eligible replacement being assigned atomically or the operation being rejected.
+PRJ-002 — Project lifecycle and priority. Use exactly these status labels: Planning, Active, On Hold, Completed, and Archived, stored as planning, active, on_hold, completed, and archived. Implement a server-side transition map. Default transitions are planning → active or archived; active → on_hold, completed, or archived; on_hold → active, completed, or archived; completed → archived; archived is terminal for ordinary users. Reopening an archived project requires explicit manager permission and audit only if the product owner approves it. Project and task priority values are exactly low, medium, high, and urgent. Archived projects are read-only to ordinary users; records/history are preserved.
+9.2 Tasks and workflow
+PRJ-003 — Task model and canonical status values. Tasks support title, description, parent project, creator, assignee, status, priority, optional start date, due date, optional approved labels, and creation/update timestamps. Use exactly these status labels: Backlog, To Do, In Progress, Blocked, and Done, stored as backlog, todo, in_progress, blocked, and done. Do not add a Cancelled task status. Deletion, where allowed, is a separately authorised soft-delete operation and does not invent a new status. A task must reference a project in the same organisation; label relationships cannot cross organisations.
+PRJ-004 — Assignment eligibility and membership changes. A task assignee must be an active organisation member and an eligible member of the same project. Validate eligibility when assigning/reassigning and when project membership or organisation membership changes. If a user has active task assignments, block removal from the project or suspension/removal of their organisation membership until the tasks have been reassigned or marked otherwise by an authorised project manager. Account-level security suspension may take effect immediately, but it must preserve task history and create an actionable reassignment state. Do not silently orphan assignments. Client-submitted user IDs are never authoritative.
+PRJ-005 — Task operations and status transitions. Permitted users can create, view, update, assign/reassign and soft-delete tasks according to permission and project lifecycle. Default status transitions are backlog → todo; todo → backlog or in_progress; in_progress → blocked or done; blocked → in_progress; and done → in_progress only for a user with explicit reopen permission. Invalid transitions fail at the backend. Task deletion is soft deletion: remove the task from normal lists, retain audit/history according to retention policy, and do not physically cascade-delete comments/history. Restoration is not in MVP unless separately approved. List and Kanban views use the same data model. Kanban status changes are server-confirmed, show pending/error state, and revert/reconcile when rejected; keyboard-accessible status change is available as an alternative to drag/drop.
+PRJ-006 — Filters, lists, Kanban and due-date views. Provide server-side filtering by status, assignee, priority, due date, project and approved labels where relevant, with pagination and deterministic sorting. Provide Assigned to me, Due soon, and Overdue views. Define due soon as due within the next 7 days; overdue means due instant is before current server time and status is not done. Use consistent server-side UTC/timezone semantics. Do not fetch all tasks and filter locally, and do not automatically change task status because its due date passed. Provide both List and Kanban views over the same records.
+9.3 Comments and activity
+PRJ-007 — Comments. Authorised project members can add simple text comments to a project/task where granted the relevant permission. Comments inherit parent task/project and tenant/resource permissions. Safely render text; do not allow raw HTML. No file attachments, mentions, direct messages or rich-text collaboration. Authors may edit their own comments while the parent project is not archived. Authors may soft-delete their own comments; deleting another user’s comment requires an explicit project.comment.moderate permission. Comment deletion preserves an audit/history marker and does not physically erase the record. Audit metadata must not copy the comment body. Do not expose comments through guessed IDs or cross-tenant references.
+PRJ-008 — Activity history and archive behaviour. Show a concise activity timeline for material project/task events such as creation, status change, assignment and comment addition. This is separate from compliance audit logs and must not expose secrets or private audit payloads. Archiving a project preserves task/history data and prevents ordinary writes. Any approved restore/unarchive action must be permission-controlled and audited. Disabling the projects module never deletes project data.
+9.4 Projects & Tasks acceptance criteria
+- Project statuses exactly match Planning, Active, On Hold, Completed and Archived.
+- Task statuses exactly match Backlog, To Do, In Progress, Blocked and Done; backend transition enforcement matches this PRD.
+- Cross-tenant references and access through guessed project/task/label/comment IDs fail.
+- Only eligible project members can be assigned to tasks, and membership changes cannot silently orphan assignments.
+- List/Kanban/assigned-to-me/due-soon/overdue share consistent backend filtering and permissions.
+- Archived projects are read-only to ordinary users and history is retained.
+- Comments/activity use safe rendering, are appropriately scoped and are not treated as a substitute for audit logs.
+10. Platform administration and support boundary
+PLAT-001 — Separate console. Platform pages use the /platform namespace and a distinct layout/navigation from organisation workspaces. Platform operators must not accidentally operate as organisation owners/admins.
+PLAT-002 — Account operations. Platform Super Admin may inspect/manage account status and permitted global account metadata, with audited high-impact changes. No password display, token display, impersonation or silent login-as-user feature.
+PLAT-003 — Organisation metadata. Platform Super Admin may view permitted organisation metadata and manage approved operational flags. This does not grant blanket access to private events, meeting minutes, projects, comments or participant data.
+PLAT-004 — Module catalogue. Super Admin can enable/disable platform availability of the three fixed modules. Catalogue changes are validated, audited and enforced by the backend. Arbitrary module creation is not supported.
+PLAT-005 — Support Agent. Support Agent may see limited account/organisation status and operational metadata needed for basic assistance. Support Agent cannot read private event submissions, participant personal details beyond specifically permitted minimum metadata, private meeting notes, project comments or arbitrary tenant records. Any request for elevated, time-limited access is out of scope until explicitly designed and approved.
+PLAT-006 — No ticketing product. The MVP has no support ticket portal, inbox, ticket queues, customer-facing case management, or support workflow engine. The Support Agent role exists only for the limited operations defined above.
+PLAT-007 — Operational safety. Platform actions that disable accounts/modules or change roles require confirmation and audit records. A module disable blocks requests without deleting organisation data.
+11. Data architecture and integrity requirements
+This section defines logical expectations, not a demand to create every table in one migration. Exact physical schema, column types, foreign keys, indexes and migration ordering must be designed in Phase 0 and documented in docs/database.md before Phase 2.
+11.1 Core logical entities
+At minimum, evaluate and model the following entities with stable IDs and timestamps where appropriate:
+- Identity/session: users, sessions, email verification tokens, password reset tokens.
+- Organisation: organisations, organisation memberships, invitations.
+- Authorization: permission catalogue, scoped roles, role-permission assignments, user/membership role assignments, resource-scoped assignments where required.
+- Module entitlements: module catalogue, platform availability state, organisation module activation.
+- Audit: audit events.
+- Events: events, event registrations/participants, teams, team membership, submissions, scoring criteria, judge assignments, scores/results.
+- Meetings: meetings, meeting attendees, agenda items, minutes/notes, action items.
+- Projects: projects, project membership, tasks, labels if approved, comments and activity records.
+- Delivery/operations: email delivery metadata only where useful and supported; do not store secrets or raw sensitive token values.
+Do not add billing, payment, support-ticket, file-upload, arbitrary workflow, or unrelated business entities.
+11.2 Tenant ownership and constraints
+- Organisation-owned rows must have an explicit tenant boundary, normally organisation_id, or be reachable only through a rigorously enforced parent chain with tenant-aware constraints documented.
+- Add tenant-aware foreign keys/constraints so a child row in Organisation A cannot reference a parent/resource in Organisation B. Examples include membership-to-organisation, project-to-organisation, task-to-project, event-to-organisation, team/submission-to-event and attendee/action item-to-meeting.
+- Use uniqueness constraints for normalized user email, organisation slug, membership pair, invitation token digest, event registration uniqueness, team membership and other domain invariants.
+- Index real query patterns: organisation_id, foreign keys, status, created/updated dates, due dates, event/meeting start instants and common list filters. Avoid indexes without a justified query pattern.
+- Store secrets/tokens as digests where feasible; return raw high-entropy tokens only where a one-time user flow requires it.
+- Avoid cascading deletes that erase audit/history or silently remove dependent user data. Prefer explicit archive/retention behaviour; every cascade must be justified in docs/database.md.
+11.3 RLS and database roles
+- Create separate migration/admin and runtime database roles. The runtime role must not be superuser, must not own protected tables in a way that bypasses RLS, and must not have BYPASSRLS.
+- Enable RLS on every tenant-owned table and use FORCE ROW LEVEL SECURITY where needed to enforce policies for table owners subject to PostgreSQL semantics.
+- Fail closed when transaction-local context is absent or malformed. Do not default missing tenant context to unrestricted access.
+- Set authenticated actor and active organisation context using transaction-local settings on the same database connection and transaction used for the protected queries. Clear automatically at transaction end; test pooled-connection reuse and rollback paths.
+- Policies must account for SELECT, INSERT, UPDATE and DELETE with appropriate USING and WITH CHECK logic. Backend permissions and RLS are complementary, not substitutes.
+- Use a dedicated, narrowly scoped access path and explicit policies for public event data and event-scoped external participant access. Never disable RLS globally or use a privileged connection to make public endpoints work.
+- Platform operations that need cross-tenant metadata must use narrowly scoped policy/queries and be audited. The support role does not bypass RLS to access private content.
+- Integration tests must use the same least-privilege runtime role intended for the app, not a superuser/table-owner connection.
+11.4 Transaction and concurrency rules
+Use database transactions for operations that span related invariants, including organisation plus owner creation, invitation acceptance, owner transfer, role/entitlement change, capacity-constrained registration, team membership limits and score/result publication where required. Add appropriate unique constraints, locking or atomic updates so concurrent requests cannot bypass invariants. Do not depend on frontend disabled buttons to prevent duplicates.
+12. Security requirements and threat boundaries
+SEC-001 — Server-trusted identity only. Never trust userId, role, membership, organisation entitlement or permission supplied by the client as authoritative. Derive identity from the server-validated session and resolve active membership/permissions from trusted data.
+SEC-002 — Authorization evaluation order. For an organisation request, validate in this order (with safe implementation-specific adjustments documented): authenticated identity → requested organisation context → active membership (unless an explicitly designed public/event-scoped path applies) → platform/module availability → organisation module entitlement → action permission → resource/assignment/participant scope → transaction-local tenant context/RLS → audit where required.
+SEC-003 — Tenant isolation. Test with at least two organisations and multiple users, including a user belonging to both organisations. Test tampered path IDs, query filters, request bodies, foreign keys, caches, direct API calls, pooled connection reuse, failed transaction rollback and missing tenant context.
+SEC-004 — Least privilege. Deny by default. Missing permission, missing membership, disabled module, invalid session, missing tenant context and unrecognised status must fail closed.
+SEC-005 — Input/output safety. Validate user-controlled data, escape/render comments and descriptions safely, prevent SQL injection, prevent unsafe redirect/open-redirect patterns, restrict URL schemes to http/https where URLs are permitted and avoid returning unnecessary personal data.
+SEC-006 — Abuse controls. Rate-limit sensitive public/auth endpoints, protect invitation and verification workflows from replay, prevent event registration overbooking, and avoid account enumeration.
+SEC-007 — Secret management. Keep secrets out of source control, prompts, logs, screenshots and error payloads. Do not print environment-variable values to make debugging easier.
+SEC-008 — Audit controls. Audit sensitive changes and permission decisions as specified in Section 6.5 without storing confidential record contents.
+SEC-009 — Platform boundary. Super Admin and Support Agent must not be implemented as blanket RLS bypass roles for tenant business data. Any new exceptional access pathway requires explicit product/security approval, purpose limitation, audit design and tests.
+SEC-010 — Security evidence. Security-sensitive acceptance requires reproducible test evidence. A green unit test suite alone is not proof of RLS or tenant isolation. Use database integration tests under the least-privilege runtime role.
+13. Non-functional requirements
+13.1 Reliability and data integrity
+- Multi-step writes must be atomic where consistency requires it.
+- Database constraints enforce invariants as a second line of defence behind backend validation.
+- Failures must return safe, actionable errors and must not leave partially created organisation, invitation acceptance, registration or role state.
+- UI handles loading, empty, success, validation error, general error, forbidden and not-found states where relevant.
+13.2 Performance
+- All potentially large collections are paginated server-side; do not load entire organisation datasets into the browser.
+- Search/filter/sort parameters are bounded and backed by appropriate indexes where query patterns justify them.
+- Avoid N+1 queries for list pages and avoid exposing full confidential records in list endpoints.
+- With a warm backend and representative test fixtures of approximately 1,000 rows per principal list, common list/detail API operations should be designed to respond within 2 seconds under light development/test load. This is an engineering target, not a production SLA, and must be measured rather than claimed without evidence. Free-tier cold starts are reported separately.
+13.3 Accessibility and responsive design
+Target WCAG 2.2 AA. All major flows should be keyboard-accessible, labels and errors must be associated with controls, focus must remain managed in dialogs, and status must not be communicated only through colour. The product must be usable at common mobile/tablet/desktop widths without hiding essential functionality.
+13.4 Maintainability
+- Keep the backend JavaScript ES Module codebase readable and domain-separated without introducing unnecessary service layers or abstractions.
+- Keep shared platform logic in one shared location; module domain rules remain in their module.
+- Keep TypeScript strictness and typed API contracts on the frontend.
+- Avoid code generation, libraries or infrastructure that do not provide a real MVP benefit.
+- Document non-obvious security decisions and migration risks.
+14. Deployment, environments and release requirements
+14.1 Target topology
+- Frontend: Vercel, React + TypeScript + Vite build.
+- Backend: Render, Node.js + Express.js JavaScript ES Modules.
+- Database: Neon PostgreSQL.
+- Browser API path: same-origin /api/* proxy/rewrite from Vercel to Render, subject to a Phase 0 validation of forwarding and cookie behaviour.
+- Local development: Vite dev server proxies /api/* to local Express; local environment variables are untracked.
+Do not make AWS, a paid custom domain, paid email provider, managed queue or paid monitoring service a launch prerequisite.
+14.2 Environments
+Document local development, automated test, and production environments separately. Use distinct credentials and database instances/branches where available. Production data must not be copied into local/test environments without an approved sanitization process. Production startup must fail safely when mandatory secrets/configuration are missing.
+14.3 Migration/release safety
+- Run migrations explicitly as part of a controlled release process with a verified target environment.
+- Before production migration, check database target, backup/recovery posture and migration reversibility/forward-fix plan.
+- Do not delete production data or run destructive migrations without explicit owner approval.
+- Verify health/readiness, auth, organisation isolation, core module smoke tests and logs after deployment.
+- Mark every release-check item verified, failed, not run or requires owner action; include evidence.
+14.4 Free-tier disclosure
+Document the actual current service limits at deployment time, including possible Render sleep/cold starts, database/storage limits and email-provider restrictions. Do not promise uninterrupted uptime, a latency SLA or automatic scaling based solely on free-tier hosting. Re-verify provider policies during Phase 11 because vendor limits may change.
+15. Error handling and user-facing behaviour
+- Use common error codes and field-validation error shape documented in docs/api-contracts.md.
+- 401 means authentication is missing/invalid; 403 means the request is authenticated but disallowed; 404 may be used to avoid leaking whether a protected resource exists, according to the documented policy; 409 represents conflicts such as duplicate registration, stale update or invalid state transition; 422 may be used consistently for semantic validation if that convention is chosen.
+- Do not reveal whether a private resource exists if doing so would leak cross-tenant information.
+- Display a specific, helpful message for known expected failures (registration closed/full, invitation expired, permission denied, module disabled, stale session) without exposing SQL, secrets or stack traces.
+- A UI success message must only appear after the server confirms a successful operation and, for email, after the provider accepts the delivery request where the wording implies delivery.
+- Destructive/high-impact operations require confirmation and clear consequences.
+16. Navigation and route inventory
+Route details may evolve within the fixed architecture, but product areas must remain distinct and protected appropriately.
+Public routes
+- / — product landing page with accurate descriptions only.
+- /modules — overview of Events & Hackathons, Meetings, Projects & Tasks.
+- /security — factual security/tenancy summary; do not claim controls that are not implemented.
+- /auth/register, /auth/login, /auth/verify-email, /auth/forgot-password, /auth/reset-password.
+- Published public event detail/registration routes using a documented stable route pattern; drafts and private event paths remain protected.
+Authenticated workspace routes
+- /app — organisation/workspace chooser and user's allowed overview; no fabricated metrics.
+- /app/organisations — list/create/switch organisations.
+- /app/organisations/:organisationId/settings — permitted organisation settings.
+- /app/organisations/:organisationId/members — member/invitation management subject to permissions.
+- /app/organisations/:organisationId/events/... — event module routes.
+- /app/organisations/:organisationId/meetings/... — meetings routes.
+- /app/organisations/:organisationId/projects/... — project/task routes.
+- Account/profile/security pages as needed for account lifecycle requirements.
+Platform routes
+- /platform — distinct platform console.
+- Platform accounts, organisation metadata and module catalogue pages only as defined in Section 10.
+The frontend route inventory does not itself authorize data. Every request is checked by the backend and database policies.
+17. Acceptance test strategy
+Phase 0 must create docs/testing.md and map every requirement ID to a test type. At minimum, include:
+1. Unit tests: state transitions, validation, permission decision functions, due-date calculations, scoring calculation and safe error mapping.
+2. API integration tests: auth/session lifecycle, membership, invitations, RBAC, module activation, each module's core workflows and error cases.
+3. Database/RLS integration tests: run as the intended least-privilege runtime role; test all relevant CRUD policy types, cross-tenant foreign keys, missing context, transaction rollback and pooled connections alternating between organisations.
+4. Concurrency tests: owner invariant, invitation acceptance, event capacity/registration uniqueness, team-size limits and other identified simultaneous writes.
+5. End-to-end tests: representative happy path for each major user journey, including permission-denied paths.
+6. Accessibility checks: keyboard-only flows, focus management, labels, validation errors and representative responsive layouts.
+7. Deployment smoke tests: health/readiness, same-origin /api proxy, secure cookies/CSRF, configured/missing email provider behaviour, migrations and core tenant isolation.
+Never treat a test as passing if it was skipped, not executed, mocked in a way that removes the security boundary under test, or merely described. Report the commands and actual outcomes.
+18. Phase plan and phase gates
+Follow the existing Antigravity prompt pack. Its finer subphases are implementation slices, not scope additions.
+Product phase	Work	Must be true before moving on
+Phase 0	Read-only repository/PRD audit; decision/risk log; implementation plan; architecture, DB, security, API, traceability, testing, deployment/runbook docs; map every requirement	Every requirement is mapped; stack and folder contract match; unresolved security/data-model decisions are documented and resolved or explicitly gated; no product code/migrations created
+Phase 1	Repository/tooling foundation, backend shell, frontend shell, shared design system and API conventions	Builds/lint/type checks work as configured; placeholder pages are honest; no business feature is falsely claimed complete
+Phase 2	PostgreSQL migrations foundation, core schema, runtime/migration roles, RLS and tenant context	Least-privilege database integration tests prove tenant isolation before business modules depend on it
+Phase 3	Shared authentication/account lifecycle/session and email abstraction	Verification/reset/session/CSRF/rate-limit tests pass
+Phase 4	Organisation lifecycle, memberships, invitation onboarding and ownership invariants	Multiple-organisation and owner/invitation concurrency tests pass
+Phase 5	Shared scoped RBAC, permission catalogue, module catalogue/activation and audit infrastructure	Deny-by-default, entitlement/permission and audit tests pass
+Phase 6A	Events core, event lifecycle, list/detail/create/edit	Event persistence, lifecycle, tenant/resource authorization and time handling pass
+Phase 6B	Public event view, registration and participant management	Eligibility, duplicate/capacity/concurrency/privacy tests pass
+Phase 6C	Teams and URL-based submissions	Team membership, ownership, deadlines and submission tests pass
+Phase 6D	Judge assignments, scoring and results	Assignment-only judge access, private scoring and controlled publication tests pass
+Phase 7A	Meetings, scheduling, attendee records, lifecycle and list/date view	Access, lifecycle and timezone tests pass
+Phase 7B	Confidential minutes/notes and action items	Note visibility and action-item assignment tests pass
+Phase 7C	Meetings full integration/E2E acceptance	Complete Meetings suite passes; no critical privacy defect remains
+Phase 8A	Projects, membership and lifecycle	Project tenancy, membership and archive behaviour pass
+Phase 8B	Tasks, statuses, assignment, List/Kanban and filters	Assignment, workflow, due-date and filter tests pass
+Phase 8C	Comments/activity and full Projects & Tasks acceptance	Safe rendering, access scope, audit/activity and end-to-end tests pass
+Phase 9	Platform administration and permitted operational controls	Separate platform boundary, role separation and audit tests pass
+Phase 10	Security, UX, accessibility, reliability and performance hardening	No unresolved critical/high security defect; regression and tenant isolation suite passes
+Phase 11	Controlled Vercel/Render/Neon release preparation/deployment	Deployment, env, migration, cookie/CSRF and smoke checks are evidenced; unrun steps are labelled honestly
+Optional final audit	Independent acceptance review	Requirement coverage, known limitations and release status are reported clearly
 
-    domains/
-      auth/
-      users/
-      organisations/
-      memberships/
-      invitations/
-      platform/
-      modules/
-      entitlements/
-      permissions/
-      audit/
 
-      events/
-      meetings/
-      projects/
-
-    shared/
-      errors/
-      validation/
-      security/
-      logging/
-      pagination/
-
-  tests/
-  package.json
-  .env.example
-Each domain may contain JavaScript route, controller, validation, database-query and business-logic files according to its actual complexity. Keep authentication and CRUD flows straightforward; avoid unnecessary abstraction layers.
-Use a package.json configuration with "type": "module" so backend source files can consistently use ES Module syntax.
-Example:
-import express from "express";
-
-const app = express();
-
-app.use(express.json());
-
-export default app;
-The above is illustrative only. Production middleware, routes, configuration validation and error handling must be implemented in their designated phases.
-3. Updated Frontend Project Structure
-client/
-  src/
-    app/
-    routes/
-    layouts/
-    components/
-      ui/
-      navigation/
-      forms/
-      tables/
-      feedback/
-
-    features/
-      auth/
-      organisations/
-      members/
-      modules/
-      roles/
-      platform/
-      events/
-      meetings/
-      projects/
-
-    api/
-    hooks/
-    lib/
-    types/
-    styles/
-
-  package.json
-Use .tsx for React components and .ts for TypeScript modules that do not contain JSX.
-Frontend TypeScript types must describe API requests and responses, reusable data models and component props. These types improve compile-time safety but do not replace server-side validation or authorisation.
-4. Updated Phase 0 — Repository and Requirements Audit
-The AI coding assistant must:
-•	Inspect the existing repository before changing files.
-•	Confirm that the frontend uses React and TypeScript.
-•	Confirm that the backend uses Node.js, Express.js and JavaScript ES Modules.
-•	Verify that TypeScript compilation is configured for the frontend only.
-•	Verify that backend source code uses .js files and does not depend on backend TypeScript compilation.
-•	Document the frontend/backend workspace arrangement, development commands and API conventions.
-5. Updated Phase 1 — Project Foundation and Design System
-The AI coding assistant must:
-•	Configure the React + TypeScript frontend.
-•	Configure the Node.js + Express + JavaScript backend.
-•	Set up the required package scripts, linting and code formatting for each workspace.
-•	Establish environment configuration and startup validation.
-•	Implement the ManageX Clean Enterprise design tokens and reusable UI components.
-•	Establish the frontend API client and backend request/response conventions.
-•	Implement the shared application shell, responsive layouts and initial routes.
-•	Configure frontend type checking separately from backend JavaScript linting and testing.
-•	Verify that both applications can be started independently during development.
-Acceptance criteria:
-•	The frontend builds and passes TypeScript type checking.
-•	The backend starts without a TypeScript compilation step.
-•	The frontend can communicate with the backend through the configured API.
-•	Both applications have clear setup instructions.
-•	No unnecessary backend TypeScript configuration or backend .ts files are introduced.
-6. Updated API Contract and Validation Rule
-Frontend and backend must share a clearly documented API contract.
-•	Frontend TypeScript interfaces or types describe expected request and response shapes.
-•	Backend Zod schemas validate incoming requests at runtime.
-•	Backend controllers and database functions must never trust frontend types as proof that submitted data is valid.
-•	Authentication, organisation membership, module entitlement, permissions, resource scope and PostgreSQL RLS must be enforced independently of TypeScript.
-•	API response formats, error codes and pagination conventions remain the same as specified in the original PRD.
-7. Updated AI Coding Assistant Instruction
-The AI coding assistant must respect the selected language split throughout the entire project:
-Frontend: TypeScript. Backend: JavaScript. Database: PostgreSQL and SQL migrations.
-Do not convert the backend to TypeScript or mix backend .ts files into the JavaScript application. Use modern JavaScript ES Modules, runtime validation, modular domain boundaries, documented API contracts and automated tests.
-All other ManageX requirements—including the three-level access-control architecture, multi-tenant isolation, RLS, the initial Events & Hackathons, Meetings, and Projects & Tasks modules, and the Clean Enterprise light UI—remain unchanged.
-Shared API, form, error-handling and design-system code must not be duplicated separately across the three modules.
-11.5 API convention
-Base path:
-/api/v1
-Use plural resource names, consistent HTTP methods and explicit response schemas.
-Examples:
-•	GET /api/v1/organisations
-•	POST /api/v1/organisations
-•	GET /api/v1/organisations/:organisationId
-•	GET /api/v1/organisations/:organisationId/members
-•	POST /api/v1/organisations/:organisationId/invitations
-•	GET /api/v1/organisations/:organisationId/modules
-•	POST /api/v1/organisations/:organisationId/modules/:moduleKey/activate
-•	GET /api/v1/organisations/:organisationId/events
-•	POST /api/v1/organisations/:organisationId/events
-•	GET /api/v1/organisations/:organisationId/meetings
-•	POST /api/v1/organisations/:organisationId/meetings
-•	GET /api/v1/organisations/:organisationId/projects
-•	POST /api/v1/organisations/:organisationId/projects
-Every protected endpoint must have an explicitly defined authentication and authorisation requirement.
-Use 401 Unauthorized when authentication is absent or invalid and 403 Forbidden when an authenticated user lacks required access. For sensitive resources, a consistent 404 policy may be used to avoid leaking resource existence, but it must be deliberate and documented.
-11.6 Standard API responses
-Successful list response:
-{
-  "data": [],
-  "meta": {
-    "page": 1,
-    "limit": 20,
-    "total": 0
-  }
-}
-Error response:
-{
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Please review the submitted fields.",
-    "details": []
-  },
-  "requestId": "example-request-id"
-}
-Do not expose stack traces, SQL errors, database credentials, raw tokens or other internal information in production API responses.
-12. Multi-Tenancy and Database Security
-12.1 Mandatory isolation model
-ManageX uses a shared PostgreSQL database and shared schema for its initial deployment.
-Each organisation-owned record must be associated with the correct tenant, usually through organisation_id.
-All data access must apply tenant isolation.
-Using organisation_id in the schema alone is not sufficient. Isolation must be enforced by backend authorization, SQL constraints and PostgreSQL RLS.
-12.2 Tenant context
-For a protected organisation request:
-1.	Authenticate the user.
-2.	Resolve the organisation ID from the request context.
-3.	Verify the user's active membership.
-4.	Verify access to the relevant module and resource.
-5.	Begin a database transaction.
-6.	Set the verified organisation and user context using transaction-local database settings.
-7.	Perform authorised queries within that transaction.
-8.	Commit or roll back.
-9.	Ensure the next transaction cannot inherit the previous tenant context.
-Illustrative pattern:
-BEGIN;
-
-SELECT set_config(
-  'app.current_organisation_id',
-  $1,
-  true
-);
-
-SELECT set_config(
-  'app.current_user_id',
-  $2,
-  true
-);
-
--- Execute only authorised tenant-scoped operations.
-
-COMMIT;
-The third argument to set_config makes the value transaction-local.
-This is an illustration, not the complete authorisation mechanism. Values must be parameterised; organisation membership must be checked before tenant context is established; and every tenant query must execute through the intended transaction.
-Do not issue a context-setting statement and then execute unrelated queries using an arbitrary pooled connection.
-12.3 RLS requirements
-For tenant-owned tables:
-•	Enable RLS.
-•	Define policies for relevant operations.
-•	Use restrictive USING and WITH CHECK expressions where appropriate.
-•	Default to denying access when context or authorisation conditions are absent.
-•	Enable FORCE ROW LEVEL SECURITY where appropriate and validate the effects for the intended table and access pattern.
-•	Test SELECT, INSERT, UPDATE and DELETE isolation separately.
-•	Never use a superuser or BYPASSRLS role for normal application requests.
-•	Do not assume the table-owner role is protected automatically by RLS.
-Example policy concept:
-ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projects FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY projects_tenant_isolation
-ON projects
-FOR ALL
-USING (
-  organisation_id =
-  NULLIF(
-    current_setting(
-      'app.current_organisation_id',
-      true
-    ),
-    ''
-  )::uuid
-)
-WITH CHECK (
-  organisation_id =
-  NULLIF(
-    current_setting(
-      'app.current_organisation_id',
-      true
-    ),
-    ''
-  )::uuid
-);
-This policy demonstrates tenant filtering only. It does not replace membership, module-permission, project-membership or user-level checks.
-A custom PostgreSQL setting is not cryptographic proof of identity. A database role that can freely set a tenant variable can potentially set another tenant's value if application control is bypassed. Parameterised queries, strict backend authorisation, RLS policies, least-privilege roles and tests are all necessary.
-For external event participants, define separate narrowly scoped access policies or database functions for public event information and user-owned event records. Do not grant a guest unrestricted tenant context.
-12.4 Database roles
-Use separate roles for different operational responsibilities.
-At minimum:
-•	Migration/owner role, used only during controlled schema changes.
-•	Runtime application role, with only required privileges and no BYPASSRLS.
-•	Read-only monitoring role if operational reporting requires it.
-The runtime application role must not be a PostgreSQL superuser.
-Application users must not receive direct database credentials.
-12.5 Cross-tenant references
-Prevent cross-tenant relationships at the database level.
-For example, if projects have a composite unique constraint on (organisation_id, id), task records should reference the project using the corresponding tenant-aware key.
-Illustrative concept:
-FOREIGN KEY (organisation_id, project_id)
-REFERENCES projects (organisation_id, id)
-Use the same principle for events, submissions, teams, meetings, action items and other tenant-owned parent-child relationships.
-A valid record ID belonging to another tenant must not be sufficient to create a cross-tenant relationship.
-12.6 Unique constraints
-Determine the appropriate scope of each unique value.
-Examples:
-•	User email: globally unique after normalisation, where the chosen account model requires it.
-•	Organisation slug: unique according to the defined platform-wide slug policy.
-•	Module key: unique globally.
-•	Organisation member: one active membership per user and organisation.
-•	Event team membership: prevent duplicate participation where prohibited.
-•	Registration: prevent duplicate registrations per user and event.
-•	Role name: unique within its intended role scope, according to the schema design.
-Do not use a global unique constraint where uniqueness should only exist within an organisation.
-12.7 Security tests
-The database and API tests must verify that:
-•	An organisation member cannot query another organisation's projects.
-•	An organisation administrator cannot change another tenant's organisation settings.
-•	An event participant cannot inspect unrelated submissions.
-•	A judge cannot evaluate an unassigned submission.
-•	A user cannot assign themselves a role by directly changing a request payload.
-•	An inactive module cannot be used through direct API calls.
-•	RLS blocks queries without valid tenant context.
-•	Tenant context does not leak through connection pooling.
-•	Inserts and updates cannot write a different organisation_id.
-•	A runtime application connection cannot bypass RLS.
-PostgreSQL official documentation: https://www.postgresql.org/docs/current/ddl-rowsecurity.html
-13. Authentication and Session Security
-13.1 Account lifecycle
-Implement:
-•	Registration.
-•	Email verification.
-•	Login.
-•	Logout.
-•	Forgot-password flow.
-•	Reset-password flow.
-•	Session expiration.
-•	Revocation of existing sessions after appropriate security events.
-•	Account status controls.
-OAuth, SSO and passkeys may be added later without changing tenant ownership or RBAC.
-13.2 Password storage
-Use a suitable password-hashing algorithm such as Argon2id with parameters appropriate to the deployment environment.
-Never store plaintext passwords or reversibly encrypted passwords.
-Never log password values.
-13.3 Session implementation
-Choose and document one session strategy before implementation.
-For a browser-based first release, prefer secure, HttpOnly cookies with server-controlled revocation and a well-defined session lifecycle.
-If using short-lived access tokens with rotating refresh tokens, store refresh-session records server-side and only expose tokens through an explicitly reviewed secure cookie mechanism. Do not put long-lived authentication credentials in browser local storage.
-Cookie-authenticated unsafe requests must be protected against CSRF using a suitable CSRF-token strategy and/or strict origin validation appropriate to the final deployment.
-Cookie settings, CORS, cookie domain and SameSite behaviour must be tested under the actual frontend/API deployment configuration.
-13.4 Authentication protections
-•	Rate-limit login and password recovery.
-•	Use generic errors for account-recovery responses.
-•	Expire verification and password-reset tokens.
-•	Store only a secure hash of high-entropy, single-use recovery tokens where appropriate.
-•	Revoke or rotate sessions following password changes or other sensitive events.
-•	Use HTTPS in production.
-•	Prevent token leakage through logs, URLs and client-side error reports.
-•	Avoid unnecessarily revealing account existence.
-14. Database Entities and Relationships
-The following is the required logical data model. Exact column definitions, nullability, indexes, constraints and migrations must be finalised before implementing module CRUD endpoints.
-All primary entities need consistent ID and timestamp conventions. Tenant-owned resources must have organisation_id directly or through an explicitly reviewed secure relationship. Prefer explicit tenant keys in tenant-owned operational tables for clarity and enforcement.
-14.1 Identity and platform
-users
-Core user accounts.
-Important fields:
-•	id
-•	name
-•	email_normalized
-•	password_hash
-•	email_verified_at
-•	status
-•	created_at
-•	updated_at
-user_sessions
-Stores revocable session or refresh-session records according to the selected authentication strategy.
-platform_role_assignments
-Associates users with explicit platform roles.
-platform_roles
-Defines approved platform roles.
-Platform permissions must be separate from organisation and module permissions.
-14.2 Organisation and membership
-organisations
-Important fields:
-•	id
-•	name
-•	slug
-•	status
-•	created_by
-•	created_at
-•	updated_at
-•	deleted_at, if using soft deletion
-organisation_memberships
-Important fields:
-•	id
-•	organisation_id
-•	user_id
-•	status
-•	joined_at
-•	created_at
-•	updated_at
-Enforce membership uniqueness and ownership constraints.
-organisation_invitations
-Important fields:
-•	id
-•	organisation_id
-•	email_normalized
-•	invited_by
-•	token_hash
-•	status
-•	expires_at
-•	accepted_at
-•	created_at
-Invitation tokens must be high-entropy, single-use and time-limited.
-organisation_settings
-Stores validated organisation-specific configuration.
-Do not use an unrestricted JSON field as a substitute for typed security-critical configuration.
-14.3 Module catalogue and entitlements
-modules
-Global module catalogue.
-Examples:
-•	events
-•	meetings
-•	projects
-Important fields:
-•	id
-•	key
-•	name
-•	description
-•	status
-•	sort_order
-organisation_modules
-Tracks module activation for each organisation.
-Important fields:
-•	organisation_id
-•	module_id
-•	status
-•	activated_by
-•	activated_at
-•	deactivated_at
-Use constraints that prevent duplicate entries for the same organisation and module.
-plans and subscriptions
-The schema may include plan and subscription foundations, but full automated payment processing is not required in MVP.
-A module may be enabled only when allowed by platform configuration, entitlement and organisation activation rules.
-The exact entitlement rules must be centralised rather than duplicated throughout controllers.
-14.4 Roles and permissions
-permissions
-A centrally defined catalogue of permission keys and descriptions.
-roles
-Represents a role at an explicitly defined scope.
-The model must distinguish platform roles, organisation roles and module roles.
-role_permissions
-Associates a role with permitted actions.
-membership_role_assignments
-Associates a role with an organisation membership and the applicable scope.
-Resource assignments
-Where required, resource-level relationships must identify permitted event, project, submission or other resources. A module role alone must not imply access to every resource if the role is restricted to assigned resources.
-Do not place all authorisation rules in a single users.role column.
-14.5 Audit and notifications
-audit_logs
-Important fields:
-•	id
-•	organisation_id, nullable for explicitly global platform operations
-•	actor_user_id, nullable only for well-defined system events
-•	action
-•	resource_type
-•	resource_id
-•	result
-•	request_id
-•	metadata
-•	created_at
-Include only appropriate metadata. Never log passwords, access tokens, session secrets or complete confidential request bodies.
-Audit logs require access control, integrity safeguards and retention rules.
-notifications
-Stores in-app notification records where needed.
-email_delivery_events
-Optional delivery tracking for messages when the selected email provider supports it.
-14.6 Events module
-Suggested tables:
-•	events
-•	event_registrations
-•	event_teams
-•	event_team_members
-•	event_submissions
-•	event_judge_assignments
-•	event_scoring_criteria
-•	event_scores
-Important design requirements:
-•	Event-owned records carry tenant scope.
-•	Registrations enforce the appropriate event/user uniqueness rule.
-•	Team membership constraints prevent duplicate membership.
-•	Scores reference the relevant judge assignment, submission and criterion.
-•	Submission visibility and evaluation access must be constrained by event scope and permissions.
-•	Public event access must reveal only approved fields.
-•	External participant access must be distinct from general organisation membership.
-14.7 Meetings module
-Suggested tables:
-•	meetings
-•	meeting_attendees
-•	meeting_agenda_items
-•	meeting_notes
-•	meeting_action_items
-Important design requirements:
-•	Meeting records are tenant-scoped.
-•	Attendee associations have appropriate uniqueness constraints.
-•	Private notes are protected separately where the product supports different note visibility.
-•	Action items remain correctly scoped to their organisation and source meeting.
-•	User assignments must reference eligible users or explicitly supported external participants.
-14.8 Projects module
-Suggested tables:
-•	projects
-•	project_members
-•	tasks
-•	task_comments
-•	task_labels
-•	task_label_assignments
-Important design requirements:
-•	Every project and task is tenant-scoped.
-•	Tasks reference projects through tenant-aware constraints.
-•	Project membership and task visibility are checked server-side.
-•	Task labels cannot be attached across organisations.
-•	Comments inherit appropriate access restrictions from their task.
-•	Status transitions and assignment changes are validated.
-14.9 Database implementation rules
-•	Use foreign keys wherever relationships must remain valid.
-•	Use NOT NULL, CHECK, UNIQUE and other constraints as appropriate.
-•	Use transactions for multi-table operations.
-•	Add indexes for tenant-scoped filters, joins, sorting and unique lookups.
-•	Avoid indexing every column without a query-based reason.
-•	Use SQL migrations stored in version control.
-•	Test the complete schema from an empty database.
-•	Do not modify production schemas manually without recording the change in a migration.
-•	Define deletion, archival and retention behaviour before enabling destructive operations.
-•	Use UTC consistently for stored timestamps and preserve the relevant time zone when local scheduling semantics matter.
-15. Module Activation and Feature Entitlements
-Activating a module must be a controlled organisation-level operation.
-15.1 Activation process
-1.	Verify the current user.
-2.	Verify that the user has permission to manage organisation modules.
-3.	Resolve the organisation and verify access.
-4.	Verify platform availability of the module.
-5.	Verify plan or entitlement restrictions if enabled.
-6.	Activate the module transactionally.
-7.	Record the activating user and timestamp.
-8.	Write the appropriate audit event.
-9.	Refresh the relevant UI state and navigation.
-15.2 Deactivation
-Before deactivation:
-•	Confirm the acting user's permission.
-•	Warn about the effect on workflows and access.
-•	Preserve historical records unless an explicit retention policy says otherwise.
-•	Prevent ordinary module APIs from accepting new operations against an inactive module.
-•	Keep authorised archival and administrative workflows available where required.
-Deactivating a module must not silently delete its data.
-15.3 Availability versus permission
-The frontend and backend must separately evaluate:
-•	Is the module registered in the platform catalogue?
-•	Is the module allowed for the organisation?
-•	Is the module active?
-•	Is the current user authorised to perform this action?
-•	Is the requested resource within the user's permitted scope?
-A hidden navigation link is not a substitute for these checks.
-16. Organisation Lifecycle and Administration
-16.1 Organisation creation
-An organisation creation transaction must create:
-•	The organisation.
-•	The initial Owner membership.
-•	Required baseline organisation settings.
-•	Any default role assignments.
-•	Any initial module configuration records required by the design.
-It must not leave the database with an organisation that has no recoverable owner.
-16.2 Invitations
-Invitation lifecycle:
-•	Pending
-•	Accepted
-•	Expired
-•	Revoked
-Acceptance must validate the invitation token, expiry, intended account/email and relevant organisation status.
-Inviting a person must not allow the inviter to grant permissions beyond their delegation authority.
-16.3 Membership changes
-Suspension or removal must:
-•	Revoke the applicable membership-based access.
-•	Invalidate or re-evaluate relevant cached authorisation.
-•	Prevent subsequent protected requests from continuing to rely on stale membership state.
-•	Preserve required audit history.
-•	Apply defined rules to assigned tasks, ownership and historical content.
-16.4 Owner transfer
-Require:
-•	Explicit confirmation.
-•	Verification of the target member's eligibility.
-•	Reauthentication or another appropriate security step.
-•	A transaction that prevents duplicate or missing ownership.
-•	An immutable or otherwise protected audit event.
-16.5 Organisation deletion
-The MVP may initially support organisation deactivation rather than irreversible deletion.
-Before implementing permanent deletion, define:
-•	Ownership verification.
-•	Confirmation and possible delay.
-•	Dependent data behaviour.
-•	Backup and retention implications.
-•	Audit retention.
-•	Legal and privacy requirements.
-•	Recovery or export policy.
-Never delete tenant data merely because the last ordinary member leaves the organisation.
-17. Audit, Privacy and Data Retention
-17.1 Audit events
-At minimum, consider recording:
-•	Authentication security events.
-•	Failed privileged operations.
-•	Organisation creation and settings changes.
-•	Membership invitations, acceptance and removal.
-•	Role and permission changes.
-•	Module activation/deactivation.
-•	Resource publication or cancellation.
-•	Meeting attendee changes and protected-note changes.
-•	Event judge assignments and result publication.
-•	Platform administrative actions.
-•	Support-access attempts and approvals.
-•	Security configuration changes.
-Audit records must be created reliably for the important operation. Critical multi-step actions should use a transaction or a deliberate durable-event strategy so successful changes are not silently left unaudited.
-17.2 Privacy principles
-•	Collect only information required by the feature.
-•	Restrict sensitive data by default.
-•	Avoid logging confidential content.
-•	Avoid cross-organisation analytics that expose identifiable tenant content without a defined and authorised purpose.
-•	Define retention periods.
-•	Provide suitable account and data-management workflows.
-•	Use secure transport and managed secret storage.
-•	Document third-party processors and their data access where applicable.
-Privacy requirements must be reviewed against the laws and contractual obligations applicable to the actual markets in which ManageX operates. This PRD does not itself certify legal compliance.
-18. Notifications and Email
-Use an email-provider abstraction so a provider can be configured without embedding provider-specific code in business logic.
-Potential messages:
-•	Email verification.
-•	Password-reset request.
-•	Organisation invitation.
-•	Invitation reminder, if enabled.
-•	Meeting invitation or update.
-•	Event registration confirmation.
-•	Relevant project/task notification, when implemented.
-Requirements:
-•	Templates must use consistent ManageX branding.
-•	Links must use the configured application origin.
-•	Sensitive tokens must be single-use and short-lived where appropriate.
-•	Provider credentials must be environment secrets.
-•	Do not expose recipient lists inappropriately.
-•	Record only the metadata needed to operate the messaging feature.
-•	Support a development email-testing mechanism without sending real messages unexpectedly.
-Retries and background queues may be introduced if reliable asynchronous delivery becomes necessary. They should not be added merely for architectural appearance.
-19. Validation and Error Handling
-All inputs must be validated server-side.
-Validation must include:
-•	Type.
-•	Length.
-•	Required fields.
-•	Date/time consistency.
-•	Allowed enum values.
-•	Related-record ownership.
-•	State transitions.
-•	Role and permission requirements.
-•	Business rules.
-•	Pagination limits.
-•	URL format and approved URL rules where applicable.
-Use parameterised SQL queries for user-controlled values.
-A client-side validation success must never be treated as proof that an API request is valid.
-Provide a central error-handling mechanism with:
-•	Consistent error codes.
-•	Safe public messages.
-•	Structured internal logs.
-•	A request ID for investigation.
-•	Appropriate HTTP status codes.
-Avoid both extremes: leaking internal implementation details and returning meaningless generic errors for every situation.
-20. Security Requirements
-20.1 Application security
-•	Enforce authentication on protected routes.
-•	Enforce permissions on every protected operation.
-•	Perform object-level authorisation for resource IDs supplied by the client.
-•	Whitelist accepted update fields to prevent mass assignment.
-•	Use parameterised database queries.
-•	Validate external URLs and avoid unsafe server-side fetching.
-•	Configure CORS for the intended origins.
-•	Add appropriate security headers.
-•	Rate-limit sensitive endpoints.
-•	Set request-body size limits.
-•	Use safe output rendering and prevent stored/reflected XSS.
-•	Protect cookie-authenticated state-changing requests against CSRF.
-•	Avoid exposing internal debug routes in production.
-•	Keep dependencies maintained and scan them through CI.
-•	Never commit secrets to source control.
-20.2 Sensitive operations
-Sensitive operations require stronger controls where appropriate:
-•	Platform administrator changes.
-•	Ownership transfer.
-•	Role and permission changes.
-•	Security configuration.
-•	Organisation closure.
-•	Module entitlement changes.
-•	Access to protected operational information.
-Consider reauthentication, explicit confirmation and audit logging based on the risk of each operation.
-20.3 Security baseline references
-Use the following as implementation and review references:
-•	OWASP Authorization Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
-•	OWASP API Security Top 10: https://owasp.org/www-project-api-security/
-•	PostgreSQL Row Security Policies: https://www.postgresql.org/docs/current/ddl-rowsecurity.html
-•	OWASP Authentication Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
-•	WCAG 2.2: https://www.w3.org/TR/WCAG22/
-These references provide guidance; following this PRD does not automatically constitute a security certification.
-21. Performance and Reliability
-The MVP should be designed to perform well for ordinary small and medium-sized organisations, while avoiding architectural decisions that prevent future scaling.
-Requirements:
-•	Use pagination for resource lists.
-•	Index real query patterns.
-•	Avoid N+1 database queries.
-•	Avoid loading entire tenant datasets for dashboard summaries.
-•	Use bounded request and query execution behaviour.
-•	Avoid unbounded payloads.
-•	Use transactions for concurrent business operations.
-•	Apply connection-pool limits appropriate to the database capacity.
-•	Handle database connection errors without exposing sensitive details.
-•	Provide health and readiness checks.
-•	Log application failures with request IDs.
-•	Define a backup and restoration strategy before production use.
-Do not set an arbitrary universal performance guarantee before measuring the actual deployment. Record baseline and target response times during testing and revise them based on expected usage.
-22. Search, Tables and Pagination
-List pages must support practical search and filtering.
-Requirements:
-•	Server-side pagination.
-•	Maximum permitted page size.
-•	Stable ordering.
-•	Safe sort-field allowlists.
-•	Tenant-scoped queries.
-•	Filters validated against the resource and user permissions.
-•	Useful empty states.
-•	Appropriate loading states.
-•	Preservation of search and filter state during navigation where useful.
-Do not interpolate arbitrary client-supplied sort expressions into SQL.
-23. Testing Strategy
-Testing is part of implementation, not a final optional activity.
-23.1 Unit tests
-Test:
-•	Validation schemas.
-•	Business-rule functions.
-•	Status transitions.
-•	Permission evaluation.
-•	Entitlement decisions.
-•	Invitation token validation.
-•	Role assignment constraints.
-•	Date and time handling.
-23.2 Integration tests
-Use a real test PostgreSQL database and the actual migrations where practical.
-Test:
-•	Authentication lifecycle.
-•	Organisation creation.
-•	Invitation acceptance.
-•	Module activation.
-•	Role and permission changes.
-•	Database constraints.
-•	RLS policies.
-•	Resource CRUD operations.
-•	Cross-tenant access attempts.
-•	Transaction rollback.
-•	Concurrent registration capacity checks.
-•	Concurrent operations that could create duplicate assignments.
-Do not rely exclusively on mocks for database-security requirements.
-23.3 API tests
-Test allowed, denied, unauthenticated and invalid requests for each important endpoint.
-At minimum verify:
-•	Missing authentication returns the expected error.
-•	Invalid role assignments fail.
-•	Inactive-module access is denied.
-•	Foreign organisation IDs do not reveal protected records.
-•	Resource ownership and assignment are checked.
-•	Invalid state transitions fail.
-•	Invalid request bodies fail.
-•	Pagination and filters are bounded.
-23.4 Frontend tests
-Test:
-•	Login and onboarding flows.
-•	Organisation switching.
-•	Navigation and responsive layout.
-•	Form validation.
-•	Loading and error states.
-•	Empty states.
-•	Permission-aware actions.
-•	Module activation UI.
-•	Confirmation dialogs.
-23.5 End-to-end tests
-Exercise complete journeys such as:
-1.	Register and verify a user.
-2.	Create an organisation.
-3.	Activate the Events module.
-4.	Create and publish an event.
-5.	Register a participant.
-6.	Submit an eligible entry.
-7.	Assign a judge.
-8.	Record and publish results under the appropriate permissions.
-Repeat equivalent end-to-end flows for meetings and projects.
-23.6 Isolation acceptance suite
-Create at least two distinct organisations with separate test users and data.
-Attempt to read, modify, delete or associate data across the two organisations using:
-•	Modified URL IDs.
-•	Modified request-body IDs.
-•	Modified query parameters.
-•	Direct API calls without UI navigation.
-•	Unexpected role assignments.
-•	Missing or stale tenant context.
-•	Pooled database connections reused between organisations.
-Every prohibited operation must fail, and no protected record or sensitive metadata may be returned.
-24. Development and Environment Management
-24.1 Configuration
-Keep environment-specific values in environment variables or an appropriate secret manager.
-Typical variables:
-•	NODE_ENV
-•	PORT
-•	DATABASE_URL
-•	APP_ORIGIN
-•	API_ORIGIN, if separately configured
-•	SESSION_SECRET, where relevant to the chosen session implementation
-•	Email-provider configuration
-•	Logging configuration
-•	Rate-limit configuration
-Define a separate example environment file containing placeholders only.
-Never commit real passwords, private keys, database URLs containing credentials or production API secrets.
-Validate required environment variables at application startup and fail clearly if required configuration is missing.
-24.2 Local development
-Provide documented commands for:
-•	Installing dependencies.
-•	Starting PostgreSQL.
-•	Applying migrations.
-•	Seeding development data.
-•	Starting the API.
-•	Starting the frontend.
-•	Running tests.
-•	Running linting.
-•	Running type checks.
-Development seed data must be clearly separated from production data.
-A development Super Admin must not be created in production using a known default password.
-24.3 Database migrations
-Migrations must:
-•	Be ordered.
-•	Be version-controlled.
-•	Apply to a fresh database.
-•	Be repeatable in the intended migration-tool sense.
-•	Include required constraints and indexes.
-•	Account for RLS policies and database privileges.
-•	Avoid unsafe destructive changes without a reviewed migration plan.
-Production deployments must use the intended migration process. Do not automatically drop or recreate production tables on application startup.
-25. Deployment and Operations
-25.1 Deployment environments
-Maintain separate environments for:
-•	Local development.
-•	Automated testing.
-•	Staging.
-•	Production.
-Use separate credentials and databases for different environments.
-25.2 Production requirements
-Before release:
-•	Configure HTTPS.
-•	Secure database access and credentials.
-•	Apply reviewed migrations.
-•	Configure email delivery.
-•	Configure allowed application origins.
-•	Verify cookie and CSRF behaviour.
-•	Verify RLS and runtime database privileges.
-•	Enable structured logging.
-•	Configure error monitoring.
-•	Set database backups and test restoration.
-•	Remove development credentials and debug routes.
-•	Verify health checks.
-•	Run the isolation acceptance suite.
-25.3 Release approach
-Do not release all modules merely because their screens render.
-A module is release-ready only when its UI, APIs, data model, permissions, RLS rules, tests, error states and operational requirements are implemented and verified.
-26. Implementation Phases for the AI Coding Assistant
-The assistant must implement ManageX in phases. It must not attempt to generate the entire production system in one unreviewed pass.
-Phase 0 — Repository and Requirements Audit
-Tasks:
-•	Inspect the existing repository and tooling.
-•	Identify existing code, dependencies and conventions.
-•	Map this PRD to planned implementation areas.
-•	List unresolved technical decisions.
-•	Produce an implementation plan.
-•	Identify high-risk security assumptions.
-•	Do not delete existing working code without justification.
-Deliverables:
-•	docs/implementation-plan.md
-•	docs/architecture.md
-•	Initial risk and decision log.
-Acceptance criteria:
-•	The plan covers frontend, backend, database, testing and deployment.
-•	Tenant isolation, authentication and RBAC are explicit design decisions.
-•	No security-critical ambiguity is hidden.
-Phase 1 — Project Foundation and Design System
-Tasks:
-•	Configure the TypeScript-based frontend and backend.
-•	Configure linting, formatting and type checking.
-•	Define environment configuration.
-•	Establish the application shell.
-•	Implement ManageX branding and Clean Enterprise design tokens.
-•	Build reusable UI components.
-•	Implement responsive layouts.
-•	Create public pages and authenticated placeholder layouts.
-•	Define API client and error-handling conventions.
-Temporary mock data is acceptable for validating UI structure in this phase, provided it is clearly identified and cannot be mistaken for completed backend integration.
-Deliverables:
-•	Working project scaffold.
-•	Design tokens and component conventions.
-•	Public landing page.
-•	Login and registration UI.
-•	Organisation workspace shell.
-•	Initial route map.
-Acceptance criteria:
-•	Responsive design works.
-•	Forms and navigation have real interaction states.
-•	No major page contains fabricated production data presented as real.
-•	Linting and type checking pass.
-Phase 2 — PostgreSQL Foundation
-Tasks:
-•	Define the logical ER model and data dictionary.
-•	Finalise table columns, relationships, nullability and constraints.
-•	Create migrations.
-•	Create separate database roles.
-•	Implement tenant-context transaction helpers.
-•	Implement initial RLS policies.
-•	Implement tenant-aware foreign keys and indexes.
-•	Create isolated test database setup.
-•	Add schema validation and migration tests.
-Deliverables:
-•	Database schema documentation.
-•	Versioned migrations.
-•	RLS policy definitions.
-•	Database transaction utilities.
-•	Database security tests.
-Acceptance criteria:
-•	The complete database can be built from an empty instance.
-•	Tenant context is transaction-local.
-•	Runtime connections cannot bypass RLS.
-•	Cross-tenant references fail.
-•	RLS behaviour is demonstrated by automated tests.
-Phase 3 — Authentication and Identity
-Tasks:
-•	Registration.
-•	Email verification.
-•	Login and logout.
-•	Password hashing.
-•	Session management.
-•	Password reset.
-•	Rate limiting.
-•	Security middleware.
-•	Authentication tests.
-Acceptance criteria:
-•	The complete authentication lifecycle works.
-•	Invalid or expired tokens are rejected.
-•	Sensitive credentials are not exposed in the browser or logs.
-•	Protected APIs require authentication.
-Phase 4 — Organisations, Invitations and Memberships
-Tasks:
-•	Organisation creation.
-•	Owner membership.
-•	Organisation list and switching.
-•	Invitations and invitation acceptance.
-•	Membership status changes.
-•	Ownership protections.
-•	Organisation settings.
-•	Audit integration.
-Acceptance criteria:
-•	User A can belong to multiple organisations.
-•	One organisation's members cannot access another organisation's private data.
-•	Membership removal affects subsequent authorised requests.
-•	Invitations expire and cannot be used repeatedly.
-•	Ownership constraints remain valid under concurrent operations.
-Phase 5 — RBAC, Module Catalogue and Entitlements
-Tasks:
-•	Platform role definitions.
-•	Organisation role definitions.
-•	Module role definitions.
-•	Permission catalogue and seed data.
-•	Role-permission assignments.
-•	Membership-role assignments.
-•	Resource-scoped access.
-•	Module catalogue.
-•	Organisation module activation/deactivation.
-•	Permission-aware UI.
-•	Audit events for changes.
-Acceptance criteria:
-•	Platform, organisation and module roles remain distinct.
-•	A user's permissions are resolved from explicit assignments and policies.
-•	Inactive modules cannot be used through direct API calls.
-•	Users cannot escalate their own privileges.
-•	Resource-level restrictions are enforced.
-Phase 6 — Events & Hackathons Module
-Implement one vertical slice at a time:
-1.	Event database entities and migrations.
-2.	Event API and validation.
-3.	Event permission policies.
-4.	Event list and detail screens.
-5.	Event creation and publishing.
-6.	Registration.
-7.	Teams.
-8.	Submissions.
-9.	Judge assignments.
-10.	Evaluation and results.
-11.	Audit events.
-12.	Unit, integration, RLS and end-to-end tests.
-Acceptance criteria:
-•	Event lifecycle works.
-•	Registration restrictions work.
-•	Participants access only eligible event resources.
-•	Judges access only assigned resources.
-•	Cross-tenant attempts fail.
-•	Results follow the intended visibility rules.
-Phase 7 — Meetings Module
-Implement:
-1.	Meeting database entities.
-2.	Meeting APIs and validation.
-3.	Permissions and resource restrictions.
-4.	Meeting list and detail.
-5.	Create, edit and cancellation flows.
-6.	Attendees and agenda.
-7.	Notes and action items.
-8.	Email notifications where configured.
-9.	Audit integration.
-10.	Tests.
-Acceptance criteria:
-•	Meeting lifecycle works.
-•	Attendee and note visibility rules are enforced.
-•	Action items remain correctly associated with the organisation and meeting.
-•	All prohibited cross-tenant operations fail.
-Phase 8 — Projects & Tasks Module
-Implement:
-1.	Project database entities.
-2.	Project APIs and validation.
-3.	Project membership rules.
-4.	Task database entities.
-5.	Task CRUD and assignment.
-6.	List and Kanban views.
-7.	Search, filtering and pagination.
-8.	Comments/activity if included in the MVP implementation.
-9.	Audit integration.
-10.	Tests.
-Acceptance criteria:
-•	Project and task workflows work end to end.
-•	Invalid task transitions are rejected.
-•	Assignment and membership rules are enforced.
-•	Tasks cannot reference projects from other organisations.
-•	Every important operation has authorisation and automated tests.
-Phase 9 — Platform Administration and Operational Controls
-Tasks:
-•	Platform overview.
-•	Organisation administration.
-•	Module catalogue administration.
-•	Appropriate platform-level audit views.
-•	Support workflows within approved permissions.
-•	Operational health checks.
-•	Error monitoring.
-•	Backup and restore documentation.
-Acceptance criteria:
-•	Platform administration is separate from tenant administration.
-•	Support users do not gain unrestricted tenant access.
-•	Administrative actions are audited.
-•	Production operational checks are documented and verified.
-Phase 10 — Security, UX and Performance Hardening
-Tasks:
-•	Run full cross-tenant isolation tests.
-•	Review API-level authorisation.
-•	Test CSRF, session management and rate limits.
-•	Test RLS under pooled connections.
-•	Review permission delegation.
-•	Test responsive layouts.
-•	Test empty, loading, error and forbidden states.
-•	Run dependency checks.
-•	Measure important query and API paths.
-•	Remove obsolete mock data and debug code.
-Acceptance criteria:
-•	Security-critical tests pass.
-•	No known unresolved critical access-control defect remains.
-•	All core workflows can be completed through the real interface.
-•	Application behaviour and operational configuration are documented.
-Phase 11 — Staging and Production Release
-Tasks:
-•	Configure staging and production environments.
-•	Run migrations through the deployment process.
-•	Validate secrets and runtime privileges.
-•	Test email and origin/cookie configuration.
-•	Run smoke tests.
-•	Validate backups and restoration.
-•	Execute the release checklist.
-•	Document rollback steps.
-Acceptance criteria:
-•	A new environment can be set up from documented instructions.
-•	Production does not depend on development credentials or seed secrets.
-•	The core product has passed end-to-end and isolation verification.
-27. How the AI Coding Assistant Must Work
-These execution rules are mandatory.
-1.	Read the entire PRD before making substantial changes.
-2.	Inspect the existing repository before choosing commands or replacing files.
-3.	Produce a short phase plan and identify dependencies.
-4.	Implement only the current phase.
-5.	Prefer small, understandable changes over large unreviewed rewrites.
-6.	Do not invent undocumented business rules where a safer established rule already exists.
-7.	Do not implement authorisation solely in the frontend.
-8.	Do not skip database constraints or RLS because the API already checks permissions.
-9.	Do not generate a giant schema or many CRUD endpoints before defining the relationships and security boundaries.
-10.	Do not create placeholder endpoints that always return success.
-11.	Do not show success notifications before the server confirms success.
-12.	Do not seed production with default privileged credentials.
-13.	Do not store secrets in source control.
-14.	Add or update tests whenever behaviour changes.
-15.	Run migrations, type checking, linting and relevant tests for the current phase.
-16.	Fix failures before claiming completion.
-17.	Update architecture and setup documentation when the implementation changes.
-18.	Keep a record of completed work, remaining work and known limitations.
-19.	Stop at phase boundaries for review rather than silently rewriting the roadmap.
-20.	Never claim that security testing or a deployment succeeded unless the relevant checks actually ran and passed.
-Every phase report must contain:
-•	Implemented functionality.
-•	Important files or areas changed.
-•	Database changes.
-•	API changes.
-•	Security and permission decisions.
-•	Tests executed and their actual results.
-•	Any failing checks.
-•	Remaining limitations.
-•	The next recommended phase.
-28. Functional Acceptance Checklist
-ManageX MVP is functionally complete when the following are true:
-Identity and organisation
-•	 
-Registration and login work.
-•	 
-Email verification and password recovery work.
-•	 
-An authenticated user can create an organisation.
-•	 
-A user can join multiple organisations through valid membership.
-•	 
-Organisation switching updates the active context correctly.
-•	 
-Invitations follow the configured lifecycle.
-•	 
-Membership removal revokes membership-based access.
-Architecture and security
-•	 
-Platform, organisation and module roles are distinct.
-•	 
-Permissions are managed through explicit records and policies.
-•	 
-Inactive modules reject protected API operations.
-•	 
-Tenant-owned tables are protected with appropriate RLS policies.
-•	 
-Runtime credentials do not bypass RLS.
-•	 
-Cross-tenant access tests pass.
-•	 
-Cross-tenant references are prevented by constraints.
-•	 
-Resource-level authorization is verified on the server.
-•	 
-Sensitive administrative operations are audited.
-Initial modules
-•	 
-Events can be created, published and managed.
-•	 
-Event registration restrictions work.
-•	 
-Eligible teams and submissions work.
-•	 
-Judges can access only assigned work.
-•	 
-Meetings can be scheduled and managed.
-•	 
-Meeting attendee and note access is enforced.
-•	 
-Meeting action items work.
-•	 
-Projects and tasks can be created and managed.
-•	 
-Assignments and task state transitions are validated.
-•	 
-Search, filters, pagination and empty states work.
-UI/UX
-•	 
-The application consistently follows the Clean Enterprise design system.
-•	 
-The light theme uses the defined neutral surfaces and restrained indigo accents.
-•	 
-Sidebar and organisation switcher work.
-•	 
-Each module uses shared UI components.
-•	 
-Loading, error, empty and forbidden states exist.
-•	 
-Primary actions have real backend behaviour.
-•	 
-Responsive layouts work.
-•	 
-Accessibility checks are incorporated.
-Operations
-•	 
-Database setup is documented.
-•	 
-Migrations run from an empty database.
-•	 
-Required environment variables are documented.
-•	 
-Tests are repeatable.
-•	 
-Staging and production configuration are documented.
-•	 
-Backups and restoration procedures are defined.
-•	 
-No known critical tenant-isolation vulnerability remains.
-29. Future Roadmap
-After the initial three modules are stable, possible additions include:
-Employee Management
-•	Employee profiles.
-•	Departments and teams.
-•	Reporting hierarchy.
-•	Leave and attendance workflows, subject to an approved privacy and access model.
-Recruitment Management
-•	Job openings.
-•	Candidates.
-•	Applications.
-•	Interview scheduling.
-•	Interviewer assignments.
-•	Hiring decisions.
-Other possible modules
-•	Document Management.
-•	Asset Management.
-•	Workflow Automation.
-•	Customer Relationship Management.
-•	Finance or billing-related workflows.
-Every future module must reuse the same organisation, membership, entitlement, RBAC, RLS, audit and design-system foundations.
-Future modules must not be built by copying all of another module's authentication and tenant infrastructure.
-30. Final Product Definition
-ManageX is a shared, multi-tenant, modular SaaS platform with three explicit access-control layers:
-Platform → Organisation → Module
-It begins with Events & Hackathons, Meetings, and Projects & Tasks.
-It uses a Clean Enterprise light interface, a React and TypeScript frontend, a Node.js and Express backend, PostgreSQL, explicit RBAC, shared-schema multi-tenancy and PostgreSQL RLS.
-Security, organisation isolation, maintainable modularity, consistent user experience, auditability and testability are core requirements—not optional improvements to add after implementation.
-The application must be built in verified phases from repository setup through database security, authentication, organisation administration, module workflows, testing and production deployment.
-The objective is not merely to create a dashboard that looks complete. The objective is to deliver a functional, secure, coherent and extensible product whose behaviour matches the requirements in this document.
-________________________________________
-End of PRD
-Implementation instruction: Treat this document as the baseline specification. Before the first substantial code change, produce the implementation plan, confirm the logical ER model and RLS strategy, and map each requirement to a planned phase and test. Build incrementally and demonstrate completion with actual test results.
-
+Phase gate policy: Antigravity must implement only the current approved phase. It must report changes, commands, actual test results, blockers, scope deviations and remaining work. Stop after the report. Do not start a later phase without explicit user approval.
+19. Requirement traceability
+During Phase 0, create docs/requirements-traceability.md with at least these columns:
+Requirement ID | Requirement summary | Phase | UI/page | API endpoint(s) | Data entities | Authorization/RLS rule | Test case/evidence | Status | Notes/decision reference
+Every ID in this PRD must have a row. A row is not complete when it merely says “tested”; it must point to the concrete test or command and record the real result once implemented. If a requirement is intentionally deferred or blocked, record the reason and obtain product-owner approval before changing scope.
+20. Mandatory architecture and security decisions for Phase 0
+These are implementation-verification tasks, not permission to change product scope. Phase 0 must document each item as PRD-defined, safe implementation decision, or requires product-owner decision. The defaults below are fixed; changing them requires explicit product-owner approval and a PRD version update.
+1. RLS context lifecycle: document the transaction helper, transaction-local setting names, pooling strategy, rollback semantics and USING/WITH CHECK policies. Missing context fails closed.
+2. Runtime database privileges: use separate migration/runtime roles and prove the runtime role cannot bypass RLS.
+3. External event participant path: a verified account without organisation membership uses the common account identity but can access only its own registration/team/submission and published public results through narrowly scoped event-resource policies. Registration never creates organisation membership.
+4. Role/permission matrix: enumerate permission keys for every default role in docs/security.md and docs/api-contracts.md. Functional boundaries in Sections 5–10 are authoritative. Unspecified capabilities are denied by default; do not broaden permissions to make a workflow pass.
+5. Owner transfer: require explicit confirmation and reauthentication within the previous 10 minutes. Transfer must be transactional, safe under concurrent requests and audited. At least one active organisation owner must always exist.
+6. Task-assignee membership removal: use the fixed policy in PRJ-004. Block project/org membership removal until active assignments are reassigned, except immediate account-level security suspension, which preserves history and creates an actionable reassignment state.
+7. Event team size: when team mode is enabled, require team_size_min and team_size_max; minimum defaults to 1, maximum must be at least minimum and cannot exceed 100. Team invitations require acceptance, expire after 7 days and are single-use.
+8. Registration windows: unset opening time means the first publication instant; unset closing time means event start. Closing must be after opening and not after event start. Server-side behaviour is authoritative.
+9. Scoring: criterion maximum is greater than 0 and at most 100; MVP uses straight sum, requires all criteria assigned for a submission to be completed, and gives tied totals shared rank. No weights or hidden tie-breaks.
+10. Email: use one shared abstraction. Verification, password recovery and organisation invitations require email capability. Meeting invitations/updates are sent only when enabled/configured. Use a local-only development test mechanism; production must never represent an unconfigured/failed send as delivered.
+11. Vercel rewrite/session behaviour: validate forwarding of cookies and CSRF headers through the /api/* rewrite before claiming the deployment model is verified. If the rewrite cannot safely support the design on the target plan, stop and request approval for an alternative. Do not silently switch to third-party cookies or localStorage tokens.
+12. Audit retention/access: ordinary application users cannot edit/delete audit records. Do not automatically delete audit records in MVP. Restrict reads by permission and document operational retention/backup implications; do not claim tamper-proof storage unless implemented.
+13. Deletion/archive: organisation/module/event/project history is preserved by default. Task deletion is soft deletion as specified in PRJ-005. Physical deletion of core business or audit records is not a standard user workflow in MVP.
+14. Meeting notes sharing: confidential notes are private to the organiser and users with explicit note permissions. No share-with-attendees toggle is included in MVP.
+15. Migrations/seeds: use versioned SQL migrations, explicit local/test seed commands, no default production credentials, and controlled production migration with a recovery procedure.
+No unrelated feature may be created as a workaround for a technical/security decision. If a required security property cannot be verified, report BLOCKED and explain the smallest decision or environment capability needed.
+21. Definition of done
+A requirement or phase is done only when all applicable checks below are satisfied:
+- Behaviour matches this PRD and documented decisions.
+- Frontend and backend validation exist where applicable; backend remains authoritative.
+- Relevant scope, permission, entitlement, resource and RLS checks are implemented.
+- Normal, empty, loading, validation failure, server failure, forbidden and not-found states are covered where relevant.
+- Database migrations, indexes, constraints and rollback/forward-fix notes are documented.
+- Unit, integration, tenant/RLS, concurrency, end-to-end or accessibility tests applicable to the requirement were actually run and their outcome recorded.
+- UI reuses the shared design system and API client; no duplicate module-specific authentication/RBAC/tenant/client infrastructure was introduced.
+- Audit and privacy requirements are implemented for sensitive actions.
+- Docs and requirement traceability are updated.
+- No out-of-scope feature was added and no requirement was silently dropped.
+- Completion report distinguishes PASS, FAIL, BLOCKED, and NOT RUN, includes evidence and stops at the current phase.
+22. Required repository structure
+Use this repository structure as the canonical target. Add subfolders only when justified by the approved architecture; do not introduce client/ or server/ as competing roots.
+ManageX/
+├── AGENTS.md
+├── README.md
+├── .gitignore
+├── .env.example
+├── docs/
+│   ├── PRD.md
+│   ├── implementation-plan.md
+│   ├── architecture.md
+│   ├── database.md
+│   ├── security.md
+│   ├── api-contracts.md
+│   ├── requirements-traceability.md
+│   ├── testing.md
+│   ├── deployment.md
+│   ├── runbook.md
+│   ├── future-suggestions.md
+│   └── decisions/
+│       ├── README.md
+│       └── decision-log.md
+├── frontend/       # React + TypeScript + Vite
+├── backend/        # Node.js + Express + JavaScript ES Modules only
+├── database/       # versioned SQL migrations and safe seeds
+└── tests/          # shared/integration/e2e tests as documented
+The exact internal layout of each code directory is decided in Phase 0 based on the existing repo and documented architecture. Do not pre-build all future module code in Phase 1.
+23. Phase completion report format
+Every phase report must include:
+1. Phase and result: PASS, FAIL or BLOCKED (with a short reason).
+2. Scope completed: requirement IDs completed and anything intentionally not done.
+3. Files changed: actual file paths and purpose.
+4. Commands run: exact commands, including migration/test/build/lint commands.
+5. Test evidence: passed/failed/skipped/not-run counts and key output; distinguish mocks from real DB/RLS tests.
+6. Security/tenant checks: exact relevant tests and whether the least-privilege runtime role was used.
+7. Decisions/risks: decision-log references and unresolved blockers.
+8. Traceability update: requirements whose status changed and evidence locations.
+9. Scope integrity: confirm no unapproved feature/stack change; report any deviation explicitly.
+10. Next phase: name it as a proposal only. Do not start it until the product owner approves.
+24. Final product acceptance checklist
+ManageX MVP is release-ready only when every applicable item is evidenced:
+- [ ] Frontend is React + TypeScript + Vite; backend is Node.js + Express + JavaScript ES Modules; no backend TypeScript compilation exists.
+- [ ] Vercel + Render + Neon deployment path and limitations are documented and verified to the extent credentials/permissions allow.
+- [ ] Authentication, verification, recovery, revocable sessions, cookie/CSRF and rate limits work.
+- [ ] Multi-organisation membership/switching/invitations/owner invariants work.
+- [ ] Platform/organisation/module/resource authorization is centrally implemented and server-enforced.
+- [ ] RLS is enabled on all tenant-owned tables and passes tests under the least-privilege runtime role.
+- [ ] Module catalogue/activation is enforced by API and audited; disabling does not delete records.
+- [ ] Common audit, API, email and UI infrastructure is shared rather than duplicated.
+- [ ] Events lifecycle, registration/capacity, teams, URL submissions, judging and controlled results work.
+- [ ] Meetings scheduling/attendees, confidential notes/minutes and action items work.
+- [ ] Projects/membership, tasks, assignment, workflow, List/Kanban, filters, comments and activity work.
+- [ ] Platform support cannot read private tenant contents by default; no support-ticketing scope has been added.
+- [ ] Cross-tenant, permission-revocation, replay, concurrency and confidentiality tests pass.
+- [ ] No secrets, fake activity, false email-delivery claims or fabricated deployment claims are present.
+- [ ] Requirement traceability is complete; known limitations are explicit; all release checks have truthful statuses.
+Implementation instruction: Read this document in full before starting any phase. During Phase 0, compare it against the repository and the Antigravity prompt pack. If this document is installed as docs/PRD.md, the prompt pack's product contract and phase plan should be followed as written. Do not use appended “Updated …” sections or duplicate structures; this canonical document already consolidates the agreed requirements. Stop and request a product-owner decision only for the explicit Phase 0 decision points above or a genuine newly discovered conflict.
