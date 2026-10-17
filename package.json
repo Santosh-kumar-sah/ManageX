@@ -14,9 +14,14 @@
     "lint": "npm run lint:backend && npm run lint:frontend",
     "test:backend": "npm --prefix backend test",
     "test:frontend": "npm --prefix frontend test",
-    "test": "npm run test:backend && npm run test:frontend"
+    "test": "npm run test:backend && npm run test:frontend",
+    "migrate": "node database/migrate.js"
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.8",
+    "pg": "^8.23.1"
   }
 }
