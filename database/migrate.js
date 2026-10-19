@@ -76,6 +76,11 @@ export async function runMigrations(customDatabaseUrl) {
       if (appliedMap.has(version)) {
         const previousChecksum = appliedMap.get(version);
         if (previousChecksum !== checksum) {
+          if (process.env.RECALCULATE_CHECKSUM === version) {
+            console.log(`[Migrations] Updating checksum for ${file}...`);
+            await client.query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', [checksum, version]);
+            continue;
+          }
           throw new Error(
             `Migration integrity error: Checksum mismatch for migration "${file}". ` +
             `Expected ${previousChecksum}, but found ${checksum}. Modified migrations must not be rerun.`

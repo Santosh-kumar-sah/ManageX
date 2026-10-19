@@ -18,6 +18,10 @@ import { MembersPage } from '@/pages/workspace/MembersPage';
 import { OrgSettingsPage } from '@/pages/workspace/OrgSettingsPage';
 import { OrgModulesPage } from '@/pages/workspace/OrgModulesPage';
 import { OrgAuditLogsPage } from '@/pages/workspace/OrgAuditLogsPage';
+import { EventsPage } from '@/pages/workspace/events/EventsPage';
+import { EventDetailPage } from '@/pages/workspace/events/EventDetailPage';
+import { MeetingsPage } from '@/pages/workspace/meetings/MeetingsPage';
+import { MeetingDetailPage } from '@/pages/workspace/meetings/MeetingDetailPage';
 import { ModulePlaceholderPage } from '@/pages/workspace/ModulePlaceholderPage';
 import { PlatformOverviewPage } from '@/pages/platform/PlatformOverviewPage';
 import { NotFoundPage } from '@/pages/edge/ErrorPages';
@@ -42,30 +46,10 @@ export function App() {
       <Route path="/app" element={<WorkspaceLayout />}>
         <Route index element={<WorkspaceOverviewPage />} />
         <Route path="organisations" element={<OrganisationsPage />} />
-        <Route
-          path="organisations/:orgId/events/*"
-          element={
-            <ModulePlaceholderPage
-              moduleName="Events & Hackathons"
-              moduleKey="events"
-              scheduledPhase="Phase 6"
-              prerequisites="Shared Auth (Phase 3), Organisations (Phase 4), Scoped RBAC (Phase 5)"
-              description="Event management, public registrations, teams, URL submissions, and assigned judging will be implemented in Phase 6."
-            />
-          }
-        />
-        <Route
-          path="organisations/:orgId/meetings/*"
-          element={
-            <ModulePlaceholderPage
-              moduleName="Meetings"
-              moduleKey="meetings"
-              scheduledPhase="Phase 7"
-              prerequisites="Shared Auth (Phase 3), Organisations (Phase 4), Scoped RBAC (Phase 5)"
-              description="Timezone-aware scheduling, ordered agenda items, confidential minutes, and action items will be implemented in Phase 7."
-            />
-          }
-        />
+        <Route path="organisations/:orgId/events" element={<EventsPage />} />
+        <Route path="organisations/:orgId/events/:eventId" element={<EventDetailPage />} />
+        <Route path="organisations/:orgId/meetings" element={<MeetingsPage />} />
+        <Route path="organisations/:orgId/meetings/:meetingId" element={<MeetingDetailPage />} />
         <Route
           path="organisations/:orgId/projects/*"
           element={
