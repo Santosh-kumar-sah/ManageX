@@ -4,7 +4,7 @@ This document tracks progress across implementation phases, completed requiremen
 
 ---
 
-## Current Status: Phase 5 Completed (Awaiting Approval to begin Phase 6)
+## Current Status: Phase 7B Accepted (Confidential Minutes, Action Items & Email Notifications)
 
 | Phase | Description | Status | Requirements Completed | Gate / Blocker |
 |---|---|---|---|---|
@@ -13,13 +13,13 @@ This document tracks progress across implementation phases, completed requiremen
 | **Phase 2** | PostgreSQL Migrations & RLS Baseline | **COMPLETED** | OPS-003, OPS-005, SEC-002, SEC-003, SEC-004, SEC-009, SEC-010 (Migration runner, core schema, restricted `managex_app` role with NOBYPASSRLS, FORCE RLS, transaction helper, live RLS test suite, DB readiness in `/ready`) | Approved |
 | **Phase 3** | Authentication & Session Lifecycle | **COMPLETED** | AUTH-001, AUTH-002, AUTH-003, AUTH-004, AUTH-005, AUTH-006, AUTH-007, AUTH-008 (User registration, bcrypt hashing, single-use verification tokens, generic auth errors, server-managed sessions with 30m idle / 7d absolute lifetime, CSRF protection, rate limiting, and email abstraction) | Approved |
 | **Phase 4** | Organisation Lifecycle & Memberships | **ACCEPTED** | ORG-001, ORG-002, ORG-003, ORG-004, ORG-005, ORG-006, ORG-007, ORG-008, ORG-009, ORG-010 (Atomic org creation with owner role, multi-org membership, workspace switching with client cache reset, 7-day single-use invitations, safe email-matched onboarding, member management, final-owner protection, step-up transfer with password reauth, approved settings updates, leave org guard, and secret-redacted audit logs) | Formally accepted after acceptance review |
-| **Phase 5** | Scoped RBAC, Module Catalogue & Audit | **COMPLETED** | RBAC-001, RBAC-002, RBAC-003, RBAC-004, RBAC-005, RBAC-006, RBAC-007, MOD-001, MOD-002, MOD-003, MOD-004, MOD-005, AUD-004, API-004 (Machine-readable permission catalogue, baseline seeded roles, anti-escalation role assignment, sole-owner protection, multi-role aggregation, 3 core MVP modules with independent activation & platform availability check, fail-closed route guards, non-destructive deactivation, bounded audit log querying, Clean Enterprise frontend module/audit/role management) | Awaiting product owner review and approval to begin Phase 6 |
-| **Phase 6A** | Events Core & Lifecycle | PENDING | None | Blocked on Phase 5 approval |
-| **Phase 6B** | Event Registration & External Participants | PENDING | None | Blocked on Phase 6A |
-| **Phase 6C** | Hackathon Teams & URL Submissions | PENDING | None | Blocked on Phase 6B |
-| **Phase 6D** | Judge Scoring & Results Publication | PENDING | None | Blocked on Phase 6C |
-| **Phase 7A** | Meetings Core, Attendees & Agendas | PENDING | None | Blocked on Phase 5 |
-| **Phase 7B** | Confidential Minutes & Action Items | PENDING | None | Blocked on Phase 7A |
+| **Phase 5** | Scoped RBAC, Module Catalogue & Audit | **ACCEPTED** | RBAC-001, RBAC-002, RBAC-003, RBAC-004, RBAC-005, RBAC-006, RBAC-007, MOD-001, MOD-002, MOD-003, MOD-004, MOD-005, AUD-004, API-004 (Machine-readable permission catalogue, baseline seeded roles, anti-escalation role assignment, sole-owner protection, multi-role aggregation, 3 core MVP modules with independent activation & platform availability check, fail-closed route guards, non-destructive deactivation, bounded audit log querying, Clean Enterprise frontend module/audit/role management) | Formally accepted after acceptance review |
+| **Phase 6A** | Events Core & Lifecycle | **ACCEPTED** | EVT-001, EVT-002, EVT-003 (Core event model, UTC instants & IANA timezones, canonical 7-status lifecycle transition engine, draft/published visibility rules, management UI) | Formally accepted after acceptance check |
+| **Phase 6B** | Event Registration & External Participants | **ACCEPTED** | EVT-004, EVT-005 (Event registration, capacity limits with transactional concurrency locking, duplicate prevention, cancellation/withdrawal & reactivated re-registration, external participant boundary without org membership, own-registration status, staff participant roster) | Formally accepted after acceptance check |
+| **Phase 6C** | Hackathon Teams & URL Submissions | **ACCEPTED** | EVT-006, EVT-007 (Hackathon team model, min/max team sizing 1..100, team invites with 7-day single-use tokens, URL submissions with SSRF protection & submission window guard, serialized concurrent joins & ownership protection) | Formally accepted after acceptance check |
+| **Phase 6D** | Judge Scoring & Results Publication | **ACCEPTED** | EVT-008, EVT-009 (Judge assignments, criteria 1..100, private scoring, straight-sum result calculation, shared ranks, results publication) | Formally accepted after acceptance check |
+| **Phase 7A** | Meetings Core, Attendees & Agendas | **ACCEPTED** | MTG-001, MTG-002, MTG-003, MTG-004 (Meetings data model, UTC & IANA timezones, canonical 4-status lifecycle, organisation vs attendees_only visibility, internal & external attendees, RSVP management, ordered agendas & atomic reordering) | Formally accepted after acceptance review |
+| **Phase 7B** | Confidential Minutes & Action Items | **ACCEPTED** | MTG-005, MTG-006, MTG-007 (Confidential meeting minutes with strict permission gates, action item tracking with assignee status transitions and member validation, invitation/cancellation/reschedule email dispatch without body leaks) | Formally accepted after acceptance review |
 | **Phase 7C** | Meetings Full E2E & Access Regression | PENDING | None | Blocked on Phase 7B |
 | **Phase 8A** | Projects Core & Membership | PENDING | None | Blocked on Phase 5 |
 | **Phase 8B** | Tasks Model, List & Kanban Views | PENDING | None | Blocked on Phase 8A |
@@ -156,4 +156,222 @@ This document tracks progress across implementation phases, completed requiremen
   - Frontend typecheck: `tsc --noEmit` passes with 0 errors.
   - Frontend build: `tsc && vite build` completes in 13.29s with 0 errors.
   - Frontend lint: `eslint` passes with 0 errors.
+
+---
+
+## Phase 6A Deliverables Summary (ACCEPTED)
+- **Core Event Data Model (`EVT-001`):**
+  - Migration `20261017000009_events_core.sql` applied. Created `events` table with composite foreign key referencing `organisations(id)`.
+  - Stored timestamps in standard UTC ISO 8601 with explicit IANA timezone column (`timezone VARCHAR(64) NOT NULL`).
+  - Check constraints for date ordering (`start_at < end_at`), registration window ordering (`registration_opens_at < registration_closes_at`), and valid event types (`general_event`, `hackathon`), visibilities (`public`, `private`), and location types (`in_person`, `virtual`, `hybrid`).
+  - Terminal state edit locking: `completed` and `archived` events cannot be updated via API.
+- **Canonical 7-Status Lifecycle State Machine (`EVT-002`):**
+  - PRD §7.2 canonical statuses: `draft`, `published`, `registration_closed`, `in_progress`, `completed`, `cancelled`, `archived`.
+  - Concurrency-safe transition validation with `SELECT ... FOR UPDATE` row-level locks on `events`.
+  - Valid transition matrix strictly enforced: illegal jumps (e.g. `draft` -> `completed`) fail closed with HTTP 409 Conflict.
+- **Visibility and Draft Filtering (`EVT-003`):**
+  - `GET /api/v1/organisations/:orgId/events`: draft and private events strictly hidden from non-organisers without `event.read_draft` permission.
+  - `GET /api/v1/events` and `GET /api/v1/events/public`: unauthenticated public endpoint strictly filters for `status = 'published'` and `visibility = 'public'`.
+- **Frontend Management UI:**
+  - `EventsListPage.tsx`: Clean Enterprise event listing with status filters, badges, and creation modal.
+  - `EventDetailPage.tsx`: Lifecycle state machine action buttons, timezone & venue cards, and event overview.
+- **Verification Evidence:**
+  - Suite `backend/src/platform/events/events.integration.test.js`: 13/13 passing tests verifying date ordering, timezone validation, 7-state transitions, invalid transition rejection, edit lockout on terminal states, draft hiding, and public listing filtering.
+
+---
+
+## Phase 6B Deliverables Summary (COMPLETED)
+- **Event Registration Data Model (`EVT-004`, `EVT-005`):**
+  - Migration `20261017000010_event_registrations.sql` created and applied.
+  - Created `event_registrations` table with composite foreign key `(organisation_id, event_id) REFERENCES events(organisation_id, id) ON DELETE RESTRICT`.
+  - Unique constraint `uq_event_registrations_event_user` (`event_id, user_id`), status constraint `chk_event_registrations_status` (`registered`, `withdrawn`), and timestamps (`registered_at`, `withdrawn_at`, `reactivated_at`).
+  - Enabled and forced PostgreSQL Row-Level Security with policies for SELECT, INSERT, UPDATE, DELETE, granting DML to `managex_app`.
+- **Registration Workflow & Window Rules (`EVT-004`, `EVT-005`, ADR-008):**
+  - Implemented `getEffectiveRegistrationWindow(event)`: `registration_opens_at` defaults to event creation/publication; `registration_closes_at` defaults to event `start_at`.
+  - Status check: only `published` events accept registrations; `draft`, `registration_closed`, `in_progress`, etc., reject registration with HTTP 409 Conflict.
+  - Window check: registration before opening or after closing is rejected with HTTP 409 Conflict.
+- **Transactional Capacity & Concurrency Locking (`EVT-005`):**
+  - `SELECT ... FOR UPDATE` row-level lock on `events` inside `withOrgTransaction`.
+  - Active registrations counted (`WHERE status = 'registered'`). If `activeCount >= capacity`, registration is rejected with HTTP 409 Conflict (`EVENT_FULL`).
+  - Concurrent registration attempts are serialized under row locks.
+- **Duplicate Prevention & Reactivation (`EVT-004`):**
+  - If user is already actively registered, returns HTTP 409 Conflict (`ALREADY_REGISTERED`).
+  - If user previously withdrew, reactivates registration: status updated to `registered`, `reactivated_at = NOW()`, preserving initial `registered_at` timestamp.
+- **Withdrawal & Cancellation (`EVT-005`):**
+  - `POST /api/v1/organisations/:orgId/events/:eventId/withdraw`: transitions status to `withdrawn` while registration window is open, recording `withdrawn_at`.
+  - Once registration window closes, withdrawals are blocked.
+- **External Participant Isolation Boundary (`EVT-004`, ADR-003):**
+  - Middleware `resolveOrgContext` resolves organisation context and verifies organisation is active without requiring organisation membership.
+  - External participants register and view their own registration using verified user session.
+  - Strict tenant isolation: external participants receive NO organisation membership and are rejected with HTTP 403 Forbidden from accessing general organisation endpoints (`/organisations/:orgId`).
+- **Staff Participant Roster (`EVT-004`, `EVT-005`):**
+  - `GET /api/v1/organisations/:orgId/events/:eventId/participants`: requires organisation membership with `event.view`.
+  - Supports bounded pagination (`page`, `limit`), search by user name/email, and status filtering (`registered`, `withdrawn`). Returns active registration count and capacity summary.
+- **Frontend Registration & Roster Experience:**
+  - `EventDetailPage.tsx` updated with:
+    - Real-time registration card displaying effective window (opens/closes) and status badge.
+    - "Register for Event" button for verified users.
+    - "Withdraw Registration" button with confirmation dialog.
+    - "Re-register" button for withdrawn users.
+    - Capacity and slot indicator (e.g., active registrations vs capacity).
+    - Event Staff "Participants Roster" with search, filter tabs (All, Active, Withdrawn), registrant table with avatar and timestamps, and accessible pagination.
+- **Automated Verification & Evidence:**
+  - Backend: 97/97 tests passing across 9 test suites in `npm test` (including 13 comprehensive registration tests in `registrations.integration.test.js`).
+  - Frontend: 8/8 tests passing in `vitest`.
+  - Frontend typecheck: `tsc --noEmit` passes with 0 errors.
+  - Frontend lint: `eslint` passes with 0 errors.
+  - Frontend build: `tsc && vite build` completes with 0 errors.
+
+---
+
+## Phase 6C Deliverables Summary (ACCEPTED)
+
+- **Database Migration 011 (`20261017000011_hackathon_teams_submissions.sql`):**
+  - Extended `events` table with `team_size_min` (default 1), `team_size_max` (default 10, max constraint 100), `submission_opens_at`, `submission_closes_at`.
+  - Created `event_teams`: `(id, organisation_id, event_id, name, slug, description, created_by_id, created_at, updated_at)` with `UNIQUE(event_id, slug)`.
+  - Created `event_team_members`: `(id, organisation_id, event_id, team_id, user_id, is_owner, joined_at)` with `UNIQUE(event_id, user_id)` enforcing that a participant can belong to at most one team per event.
+  - Created `event_team_invitations`: `(id, organisation_id, event_id, team_id, invited_email, token_hash, status, expires_at)` with 7-day single-use invitation lifecycle.
+  - Created `event_submissions`: `(id, organisation_id, event_id, team_id, submitter_user_id, title, description, repository_url, demo_url, custom_fields, status)`.
+  - Enabled and forced PostgreSQL RLS across all new tables with DML grants to `managex_app`.
+- **Hackathon Team Lifecycle (`EVT-006`, ADR-007):**
+  - Team creation restricted to `hackathon` event type and active registered participants.
+  - Team creator automatically becomes the team owner (`is_owner = true`).
+  - Single team membership constraint enforced at database and application level (`UNIQUE(event_id, user_id)`).
+  - Single-use 7-day invitation tokens generated with SHA-256 hash storage; invitee must be a registered participant.
+  - Capacity limits: teams strictly cannot exceed `team_size_max`.
+  - Leaving/removing team members with ownership safeguards.
+- **URL-Based Submissions & SSRF Protection (`EVT-007`):**
+  - Strictly URL-based submissions (`repository_url`, `demo_url`) without file blobs.
+  - URL scheme validated strictly for `http:` and `https:`.
+  - SSRF invariant: backend never fetches, proxies, or pings submitted URLs; stored purely as textual links.
+  - Submission window enforcement: submissions accepted only between `submission_opens_at` and `submission_closes_at`.
+  - Team-owned submission: any active team member can create or edit the team's submission during the open window.
+- **Frontend Experience (`EventDetailPage.tsx`):**
+  - Dynamic "Hackathon Teams" card for `eventType === 'hackathon'`.
+  - "Create Team" dialog with name, slug, and description inputs.
+  - "Invite Team Member" dialog with invitation link generator.
+  - "Leave Team" button with confirmation modal.
+  - "Project Submissions" card showing current active team submission, submission window status, repository link, demo URL, and timestamp.
+  - "Submit Project" / "Edit Submission" modal with client-side URL validation.
+- **Automated Verification & Evidence:**
+  - Backend: 115/115 tests passing across 10 test suites in `npm test` (including 18 comprehensive Phase 6C integration tests in `teams_submissions.integration.test.js`).
+  - Frontend: 8/8 tests passing in `vitest`.
+  - Frontend typecheck: `tsc --noEmit` passes with 0 errors.
+  - Frontend lint: `eslint` passes with 0 errors.
+  - Frontend build: `tsc && vite build` completes with 0 errors.
+
+---
+
+## Phase 6D Deliverables Summary (ACCEPTED)
+
+- **Database Migration 012 (`20261017000012_judge_scoring_results.sql`):**
+  - Extended `events` table with `results_published_at TIMESTAMPTZ` and `results_published_by_id UUID`.
+  - Added composite foreign key constraint `uq_event_submissions_id_org` to `event_submissions` for tenant-safe composite foreign keys.
+  - Created `event_scoring_criteria`: `(id, organisation_id, event_id, name, description, order_index, max_score, created_at, updated_at)` with `max_score > 0 AND max_score <= 100`, `UNIQUE(event_id, name)`.
+  - Created `event_judge_assignments`: `(id, organisation_id, event_id, judge_user_id, submission_id, assigned_by_id, created_at)` with `UNIQUE NULLS NOT DISTINCT (event_id, judge_user_id, submission_id)`.
+  - Created `event_scores`: `(id, organisation_id, event_id, submission_id, criterion_id, judge_user_id, score, feedback, created_at, updated_at)` with `score >= 0 AND score <= 100`, `UNIQUE (event_id, submission_id, criterion_id, judge_user_id)`.
+  - Enabled and forced PostgreSQL RLS across all new tables with DML grants to `managex_app`.
+- **Criteria & Judge Assignments (`EVT-008`):**
+  - Configurable scoring criteria with individual max scores (1..100) managed by event managers/admins (`event.edit`).
+  - Edit lockout safeguard: criteria cannot be added or deleted once scoring has started (`SCORING_ALREADY_STARTED` 409).
+  - Flexible judge assignment supporting both global event-wide evaluation and submission-specific assignment (`event.participant.manage`).
+- **Private Scoring & Judge Assigned Work (`EVT-008`):**
+  - Judges list and view ONLY their assigned submissions and scoring fields (`GET /api/v1/organisations/:orgId/events/:eventId/judge-work`).
+  - Unassigned judges or external non-members cannot query judge work or submit scores.
+  - Score validation: each criterion score strictly bounded between 0 and configured `maxScore` with optional feedback.
+  - Confidentiality invariant: unpublished scores and judge feedback remain strictly private and hidden from participants and public visitors.
+- **Controlled Result Calculation & Publication (`EVT-009`, ADR-009):**
+  - Straight sum of criterion scores across assigned judges; score weights avoided for MVP simplicity.
+  - Standard competition ranking with shared ranks for tied scores; no arbitrary or hidden tie-breakers.
+  - Completeness validation: publication is strictly blocked with HTTP 409 (`INCOMPLETE_EVALUATION`) until all assigned judges submit scores for all required criteria on all submissions.
+  - Publication controls: authorised event managers (`event.result.publish`) can review calculated results, publish official rankings, and unpublish if needed.
+  - Public visibility: once published, official rankings, team names, project titles, and total scores become accessible via public endpoints (`/api/v1/events/:eventId/results`).
+  - Immutable audit trail recorded for all criteria mutations, judge assignments, score submissions, and result publication/unpublication.
+- **Frontend Experience (`EventDetailPage.tsx`):**
+  - Leaderboard & Results card: Displays official published rankings with rank badges, team names, project links, total score, and Publish/Unpublish controls with confirmation dialogs.
+  - Judge Evaluation Work card: Displays assigned submissions to judges, completion status, and "Score Submission" modal with real-time numeric inputs and feedback textareas.
+  - Criteria & Judge Assignments management card: Displays configured criteria and assigned judges with "Add Criterion" dialog and "Assign Judge" dialog.
+- **Automated Verification & Evidence:**
+  - Backend: 135/135 tests passing across 11 test suites in `npm test` (including 20 comprehensive Phase 6D integration tests in `judging_results.integration.test.js`).
+  - Frontend typecheck: `tsc --noEmit` passes with 0 errors.
+  - Frontend lint: `eslint` passes with 0 errors.
+  - Frontend build: `tsc && vite build` completes with 0 errors in 13.28s.
+
+---
+
+---
+
+## Phase 7A Deliverables Summary (ACCEPTED)
+- **Database Migration (`20261017000013_meetings_core.sql`):**
+  - Created `meetings`: `(id, organisation_id, title, description, start_at, end_at, timezone, location_type, location, virtual_url, visibility, status, organiser_id, created_by_id, created_at, updated_at)` with `CHECK (start_at < end_at)`, canonical statuses `('scheduled', 'in_progress', 'completed', 'cancelled')`, visibility `('organisation', 'attendees_only')`, and composite unique key `(id, organisation_id)`.
+  - Created `meeting_attendees`: `(id, organisation_id, meeting_id, user_id, external_email, role, rsvp_status, invited_at, responded_at, created_at, updated_at)` with FK cascade to `meetings`, roles `('organiser', 'participant', 'guest')`, RSVP statuses `('pending', 'accepted', 'declined', 'tentative')`, and partial unique indexes `uq_meeting_attendees_internal` on `(meeting_id, user_id) WHERE user_id IS NOT NULL` and `uq_meeting_attendees_external` on `(meeting_id, external_email) WHERE external_email IS NOT NULL`.
+  - Created `meeting_agenda_items`: `(id, organisation_id, meeting_id, title, description, duration_minutes, order_index, created_by_id, created_at, updated_at)` with FK cascade to `meetings`.
+  - Enabled and forced PostgreSQL RLS across all 3 tables with DML granted to restricted role `managex_app`.
+- **Backend Services & Lifecycle Engine (`MTG-001`, `MTG-002`, PRD §8.1):**
+  - Canonical 4-status lifecycle: `scheduled` -> `['in_progress', 'completed', 'cancelled']`, `in_progress` -> `['completed', 'cancelled']`. Terminal state enforcement prevents transitions or edits on `completed` and `cancelled` meetings.
+  - Explicit IANA timezone validation (`Intl.DateTimeFormat`) and UTC timestamp storage with date ordering (`start_at < end_at`).
+  - Automatic attendee registration: Organiser is automatically added as an accepted attendee upon creation.
+- **Attendance & Visibility Access Control (`MTG-003`, PRD §8.3):**
+  - `organisation` meetings are visible to all active members of the tenant.
+  - `attendees_only` meetings are restricted: ordinary non-attendee members receive 403 on detail queries and have records excluded from list queries.
+  - Internal members and external guests can be invited as attendees with duplicate prevention.
+  - RSVP management: Attendees can update their status (`accepted`, `declined`, `tentative`).
+  - Sole organiser protection: Removing the meeting's sole organiser is rejected with 409 `CANNOT_REMOVE_ORGANISER`.
+- **Structured Agendas (`MTG-004`, PRD §8.2):**
+  - Ordered agenda items with title, duration in minutes, and description.
+  - Atomic reordering via `PUT /api/v1/organisations/:orgId/meetings/:meetingId/agenda/reorder`.
+- **Frontend Experience (`MeetingsPage.tsx`, `MeetingDetailPage.tsx`, `ScheduleMeetingDialog.tsx`):**
+  - Meetings list with filter tabs (Upcoming, Past, All), status filter, title search, and meeting cards with badges, formatted date/time in timezone, location link, attendee count, and agenda count.
+  - Schedule meeting modal with IANA timezone selector, date range validation, location options, and visibility controls.
+  - Detail page with lifecycle transition actions (Start, Complete, Cancel), RSVP response actions, attendees roster with invite dialog, and ordered agenda with up/down reordering.
+- **Automated Verification & Evidence:**
+  - Backend: 156/156 tests passing across 12 test suites in `npm test` (including 21 comprehensive Phase 7A integration tests in `meetings.integration.test.js`).
+  - Frontend typecheck: `tsc --noEmit` passes with 0 errors.
+  - Frontend lint: `eslint` passes with 0 errors.
+  - Frontend build: `tsc && vite build` completes with 0 errors in 23.67s.
+
+---
+
+## Phase 7B Deliverables Summary (COMPLETED)
+- **Database Migration (`20261017000014_meeting_notes_actions.sql`):**
+  - Created `meeting_notes`: `(id, organisation_id, meeting_id, content, created_by_id, updated_by_id, created_at, updated_at)` with `UNIQUE(meeting_id)`, FK cascade to `meetings(id, organisation_id)`, RLS enabled & forced, DML granted to restricted role `managex_app`.
+  - Created `meeting_action_items`: `(id, organisation_id, meeting_id, title, description, assignee_id, due_date, priority, status, agenda_item_id, created_by_id, created_at, updated_at)` with FK cascade to `meetings(id, organisation_id)`, `priority IN ('low', 'medium', 'high', 'urgent')`, `status IN ('open', 'in_progress', 'done', 'cancelled')`, RLS enabled & forced, DML granted to restricted role `managex_app`.
+- **Confidential Minutes Access Control (`MTG-005`, PRD §8.2, ADR-014):**
+  - Invariant enforced: Attendee status alone does NOT grant access to confidential minutes. Non-permitted attendees attempting `GET /notes` receive 403 `FORBIDDEN_NOTES_ACCESS` and attempting `PUT /notes` receive 403 `FORBIDDEN_NOTES_MANAGE`.
+  - Only meeting organiser and users with `meeting.notes.read` / `meeting.notes.manage` / `org.admin` / `org.owner` can read or author notes.
+  - Auditing privacy invariant: Note bodies are strictly excluded from audit log metadata (`metadata: { meetingId, length }`).
+  - Cancelled meetings cannot author or edit minutes (409 `MEETING_CANCELLED`).
+  - Content length validation: bounded from 1 to 50,000 characters.
+- **Action Items & Canonical Transitions (`MTG-006`, PRD §8.2):**
+  - Assignee validation: Assignee must be an active member of the host organisation (rejected with 422 `VALIDATION_ERROR` if not an active member).
+  - Source agenda validation: If specified, agenda item must belong to the same meeting and organisation (422 `VALIDATION_ERROR`).
+  - Canonical lifecycle: `open` -> `['in_progress', 'done', 'cancelled']`, `in_progress` -> `['open', 'done', 'cancelled']`.
+  - Terminal states: `done` and `cancelled` action items cannot be transitioned (locked with 409 `ACTION_ITEM_TERMINAL_STATE`).
+  - Assignee restricted mutations: Assignees without manager permissions can ONLY update the `status` of their assigned action item; mutating management fields (`title`, `assigneeId`, `priority`, etc.) is rejected with 403 `FORBIDDEN_ACTION_FIELD_UPDATE`.
+  - Manager/Organiser capabilities: Update full metadata, reassign active members, or delete action items with audit logging.
+- **Email Notifications & Invitations (`MTG-007`, PRD §8.3, ADR-010):**
+  - Reused existing email abstraction (`sendEmail` in `backend/src/platform/email/emailService.js`).
+  - `POST /api/v1/organisations/:orgId/meetings/:meetingId/send-invites`: Dispatches structured meeting invitation emails with dates, timezone, location, and organiser details to pending attendees.
+  - Safe failure handling: Delivery errors are logged safely without aborting database transactions, returning delivery logs with `sentCount` and `failedCount`.
+  - Automatic status notifications:
+    - Rescheduling (`startAt` or `endAt` updated): Dispatches `Updated: <Meeting Title>` email notices to all active attendees.
+    - Cancellation (meeting status transitioned to `cancelled`): Dispatches `Cancelled: <Meeting Title>` email notices to all active attendees.
+- **Frontend Experience (`MeetingDetailPage.tsx`, `types/meetings.ts`):**
+  - Added "Send Invitations" button in the meeting header for scheduled meetings with delivery feedback banner.
+  - Implemented Tab 3 ("Minutes & Notes"):
+    - Displays confidentiality shield card when viewer lacks permission (`FORBIDDEN_NOTES_ACCESS`).
+    - Confidential Markdown/text editor with character counter (up to 50,000 chars), author and last-updated metadata, save button, and cancellation archive state.
+  - Implemented Tab 4 ("Action Items"):
+    - Action item count badge in tab navigation.
+    - Action items roster displaying priority badges, interactive status updater buttons, assignee info, due dates, and linked agenda topics.
+    - Terminal state badges when done or cancelled.
+    - Delete button for organisers/managers.
+    - "Add Action Item" modal with member dropdown, priority selector, due date picker, source agenda topic selector, and description.
+- **Automated Verification & Evidence:**
+  - Backend: 165/165 tests passing across 12 test suites in `npm test` (including 30 comprehensive Phase 7 integration tests in `meetings.integration.test.js`).
+  - Frontend typecheck: `tsc --noEmit` passes with 0 errors.
+  - Frontend lint: `eslint` passes with 0 errors.
+  - Frontend build: `tsc && vite build` completes with 0 errors in 23.66s.
+
+
 

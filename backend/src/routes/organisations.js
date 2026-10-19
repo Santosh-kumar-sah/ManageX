@@ -59,6 +59,8 @@ import {
   removeRoleFromMember,
 } from '../platform/rbac/permissionService.js';
 import { listOrganisationAuditLogs } from '../platform/audit/auditService.js';
+import { eventsRouter } from './events.js';
+import { meetingsRouter } from './meetings.js';
 import { sendSuccess } from '../platform/common/responses.js';
 import { ValidationError } from '../platform/common/errors.js';
 
@@ -367,8 +369,13 @@ organisationsRouter.get(
 );
 
 const updateModuleSchema = z.object({
-  is_enabled: z.boolean({ required_error: 'is_enabled boolean is required' }),
-});
+  is_enabled: z.boolean().optional(),
+  isEnabled: z.boolean().optional(),
+}).refine((data) => typeof data.is_enabled === 'boolean' || typeof data.isEnabled === 'boolean', {
+  message: 'is_enabled or isEnabled boolean is required',
+}).transform((data) => ({
+  is_enabled: typeof data.is_enabled === 'boolean' ? data.is_enabled : data.isEnabled,
+}));
 
 organisationsRouter.patch(
   '/:orgId/modules/:moduleKey',
@@ -507,35 +514,14 @@ organisationsRouter.get(
 );
 
 // -----------------------------------------------------------------------------
-// 14. Module Verification / Entitlement Routes (MOD-003, MOD-004)
+// 14. Events Module Core Router (Phase 6A: EVT-001, EVT-002, EVT-003)
 // -----------------------------------------------------------------------------
-organisationsRouter.get(
-  '/:orgId/events',
-  requireOrgMembership,
-  requireModuleEntitlement('events'),
-  requireOrgPermission('event.view'),
-  async (req, res) => {
-    return sendSuccess(res, 200, {
-      module: 'events',
-      entitled: true,
-      message: 'Events module is active and accessible for this organisation.',
-    });
-  }
-);
+organisationsRouter.use('/:orgId/events', eventsRouter);
 
-organisationsRouter.get(
-  '/:orgId/meetings',
-  requireOrgMembership,
-  requireModuleEntitlement('meetings'),
-  requireOrgPermission('meeting.view'),
-  async (req, res) => {
-    return sendSuccess(res, 200, {
-      module: 'meetings',
-      entitled: true,
-      message: 'Meetings module is active and accessible for this organisation.',
-    });
-  }
-);
+// -----------------------------------------------------------------------------
+// 15. Meetings Module Core Router (Phase 7A: MTG-001, MTG-002, MTG-003, MTG-004)
+// -----------------------------------------------------------------------------
+organisationsRouter.use('/:orgId/meetings', meetingsRouter);
 
 organisationsRouter.get(
   '/:orgId/projects',
