@@ -45,3 +45,26 @@ export function errorResponse({ code, message, requestId, details } = {}) {
     },
   };
 }
+
+/**
+ * Sends a standard success response via Express res object.
+ */
+export function sendSuccess(res, statusCode, data, extraMeta) {
+  return res.status(statusCode).json(successResponse({
+    data,
+    requestId: res.req?.requestId,
+    extraMeta,
+  }));
+}
+
+/**
+ * Sends a standard error response via Express res object.
+ */
+export function sendError(res, statusCode, code, message, details) {
+  return res.status(statusCode).json(errorResponse({
+    code,
+    message,
+    requestId: res.req?.requestId,
+    details,
+  }));
+}

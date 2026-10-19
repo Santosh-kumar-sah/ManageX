@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   Layers,
@@ -14,27 +14,99 @@ import {
   ChevronDown,
   LogOut,
   ShieldCheck,
+  Plus,
+  Check,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { ColdStartBanner } from '@/components/ui/ColdStartBanner';
+import { apiClient } from '@/api/client';
+import { useAuth } from '@/api/AuthContext';
+import { useOrg } from '@/api/OrgContext';
 
 export function WorkspaceLayout() {
   const location = useLocation();
+  const { user, logout } = useAuth();
+  const { organisations, activeOrg, switchOrg } = useOrg();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isOrgDropdownOpen, setIsOrgDropdownOpen] = useState(false);
+  const [moduleStates, setModuleStates] = useState<Record<string, boolean>>({
+    events: true,
+    meetings: true,
+    projects: true,
+  });
+
+  const activeOrgIdentifier = activeOrg ? activeOrg.id : 'default';
+
+  useEffect(() => {
+    if (!activeOrg?.id) return;
+    let isMounted = true;
+    apiClient<{ modules: { slug: string; isEnabled: boolean }[] }>(
+      `/organisations/${activeOrg.id}/modules`
+    )
+      .then((res) => {
+        if (isMounted && res.data?.modules) {
+          const map: Record<string, boolean> = {};
+          res.data.modules.forEach((m) => {
+            map[m.slug] = m.isEnabled;
+          });
+          setModuleStates(map);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeOrg?.id]);
 
   const mainNav = [
     { label: 'Workspace Overview', href: '/app', icon: LayoutDashboard },
-    { label: 'Events & Hackathons', href: '/app/organisations/demo-org/events', icon: Calendar, badge: 'Phase 6' },
-    { label: 'Meetings', href: '/app/organisations/demo-org/meetings', icon: Video, badge: 'Phase 7' },
-    { label: 'Projects & Tasks', href: '/app/organisations/demo-org/projects', icon: CheckSquare, badge: 'Phase 8' },
+    {
+      label: 'Events & Hackathons',
+      href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/events` : '/app/organisations',
+      icon: Calendar,
+      badge: moduleStates.events === false ? 'Disabled' : 'Phase 6',
+      badgeVariant: (moduleStates.events === false ? 'neutral' : 'neutral') as 'neutral' | 'brand',
+    },
+    {
+      label: 'Meetings',
+      href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/meetings` : '/app/organisations',
+      icon: Video,
+      badge: moduleStates.meetings === false ? 'Disabled' : 'Phase 7',
+      badgeVariant: (moduleStates.meetings === false ? 'neutral' : 'neutral') as 'neutral' | 'brand',
+    },
+    {
+      label: 'Projects & Tasks',
+      href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/projects` : '/app/organisations',
+      icon: CheckSquare,
+      badge: moduleStates.projects === false ? 'Disabled' : 'Phase 8',
+      badgeVariant: (moduleStates.projects === false ? 'neutral' : 'neutral') as 'neutral' | 'brand',
+    },
   ];
 
   const adminNav = [
-    { label: 'Members & Invites', href: '/app/organisations/demo-org/members', icon: Users, badge: 'Phase 4' },
-    { label: 'Organisation Settings', href: '/app/organisations/demo-org/settings', icon: Settings, badge: 'Phase 4' },
-    { label: 'Switch Organisations', href: '/app/organisations', icon: Building2 },
+    {
+      label: 'Members & Roles',
+      href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/members` : '/app/organisations',
+      icon: Users,
+    },
+    {
+      label: 'Modules & Entitlements',
+      href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/modules` : '/app/organisations',
+      icon: Layers,
+    },
+    {
+      label: 'Security & Audit Log',
+      href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/audit-logs` : '/app/organisations',
+      icon: ShieldCheck,
+    },
+    {
+      label: 'Organisation Settings',
+      href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/settings` : '/app/organisations',
+      icon: Settings,
+    },
+    { label: 'All Organisations', href: '/app/organisations', icon: Building2 },
   ];
 
   return (
@@ -53,7 +125,7 @@ export function WorkspaceLayout() {
               <span>ManageX</span>
             </Link>
 
-            {/* Active Organisation Switcher Placeholder */}
+            {/* Dynamic Active Organisation Switcher */}
             <div className="relative">
               <button
                 onClick={() => setIsOrgDropdownOpen(!isOrgDropdownOpen)}
@@ -61,32 +133,52 @@ export function WorkspaceLayout() {
                 aria-expanded={isOrgDropdownOpen}
               >
                 <div className="flex items-center gap-2 truncate">
-                  <div className="h-5 w-5 rounded bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-[10px] shrink-0">
-                    A
+                  <div className="h-5 w-5 rounded bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-[10px] shrink-0 uppercase">
+                    {activeOrg ? activeOrg.name.charAt(0) : '?'}
                   </div>
-                  <span className="font-medium text-slate-800 truncate">Acme Enterprise</span>
+                  <span className="font-medium text-slate-800 truncate">
+                    {activeOrg ? activeOrg.name : 'No Organisation'}
+                  </span>
                 </div>
                 <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
               </button>
 
               {isOrgDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-md border border-border bg-white p-1 shadow-lg text-xs">
+                <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-md border border-border bg-white p-1 shadow-lg text-xs max-h-64 overflow-y-auto">
                   <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                     Your Organisations
                   </div>
-                  <button
-                    onClick={() => setIsOrgDropdownOpen(false)}
-                    className="w-full text-left px-2 py-1.5 rounded hover:bg-slate-50 font-medium text-slate-700 flex items-center justify-between"
-                  >
-                    <span>Acme Enterprise</span>
-                    <Badge variant="brand">Active</Badge>
-                  </button>
+                  {organisations.length === 0 ? (
+                    <div className="px-2 py-2 text-slate-400 text-center">No organisations yet</div>
+                  ) : (
+                    organisations.map((org) => {
+                      const isCurrent = activeOrg?.id === org.id;
+                      return (
+                        <button
+                          key={org.id}
+                          onClick={() => {
+                            switchOrg(org.id);
+                            setIsOrgDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-2 py-1.5 rounded flex items-center justify-between transition-colors ${
+                            isCurrent
+                              ? 'bg-brand-50 text-brand-700 font-semibold'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <span className="truncate pr-1">{org.name}</span>
+                          {isCurrent && <Check className="h-3.5 w-3.5 text-brand-600 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
                   <Link
                     to="/app/organisations"
                     onClick={() => setIsOrgDropdownOpen(false)}
-                    className="block px-2 py-1.5 rounded hover:bg-slate-50 text-brand-600 font-medium border-t border-border mt-1"
+                    className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-slate-50 text-brand-600 font-medium border-t border-border mt-1"
                   >
-                    + Manage organisations...
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Manage organisations...</span>
                   </Link>
                 </div>
               )}
@@ -144,7 +236,6 @@ export function WorkspaceLayout() {
                         <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
                         <span>{item.label}</span>
                       </div>
-                      {item.badge && <Badge variant="neutral">{item.badge}</Badge>}
                     </Link>
                   );
                 })}
@@ -153,15 +244,17 @@ export function WorkspaceLayout() {
           </nav>
 
           {/* Platform Console Shortcut */}
-          <div className="p-3 border-t border-border bg-slate-50">
-            <Link
-              to="/platform"
-              className="flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-brand-600 p-2 rounded transition-colors"
-            >
-              <ShieldCheck className="h-4 w-4 text-slate-400" />
-              <span>Platform Administration</span>
-            </Link>
-          </div>
+          {user?.isPlatformAdmin && (
+            <div className="p-3 border-t border-border bg-slate-50">
+              <Link
+                to="/platform"
+                className="flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-brand-600 p-2 rounded transition-colors"
+              >
+                <ShieldCheck className="h-4 w-4 text-slate-400" />
+                <span>Platform Administration</span>
+              </Link>
+            </div>
+          )}
         </aside>
 
         {/* Main Application Area */}
@@ -177,24 +270,45 @@ export function WorkspaceLayout() {
                 {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
               <span className="text-xs font-medium text-slate-500 hidden sm:inline">
-                Workspace / Acme Enterprise
+                Workspace / {activeOrg ? activeOrg.name : 'No Organisation Selected'}
               </span>
             </div>
 
             {/* User Profile Menu */}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2.5">
-                <Avatar name="Alex Developer" size="sm" />
+                <Avatar name={user?.fullName || 'User'} size="sm" />
                 <div className="hidden sm:block text-left">
-                  <div className="text-xs font-semibold text-slate-800 leading-tight">Alex Developer</div>
-                  <div className="text-[10px] text-slate-400">Owner</div>
+                  <div className="text-xs font-semibold text-slate-800 leading-tight">
+                    {user?.fullName || 'Guest'}
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    {activeOrg?.role?.name || (user?.isPlatformAdmin ? 'Platform Admin' : 'Member')}
+                  </div>
                 </div>
               </div>
-              <Link to="/auth/login" title="Logout" className="text-slate-400 hover:text-slate-600">
+              <button
+                onClick={logout}
+                title="Logout"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded"
+              >
                 <LogOut className="h-4 w-4" />
-              </Link>
+              </button>
             </div>
           </header>
+
+          {/* Onboarding Notice if 0 organisations */}
+          {organisations.length === 0 && (
+            <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center justify-between text-xs text-amber-800">
+              <span>You do not belong to any organisations yet. Create your first organisation to start collaborating.</span>
+              <Link
+                to="/app/organisations"
+                className="font-semibold text-amber-900 underline hover:no-underline ml-4 shrink-0"
+              >
+                Create Organisation &rarr;
+              </Link>
+            </div>
+          )}
 
           {/* Workspace Page Content */}
           <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">

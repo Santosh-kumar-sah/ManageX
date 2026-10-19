@@ -10,9 +10,14 @@ import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
 import { ForgotPasswordPage, ResetPasswordPage } from '@/pages/auth/PasswordRecoveryPages';
+import { AcceptInvitationPage } from '@/pages/auth/AcceptInvitationPage';
 
 import { WorkspaceOverviewPage } from '@/pages/workspace/WorkspaceOverviewPage';
 import { OrganisationsPage } from '@/pages/workspace/OrganisationsPage';
+import { MembersPage } from '@/pages/workspace/MembersPage';
+import { OrgSettingsPage } from '@/pages/workspace/OrgSettingsPage';
+import { OrgModulesPage } from '@/pages/workspace/OrgModulesPage';
+import { OrgAuditLogsPage } from '@/pages/workspace/OrgAuditLogsPage';
 import { ModulePlaceholderPage } from '@/pages/workspace/ModulePlaceholderPage';
 import { PlatformOverviewPage } from '@/pages/platform/PlatformOverviewPage';
 import { NotFoundPage } from '@/pages/edge/ErrorPages';
@@ -30,6 +35,7 @@ export function App() {
         <Route path="/auth/verify-email" element={<VerifyEmailPage />} />
         <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/invitations/:token/accept" element={<AcceptInvitationPage />} />
       </Route>
 
       {/* Authenticated Workspace Routes */}
@@ -72,28 +78,10 @@ export function App() {
             />
           }
         />
-        <Route
-          path="organisations/:orgId/members"
-          element={
-            <ModulePlaceholderPage
-              moduleName="Members & Invitations"
-              scheduledPhase="Phase 4"
-              prerequisites="Postgres Migrations (Phase 2), Shared Auth (Phase 3)"
-              description="Member roster, role assignments, email invitations (7-day single use), and owner protection will be implemented in Phase 4."
-            />
-          }
-        />
-        <Route
-          path="organisations/:orgId/settings"
-          element={
-            <ModulePlaceholderPage
-              moduleName="Organisation Settings"
-              scheduledPhase="Phase 4"
-              prerequisites="Postgres Migrations (Phase 2), Shared Auth (Phase 3)"
-              description="Approved organisation profile settings and high-impact ownership transfer with step-up reauthentication will be implemented in Phase 4."
-            />
-          }
-        />
+        <Route path="organisations/:orgId/members" element={<MembersPage />} />
+        <Route path="organisations/:orgId/modules" element={<OrgModulesPage />} />
+        <Route path="organisations/:orgId/audit-logs" element={<OrgAuditLogsPage />} />
+        <Route path="organisations/:orgId/settings" element={<OrgSettingsPage />} />
       </Route>
 
       {/* Platform Administration Routes */}

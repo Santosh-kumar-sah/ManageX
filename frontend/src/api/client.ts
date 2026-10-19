@@ -131,6 +131,14 @@ export async function apiClient<T>(
     headers.set('Content-Type', 'application/json');
   }
 
+  // Double-submit CSRF token protection for browser environments (AUTH-007)
+  if (typeof document !== 'undefined') {
+    const csrfMatch = document.cookie.match(/(?:^|;\s*)managex_csrf=([^;]+)/);
+    if (csrfMatch && csrfMatch[1] && !headers.has('X-CSRF-Token')) {
+      headers.set('X-CSRF-Token', decodeURIComponent(csrfMatch[1]));
+    }
+  }
+
   const method = (fetchOptions.method || 'GET').toUpperCase();
   const isIdempotentRead = method === 'GET' || method === 'HEAD';
 
@@ -138,7 +146,7 @@ export async function apiClient<T>(
     return fetch(url, {
       ...fetchOptions,
       headers,
-      credentials: 'same-origin',
+      credentials: fetchOptions.credentials || 'include',
     });
   }
 

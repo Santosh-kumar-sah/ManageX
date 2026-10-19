@@ -41,3 +41,21 @@ export class ConflictError extends AppError {
     super(message, 409, code);
   }
 }
+
+export class AuthenticationError extends AppError {
+  constructor(message = 'Authentication required', code = 'AUTHENTICATION_ERROR') {
+    super(message, 401, code);
+  }
+}
+
+export class AuthorizationError extends AppError {
+  constructor(message = 'Access denied', code = 'FORBIDDEN') {
+    super(message, 403, code);
+  }
+}
+
+export class ServiceUnavailableError extends AppError {
+  constructor(message = 'Service temporarily unavailable', code = 'SERVICE_UNAVAILABLE') {
+    super(message, 503, code);
+  }
+}

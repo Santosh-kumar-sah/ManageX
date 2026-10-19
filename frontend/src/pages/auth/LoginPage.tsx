@@ -5,16 +5,38 @@ import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { apiClient, ApiError } from '@/api/client';
+import { useAuth } from '@/api/AuthContext';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // Phase 1 UI-only demo: routes to workspace shell without fake authentication claims
-    navigate('/app');
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      await apiClient('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      await refreshUser();
+      navigate('/app');
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage('Unable to connect to authentication service. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -28,9 +50,11 @@ export function LoginPage() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            <Alert variant="info" title="Phase 1 Foundation Shell">
-              Authentication forms are rendered in UI-only mode for Phase 1. Real password hashing, sessions, and verification will be connected in Phase 3.
-            </Alert>
+            {errorMessage && (
+              <Alert variant="error" title="Sign In Failed">
+                {errorMessage}
+              </Alert>
+            )}
 
             <FormField label="Email address" htmlFor="email" required>
               <Input
@@ -40,6 +64,7 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </FormField>
 
@@ -50,6 +75,7 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </FormField>
 
@@ -60,8 +86,8 @@ export function LoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" className="w-full">
-              Sign In (Open Workspace Shell)
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Signing In...' : 'Sign In'}
             </Button>
             <div className="text-xs text-center text-slate-500">
               Don't have an account?{' '}
@@ -75,3 +101,4 @@ export function LoginPage() {
     </div>
   );
 }
+

@@ -5,16 +5,36 @@ import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
+import { apiClient, ApiError } from '@/api/client';
 
 export function RegisterPage() {
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    navigate('/auth/verify-email');
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      await apiClient('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ fullName: name, email, password }),
+      });
+      navigate(`/auth/verify-email?email=${encodeURIComponent(email)}`);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrorMessage(err.message);
+      } else {
+        setErrorMessage('Unable to complete registration. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -28,9 +48,11 @@ export function RegisterPage() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            <Alert variant="info" title="Phase 1 Foundation Shell">
-              Registration forms are rendered in UI-only mode for Phase 1. Token-based email verification and Argon2id password hashing connect in Phase 3.
-            </Alert>
+            {errorMessage && (
+              <Alert variant="error" title="Registration Error">
+                {errorMessage}
+              </Alert>
+            )}
 
             <FormField label="Full Name" htmlFor="name" required>
               <Input
@@ -39,6 +61,7 @@ export function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </FormField>
 
@@ -50,22 +73,29 @@ export function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </FormField>
 
-            <FormField label="Password" htmlFor="password" helperText="Must be at least 10 characters." required>
+            <FormField
+              label="Password"
+              htmlFor="password"
+              helperText="Must be at least 10 characters with upper, lower, number, and special character."
+              required
+            >
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </FormField>
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" className="w-full">
-              Create Account
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Creating Account...' : 'Create Account'}
             </Button>
             <div className="text-xs text-center text-slate-500">
               Already have an account?{' '}
@@ -79,3 +109,4 @@ export function RegisterPage() {
     </div>
   );
 }
+
