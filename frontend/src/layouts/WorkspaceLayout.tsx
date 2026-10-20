@@ -80,8 +80,8 @@ export function WorkspaceLayout() {
       label: 'Projects & Tasks',
       href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/projects` : '/app/organisations',
       icon: CheckSquare,
-      badge: moduleStates.projects === false ? 'Disabled' : 'Phase 8',
-      badgeVariant: (moduleStates.projects === false ? 'neutral' : 'neutral') as 'neutral' | 'brand',
+      badge: moduleStates.projects === false ? 'Disabled' : undefined,
+      badgeVariant: (moduleStates.projects === false ? 'neutral' : 'brand') as 'neutral' | 'brand',
     },
   ];
 

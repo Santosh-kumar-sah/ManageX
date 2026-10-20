@@ -44,6 +44,7 @@ export function Dialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? 'dialog-title' : undefined}
+      aria-describedby={description ? 'dialog-description' : undefined}
     >
       <div
         className={cn(
@@ -65,7 +66,7 @@ export function Dialog({
           </h2>
         )}
         {description && (
-          <p className="text-sm text-slate-500 mb-4">{description}</p>
+          <p id="dialog-description" className="text-sm text-slate-500 mb-4">{description}</p>
         )}
 
         <div className="mt-2">{children}</div>

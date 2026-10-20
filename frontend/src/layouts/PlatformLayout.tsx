@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Shield, Building, Boxes, FileText, ArrowLeft } from 'lucide-react';
+import { Shield, Users, Building, Boxes, FileText, ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { ColdStartBanner } from '@/components/ui/ColdStartBanner';
 
@@ -8,9 +8,10 @@ export function PlatformLayout() {
 
   const navItems = [
     { label: 'Overview', href: '/platform', icon: Shield },
-    { label: 'Organisations', href: '/platform/organisations', icon: Building, badge: 'Phase 9' },
-    { label: 'Module Catalogue', href: '/platform/modules', icon: Boxes, badge: 'Phase 9' },
-    { label: 'Platform Audit Logs', href: '/platform/audit-logs', icon: FileText, badge: 'Phase 9' },
+    { label: 'Accounts', href: '/platform/accounts', icon: Users },
+    { label: 'Organisations', href: '/platform/organisations', icon: Building },
+    { label: 'Module Catalogue', href: '/platform/modules', icon: Boxes },
+    { label: 'Platform Audit Logs', href: '/platform/audit-logs', icon: FileText },
   ];
 
   return (
@@ -57,11 +58,6 @@ export function PlatformLayout() {
               >
                 <item.icon className="h-3.5 w-3.5" />
                 <span>{item.label}</span>
-                {item.badge && (
-                  <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">
-                    {item.badge}
-                  </span>
-                )}
               </Link>
             );
           })}

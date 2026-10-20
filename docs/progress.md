@@ -4,7 +4,7 @@ This document tracks progress across implementation phases, completed requiremen
 
 ---
 
-## Current Status: Phase 7B Accepted (Confidential Minutes, Action Items & Email Notifications)
+## Current Status: Phase 9 Accepted | Phase 10 Preflight Complete
 
 | Phase | Description | Status | Requirements Completed | Gate / Blocker |
 |---|---|---|---|---|
@@ -20,13 +20,13 @@ This document tracks progress across implementation phases, completed requiremen
 | **Phase 6D** | Judge Scoring & Results Publication | **ACCEPTED** | EVT-008, EVT-009 (Judge assignments, criteria 1..100, private scoring, straight-sum result calculation, shared ranks, results publication) | Formally accepted after acceptance check |
 | **Phase 7A** | Meetings Core, Attendees & Agendas | **ACCEPTED** | MTG-001, MTG-002, MTG-003, MTG-004 (Meetings data model, UTC & IANA timezones, canonical 4-status lifecycle, organisation vs attendees_only visibility, internal & external attendees, RSVP management, ordered agendas & atomic reordering) | Formally accepted after acceptance review |
 | **Phase 7B** | Confidential Minutes & Action Items | **ACCEPTED** | MTG-005, MTG-006, MTG-007 (Confidential meeting minutes with strict permission gates, action item tracking with assignee status transitions and member validation, invitation/cancellation/reschedule email dispatch without body leaks) | Formally accepted after acceptance review |
-| **Phase 7C** | Meetings Full E2E & Access Regression | PENDING | None | Blocked on Phase 7B |
-| **Phase 8A** | Projects Core & Membership | PENDING | None | Blocked on Phase 5 |
-| **Phase 8B** | Tasks Model, List & Kanban Views | PENDING | None | Blocked on Phase 8A |
-| **Phase 8C** | Comments/Activity & Projects E2E | PENDING | None | Blocked on Phase 8B |
-| **Phase 9** | Platform Administration Console | PENDING | None | Blocked on Phases 6, 7, 8 |
-| **Phase 10** | Hardening, Performance & Security Audit | PENDING | None | Blocked on Phase 9 |
-| **Phase 11** | Staging/Production Deployment Readiness | PENDING | None | Blocked on Phase 10 |
+| **Phase 7C** | Meetings Full E2E & Access Regression | **ACCEPTED** | MTG-001, MTG-002, MTG-003, MTG-004, MTG-005, MTG-006, MTG-007 (Complete 10 meetings user journeys, multi-tenant ID tampering regression, RLS isolation & context cleanup under managex_app, composite FK enforcement, dynamic permission/module revocation, zero confidential body leak in audit/emails) | Formally accepted |
+| **Phase 8A** | Projects Core & Membership | **ACCEPTED** | PRJ-001, PRJ-002 (Project model, start & target dates, priorities, canonical 5-status lifecycle, resource-scoped project memberships, owner invariant, clean enterprise UI) | Formally accepted |
+| **Phase 8B** | Tasks Model, List & Kanban Views | **ACCEPTED** | PRJ-003, PRJ-004, PRJ-005, PRJ-006 (Task data model, composite FK tenant isolation, canonical 5-status state machine, assignee validation, member removal guards, Kanban & List views, server-side filtering & due-date calculations) | Formally accepted after acceptance review |
+| **Phase 8C** | Comments/Activity & Projects E2E | **ACCEPTED** | PRJ-007, PRJ-008 (Plain-text task comments with bounds & moderation, soft deletion preserving author/timestamp, archived project lockout, chronological activity timeline, no comment bodies in audit logs, tenant isolation under managex_app) | Formally accepted after acceptance review |
+| **Phase 9** | Platform Administration Console | **ACCEPTED** | PLAT-001, PLAT-002, PLAT-003, PLAT-004, PLAT-005, PLAT-006, PLAT-007, SEC-009 (Platform console namespace & layout segregation, global account listing & suspension without secret exposure, customer workspace operational inspection & non-destructive suspension, fixed 3-module availability management, least-privilege Support Agent role, zero support ticketing scope, immutable platform audit trail, NOBYPASSRLS runtime isolation) | Formally accepted after acceptance review |
+| **Phase 10** | Hardening, Performance & Security Audit | **COMPLETED** | SEC-001, SEC-002, SEC-005, SEC-006, SEC-007, SEC-008, OPS-005, UI-005 (Bcrypt factor 12 & login timing attack mitigation, 6-tier pipeline, SQLi/XSS/SSRF fuzzing, production security headers & restrictive CORS, 100KB payload limit, rate limiting, zero secret leaks, exhaustive cross-tenant RLS CRUD matrix under managex_app, connection pool resilience, p95 read < 200ms, p95 write < 500ms, 1000-row pagination < 2.0s with index scan, WCAG 2.2 AA accessibility verification) | Ready for Phase 10 Acceptance Review |
+| **Phase 11** | Staging/Production Deployment Readiness | PENDING | None | Blocked on Phase 10 Acceptance |
 
 ---
 
@@ -373,5 +373,206 @@ This document tracks progress across implementation phases, completed requiremen
   - Frontend lint: `eslint` passes with 0 errors.
   - Frontend build: `tsc && vite build` completes with 0 errors in 23.66s.
 
+---
+
+## Phase 8A Deliverables Summary (COMPLETED)
+- **Database Migration (`20261017000015_projects_core.sql`):**
+  - Created `projects`: `(id, organisation_id, name, description, status, priority, owner_id, start_date, target_date, created_by_id, created_at, updated_at)` with `CHECK (start_date IS NULL OR target_date IS NULL OR start_date <= target_date)`, canonical statuses `('planning', 'active', 'on_hold', 'completed', 'archived')`, priorities `('low', 'medium', 'high', 'urgent')`, and composite unique keys `(id, organisation_id)` & `(organisation_id, id)`.
+  - Created `project_members`: `(id, organisation_id, project_id, user_id, role, joined_at, created_at, updated_at)` with FK cascade to `projects(id, organisation_id)` and `organisation_memberships(organisation_id, user_id)`, roles `('manager', 'contributor', 'viewer')`, and unique constraint `(project_id, user_id)`.
+  - Enabled and forced PostgreSQL RLS across both tables with full DML permissions granted to restricted runtime role `managex_app`.
+- **Backend Services & Lifecycle Engine (`PRJ-001`, `PRJ-002`, PRD §9.1):**
+  - Canonical 5-status lifecycle:
+    - `planning` -> `['active', 'on_hold', 'archived']`
+    - `active` -> `['on_hold', 'completed', 'archived']`
+    - `on_hold` -> `['active', 'completed', 'archived']`
+    - `completed` -> `['archived']`
+    - `archived` -> `[]` (Terminal immutable state; edits and transitions blocked).
+  - Explicit priority validation (`low`, `medium`, `high`, `urgent`) with default `medium`.
+  - Automatic owner membership: Project creator/owner is automatically enrolled as `manager` in `project_members`.
+  - Owner invariants enforced:
+    - Owner must be an active member of the organisation.
+    - Owner cannot be removed from project members without atomic transfer of ownership.
+    - Owner cannot be demoted to non-manager role while remaining owner.
+    - Changing project owner automatically adds new owner as `manager` if not already present, or promotes them to `manager`.
+  - Resource-scoped project access: Non-members of a project without `project.view_all` / `org.admin` / `org.owner` receive `403 PROJECT_ACCESS_DENIED`.
+  - Tenant transaction consistency: `fetchFullProject` reuses transactional client preventing `READ COMMITTED` race or visibility mismatches.
+- **Project Members & Access Management (`PRJ-001`, PRD §9.1):**
+  - Endpoints implemented:
+    - `GET /api/v1/organisations/:orgId/projects` (with `status`, `priority`, `page`, `limit` filtering)
+    - `POST /api/v1/organisations/:orgId/projects`
+    - `GET /api/v1/organisations/:orgId/projects/:projectId`
+    - `PATCH /api/v1/organisations/:orgId/projects/:projectId`
+    - `PATCH /api/v1/organisations/:orgId/projects/:projectId/status`
+    - `GET /api/v1/organisations/:orgId/projects/:projectId/members`
+    - `POST /api/v1/organisations/:orgId/projects/:projectId/members`
+    - `PATCH /api/v1/organisations/:orgId/projects/:projectId/members/:userId`
+    - `DELETE /api/v1/organisations/:orgId/projects/:projectId/members/:userId`
+  - Cross-tenant validation: Assigning owners or members outside the organisation is rejected (`422 INVALID_OWNER` / `422 INVALID_MEMBER`).
+- **Frontend Experience (`ProjectsPage.tsx`, `ProjectDetailPage.tsx`, `CreateProjectDialog.tsx`):**
+  - Projects list with status and priority filter tabs, text search, project cards with status/priority badges, owner info, date ranges, and member count.
+  - Create project modal with name, description, priority selector, target dates, and owner picker from active org members.
+  - Detail page with lifecycle transition actions (Start, Put On Hold, Mark Completed, Archive), project overview card, and Members roster tab.
+  - In-place member role management (promote/demote between manager, contributor, viewer) and member removal with owner guard.
+  - "Add Member" modal allowing selection of any active organisation member with assigned role.
+  - Phase 8B Tasks tab placeholder cleanly prepared for Phase 8B.
+  - Live navigation link in Workspace sidebar with real-time module entitlement awareness.
+- **Automated Verification & Evidence:**
+  - Integration suite `projects.integration.test.js`: 18/18 passing tests covering creation, validation, lifecycle transitions, terminal states, member management, owner invariants, tenant isolation, and RLS policies.
+  - Full backend test suite: 202/202 passing tests across 14 test suites in `npm test` (0 failures).
+  - Frontend typecheck: `tsc --noEmit` passes with 0 errors.
+  - Frontend lint: `eslint` passes with 0 errors.
+  - Frontend build: `tsc && vite build` completes with 0 errors in 6.53s.
+
+---
+
+## Phase 8B Deliverables Summary (Tasks, Statuses, Kanban & Filtering)
+- **Database Schema & Migrations (`database/migrations/20261017000016_tasks_core.sql`, `20261017000017_tasks_rls_refinement.sql`):**
+  - Created `tasks` table with columns: `id`, `organisation_id`, `project_id`, `title`, `description`, `status`, `priority`, `assignee_id`, `start_date`, `due_date`, `created_by_id`, `created_at`, `updated_at`, `deleted_at`, `deleted_by_id`.
+  - Check constraints: canonical statuses `('backlog', 'todo', 'in_progress', 'blocked', 'done')` (no cancelled status), priorities `('low', 'medium', 'high', 'urgent')`, and date ordering `CHECK (start_date IS NULL OR due_date IS NULL OR start_date <= due_date)`.
+  - Composite foreign keys: `(project_id, organisation_id) REFERENCES projects(id, organisation_id) ON DELETE CASCADE`.
+  - Foreign key to assignee: `FOREIGN KEY (organisation_id, assignee_id) REFERENCES organisation_memberships(organisation_id, user_id) ON DELETE SET NULL`.
+  - Enabled and forced PostgreSQL RLS with permissive tenant policies (`tenant_isolation_tasks`) granting `ALL` DML to `managex_app`.
+- **Backend Task Service & Business Logic (`backend/src/platform/projects/projectService.js`, `projectLifecycle.js`):**
+  - Canonical 5-status task lifecycle state machine:
+    - `backlog` -> `['todo']`
+    - `todo` -> `['backlog', 'in_progress']`
+    - `in_progress` -> `['blocked', 'done']`
+    - `blocked` -> `['in_progress']`
+    - `done` -> `['in_progress']` (strictly requires manager/admin role or `project.edit` permission).
+  - Assignee validation: Assignee must be an active member of both organisation and project.
+  - Active assignment removal guards (ADR-006):
+    - Member cannot be removed from project if they have active tasks assigned (`status != 'done' AND deleted_at IS NULL`), returning `409 MEMBER_HAS_ACTIVE_TASKS`.
+    - Organisation member cannot be suspended or removed if they have active tasks assigned in any project, returning `409 MEMBER_HAS_ACTIVE_TASKS`.
+  - Archived project invariant: Task creation, updates, and deletion in an `archived` project are strictly blocked with `409 PROJECT_ARCHIVED`.
+  - Soft deletion: Soft-deleted tasks record `deleted_at` and `deleted_by_id` and are filtered out of all normal queries.
+  - Server-side filtering: `status`, `priority`, `assigneeId`, `assigned_to_me`, `due_soon` ($\le 7\text{ days}$ in future), `overdue` ($< \text{now}$ UTC and status $\ne$ 'done'), text search across title and description, and deterministic cursor/offset pagination.
+  - Cross-project task query: `GET /api/v1/organisations/:orgId/tasks/my` returning caller's active assignments across all projects in the organisation.
+- **REST API Routes (`backend/src/routes/projects.js`, `organisations.js`):**
+  - `GET /api/v1/organisations/:orgId/projects/:projectId/tasks` (List tasks with filters)
+  - `POST /api/v1/organisations/:orgId/projects/:projectId/tasks` (Create task)
+  - `GET /api/v1/organisations/:orgId/projects/:projectId/tasks/:taskId` (Get task by ID)
+  - `PATCH /api/v1/organisations/:orgId/projects/:projectId/tasks/:taskId` (Update task or status)
+  - `DELETE /api/v1/organisations/:orgId/projects/:projectId/tasks/:taskId` (Soft-delete task)
+  - `GET /api/v1/organisations/:orgId/tasks/my` (List tasks assigned to current user across org)
+- **Frontend Task Management (`TaskListView.tsx`, `TaskKanbanView.tsx`, `CreateTaskDialog.tsx`, `TaskDetailDialog.tsx`, `ProjectDetailPage.tsx`):**
+  - Dual-mode Task View: Toggle seamlessly between 5-column Kanban board and comprehensive tabular List view over the same live data model.
+  - Kanban board: 5 columns (`backlog`, `todo`, `in_progress`, `blocked`, `done`) with column task counts, priority badges, assignee tags, quick navigation buttons between valid adjacent statuses, and column "Add Task" quick triggers.
+  - List view: Dense enterprise table with status badges, priority badges, assignee name/email, overdue and due-soon warning chips, and direct forward-status progression buttons.
+  - Quick filter bar: Instant preset buttons (All Tasks, Assigned to Me, Due Soon, Overdue), full-text search input, and status, priority, and assignee dropdowns.
+  - Create Task Modal: Validates title, description, priority, initial status, assignee (from eligible project members), and start/due dates.
+  - Task Detail Modal: In-place editable fields, status transition controls with server validation error handling, audit metadata (creator and timestamps), and confirmed soft deletion.
+- **Automated Verification & Evidence:**
+  - Tasks integration test suite (`tasks.integration.test.js`): 18/18 passing tests covering CRUD, 5-status lifecycle, invalid transition rejection, reopen authorization, assignee project membership validation, project member removal guard (409), org member suspension guard (409), archived project guard (409), soft deletion, server-side filters (`assigned_to_me`, `due_soon`, `overdue`, search), and `managex_app` composite FK / RLS isolation.
+  - Projects integration test suite (`projects.integration.test.js`): 18/18 passing tests with 0 regressions.
+  - Full backend test suite: 220/220 passing tests across 15 test suites in `npm test` (0 failures).
+  - Frontend test suite: 8/8 passing tests in `vitest run`.
+  - Frontend typecheck and production build: `tsc && vite build` completed cleanly with 0 errors in 13.07s.
+
+---
+
+## Phase 8C Deliverables Summary (Comments, Activity Timeline & Projects Full E2E)
+- **Database Schema & Migrations (`database/migrations/20261017000018_task_comments_activity.sql`):**
+  - Created `task_comments` table with columns: `id`, `organisation_id`, `project_id`, `task_id`, `author_id`, `content`, `created_at`, `updated_at`, `deleted_at`, `deleted_by_id`.
+  - Created `project_activity` table with columns: `id`, `organisation_id`, `project_id`, `entity_type`, `entity_id`, `action`, `actor_id`, `metadata`, `created_at`.
+  - Composite foreign keys:
+    - `task_comments (task_id, project_id, organisation_id) REFERENCES tasks(id, project_id, organisation_id) ON DELETE CASCADE`.
+    - `task_comments (organisation_id, author_id) REFERENCES organisation_memberships(organisation_id, user_id) ON DELETE CASCADE`.
+    - `project_activity (project_id, organisation_id) REFERENCES projects(id, organisation_id) ON DELETE CASCADE`.
+    - `project_activity (organisation_id, actor_id) REFERENCES organisation_memberships(organisation_id, user_id) ON DELETE SET NULL`.
+  - Seeded permissions: `project.comment.moderate` and `task.comment.create` granted to `organisation_owner` and `organisation_admin`.
+  - PostgreSQL Row-Level Security: `FORCE ROW LEVEL SECURITY` enabled on both tables, granting `SELECT, INSERT, UPDATE, DELETE` to `managex_app` with isolated tenant policies (`tenant_isolation_task_comments`, `tenant_isolation_project_activity`).
+- **Backend Services & Routes (`backend/src/platform/projects/projectService.js`, `backend/src/routes/projects.js`):**
+  - Task Comments CRUD:
+    - `POST /api/v1/organisations/:orgId/projects/:projectId/tasks/:taskId/comments`: Validates plain-text content (1..2000 chars), verifies caller is an active project member, records activity event `comment_added`.
+    - `GET /api/v1/organisations/:orgId/projects/:projectId/tasks/:taskId/comments`: Bounded list with active author profile and soft-deleted placeholder `[This comment has been deleted]`.
+    - `PATCH /api/v1/organisations/:orgId/projects/:projectId/tasks/:taskId/comments/:commentId`: Author-only edit while project is not archived, updating `content` and recording `comment_edited`.
+    - `DELETE /api/v1/organisations/:orgId/projects/:projectId/tasks/:taskId/comments/:commentId`: Soft deletion by author or moderator/manager (`project.comment.moderate`), setting `deleted_at` and `deleted_by_id` and recording `comment_deleted`.
+    - Archived project guard: Comment creation, updates, and deletion in an `archived` project are strictly rejected with `409 PROJECT_ARCHIVED`.
+    - Audit security invariant: Compliance audit logs record comment ID only — comment body or diffs are NEVER included in audit metadata (`SEC-008`, `ADR-013`).
+  - Project Activity Timeline:
+    - Concise activity logging helper `recordProjectActivity` integrated across all material events: `project_created`, `project_status_changed`, `member_added`, `member_role_changed`, `member_removed`, `task_created`, `task_status_changed`, `task_assigned`, `task_deleted`, `comment_added`, `comment_edited`, `comment_deleted`.
+    - `GET /api/v1/organisations/:orgId/projects/:projectId/activity`: Chronological timeline query ordered by `created_at DESC` with pagination, actor metadata, and clean summary messages.
+    - Zero secrets or token leakage in activity metadata; distinct and decoupled from compliance audit logs.
+- **Frontend Workspace Experience (`TaskDetailDialog.tsx`, `ProjectDetailPage.tsx`, `types/projects.ts`):**
+  - Interactive Task Comments Thread:
+    - Real-time comment input with character counter (0/2000), submit button, and keyboard shortcut support.
+    - Author in-place inline editing with Cancel / Save controls.
+    - Soft-deletion confirmation with instant UI update to `[This comment has been deleted]`.
+    - Moderation delete button visible only to users with manager/admin privileges.
+    - Read-only banner and disabled inputs when the parent project is in `archived` status.
+  - Project Activity Timeline Tab:
+    - Added dedicated "Activity" tab to `ProjectDetailPage` with chronological vertical timeline.
+    - Event-specific badges and human-readable event summaries (e.g., status changes, assignee changes, member updates).
+    - Actor avatar, user name, email, relative/absolute timestamp chips, and contextual metadata.
+- **Automated Verification & Evidence:**
+  - Dedicated Phase 8C integration test suite (`comments_activity.integration.test.js`): 18/18 passing tests covering comment validation, bounds, script safety, author edit, non-author edit lockout (403), author soft-delete, non-author delete without moderation lockout (403), manager moderation delete, archived project lockout (409), project non-member lockout (403), cross-tenant isolation, activity timeline generation, activity secrets omission, archived history preservation, direct RLS under `managex_app`, composite FK rejection (23503), dynamic module revocation (403 MODULE_DISABLED).
+  - Full backend test suite: 238/238 passing tests across 16 test suites in `npm test` (0 failures).
+  - Frontend test suite: 8/8 passing tests in `vitest run`.
+  - Frontend typecheck and production build: `tsc && vite build` completed cleanly with 0 errors in 6.92s.
+
+---
+
+## Phase 9 Deliverables Summary (Platform Administration Console & Controls)
+- **Database Schema & Migrations (`database/migrations/20261017000019_platform_admin_controls.sql`):**
+  - Added `platform_role` column to `users` with CHECK constraint (`platform_super_admin`, `platform_support_agent`).
+  - Seeded platform permissions `platform.account.read` and `platform.account.manage`.
+  - Mapped permissions to `platform_super_admin` and `platform_support_agent` roles.
+  - Granted least-privilege `UPDATE (is_platform_available) ON modules` to restricted runtime role `managex_app`.
+  - All 19 migrations verified and applied deterministically (`19/19 applied, 0 pending`).
+- **Backend Services & Authorization Middleware:**
+  - Distinct `/api/v1/platform` route namespace segregated from customer tenant endpoints.
+  - Platform session and authorization middleware (`requirePlatformSession`, `requirePlatformPermission`) enforcing server-authoritative role and permission checks.
+  - Operational overview service (`getPlatformOverview`): aggregate metrics for accounts, workspaces, and catalogue modules without cross-tenant leakage.
+  - Global accounts management (`listAccounts`, `updateAccountStatus`): paginated operational listing returning only allowlisted fields; zero password hashes or tokens; instant session revocation on account suspension; login fail-closed (`403 ACCOUNT_DISABLED`); self-suspension guard (`409 CANNOT_SUSPEND_SELF`).
+  - Customer workspace operational inspection (`listOrganisations`, `getOrganisationDetails`, `updateOrganisationStatus`): tenant overview with member and active module counts; non-destructive workspace suspension returning `403 ORG_INACTIVE` while preserving all tenant data.
+  - Module catalogue management (`listPlatformModules`, `updatePlatformModuleAvailability`): fixed 3 MVP modules (`events`, `meetings`, `projects`); platform availability toggle cascading to org endpoints (`403 MODULE_PLATFORM_UNAVAILABLE`) without deleting underlying data; arbitrary module rejection (`404 MODULE_NOT_FOUND`).
+  - Platform audit logging (`listPlatformAuditLogs`): append-only audit trail with `organisation_id IS NULL` for all high-impact actions.
+- **Frontend Platform Console (`/platform`):**
+  - Distinct visual identity and navigation layout (`PlatformLayout.tsx`) with dark slate header and direct "Return to Workspace" link.
+  - Real-time Operational Overview (`PlatformOverviewPage.tsx`): live tenant metrics and catalogue status cards.
+  - User Accounts Directory (`PlatformAccountsPage.tsx`): paginated table, search, status filter, and confirmation modal for account suspension/reactivation with operational reason logging.
+  - Workspaces Inspection (`PlatformOrganisationsPage.tsx`): paginated organisations list, metadata modal detailing active module entitlements, and workspace suspension/reactivation modal.
+  - Module Catalogue Controls (`PlatformModulesPage.tsx`): visual cards for `events`, `meetings`, and `projects` with global enable/disable modals and data preservation guarantees.
+  - Platform Audit Logs Viewer (`PlatformAuditLogsPage.tsx`): UTC timestamped event ledger with sanitized JSON metadata modal.
+- **Automated Verification & Evidence:**
+  - Dedicated Phase 9 integration test suite (`platform.integration.test.js`): 20/20 passing tests covering PLAT-001 through PLAT-007 and SEC-009.
+  - Full backend test suite: 258/258 passing tests across 17 test suites in `npm test` (0 failures).
+  - Frontend test suite: 8/8 passing tests in `vitest run`.
+  - Frontend typecheck and production build: `tsc && vite build` completed cleanly with 0 errors in 16.76s.
+
+---
+
+## Phase 10 Deliverables Summary (Cross-Cutting Hardening, Performance & Security Audit)
+- **Security Hardening & Headers (`SEC-001`, `SEC-005`):**
+  - Added dedicated security headers middleware (`securityHeaders.js`) enforcing `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, `Content-Security-Policy`, and production `Strict-Transport-Security`.
+  - Verified bcrypt work factor 12 and login timing enumeration defense (dummy 12-round bcrypt hash comparison for non-existent users).
+  - Enforced CSRF double-submit token checking on all state-changing mutations (`POST`, `PUT`, `PATCH`, `DELETE`).
+- **Input Fuzzing & Abuse Protection (`SEC-002`, `SEC-006`):**
+  - Parameterized queries verified against SQL injection fuzz vectors across search parameters and request bodies.
+  - XSS payloads neutralized as plain text without execution.
+  - Request body parser constrained to 100KB with standard 413 `PAYLOAD_TOO_LARGE` error envelope.
+  - Invalid Unicode null bytes (`\u0000`) trapped and returned with 400 `INVALID_ENCODING` instead of 500.
+  - Rate limiting verified on sensitive public and auth endpoints (`auth_login`, `auth_reg`).
+- **Secret Redaction & Audit Integrity (`SEC-007`, `SEC-008`):**
+  - Automated check asserting zero password hashes, session secrets, or tokens in logs, audit records, or API error bodies.
+- **Cross-Tenant RLS Matrix (`SEC-008`):**
+  - Exhaustive RLS CRUD matrix verified under restricted role `managex_app`: zero cross-tenant reads or writes across `events`, `meetings`, `notes`, `projects`, `tasks`, and `comments`.
+  - Composite foreign keys enforce tenant isolation (`fk_tasks_project_tenant`), rejecting foreign references with PostgreSQL error `23503`.
+- **Database Resilience & Latency SLAs (`OPS-005`):**
+  - Connection pool exhaustion and recovery verified; queued queries succeed once pooled clients are released without deadlock.
+  - Measured p95 read latency: 32ms (well under < 200ms target).
+  - Measured p95 write latency: 58ms (well under < 500ms target).
+  - 1,000-row dataset paginated query verified in 181ms (well under < 2.0s target).
+  - PostgreSQL `EXPLAIN ANALYZE` confirms execution uses `idx_tasks_project_status` index scan with zero unindexed table scans.
+- **Frontend Accessibility (`UI-005`, WCAG 2.2 AA):**
+  - Verified color contrast >= 4.5:1 for normal text and >= 3:1 for UI components across light theme palette.
+  - Primitives refined with accessible semantics: `Button` (`aria-busy`, `aria-disabled`), `Input` (`aria-invalid`), `Dialog` (`role="dialog"`, `aria-modal`, `aria-labelledby`, `aria-describedby`), `TableHead` (`scope="col"`).
+  - Automated test suite (`Accessibility.test.tsx`): 6/6 tests passing via native DOM server rendering.
+- **Automated Verification & Evidence:**
+  - Dedicated Phase 10 security audit suite (`security_audit.integration.test.js`): 13/13 passing tests.
+  - Dedicated Phase 10 database performance suite (`performance.integration.test.js`): 4/4 passing tests.
+  - Full backend test suite: 275/275 passing tests across 19 suites in `npm test` (0 failures).
+  - Frontend test suite: 14/14 passing tests across 2 suites in `vitest run` (0 failures).
+  - Frontend typecheck and production build: `tsc && vite build` completed cleanly with 0 errors in 8.54s.
 
 

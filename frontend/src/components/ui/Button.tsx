@@ -31,6 +31,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(baseStyles, variants[variant], sizes[size], className)}
         disabled={disabled || isLoading}
+        aria-busy={isLoading ? true : undefined}
+        aria-disabled={disabled || isLoading ? true : undefined}
         {...props}
       >
         {isLoading && <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden="true" />}

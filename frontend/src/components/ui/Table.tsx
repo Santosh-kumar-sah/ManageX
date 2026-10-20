@@ -29,9 +29,10 @@ export function TableRow({ className, ...props }: React.HTMLAttributes<HTMLTable
   );
 }
 
-export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) {
+export function TableHead({ className, scope = 'col', ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
+      scope={scope}
       className={cn(
         'h-10 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 align-middle [&:has([role=checkbox])]:pr-0',
         className
