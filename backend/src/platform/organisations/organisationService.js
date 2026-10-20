@@ -407,6 +407,22 @@ export async function updateMember({
     // 4. Update status if specified
     let newStatus = currentTarget.status;
     if (status && status !== currentTarget.status) {
+      if (status === 'suspended' || status === 'removed') {
+        // PRJ-004 invariant: block suspension/removal if active task assignments exist
+        const activeTasksRes = await client.query(`
+          SELECT id FROM tasks
+          WHERE organisation_id = $1 AND assignee_id = $2 AND deleted_at IS NULL AND status != 'done'
+          LIMIT 1
+        `, [organisationId, targetUserId]);
+
+        if (activeTasksRes.rows.length > 0) {
+          throw new ConflictError(
+            'Cannot suspend or remove member with active task assignments. Reassign or complete their tasks first.',
+            'MEMBER_HAS_ACTIVE_TASKS'
+          );
+        }
+      }
+
       await client.query(`
         UPDATE organisation_memberships
         SET status = $1, updated_at = NOW()

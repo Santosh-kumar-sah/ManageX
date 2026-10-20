@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import { requestIdMiddleware } from './platform/middleware/requestId.js';
 import { httpLoggerMiddleware } from './platform/middleware/logger.js';
 import { corsMiddleware } from './platform/middleware/cors.js';
+import { securityHeadersMiddleware } from './platform/middleware/securityHeaders.js';
 import { csrfMiddleware } from './platform/middleware/csrf.js';
 import { authenticateSession } from './platform/middleware/auth.js';
 import { notFoundHandler } from './platform/middleware/notFoundHandler.js';
@@ -15,10 +16,11 @@ export function createApp() {
   // Trust proxy for Vercel edge rewrite proxy (X-Forwarded-For, X-Forwarded-Proto)
   app.set('trust proxy', 1);
 
-  // Security headers & basic middleware
+  // Security headers & basic middleware (SEC-005, SEC-006)
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '1mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+  app.use(securityHeadersMiddleware);
+  app.use(express.json({ limit: '100kb' }));
+  app.use(express.urlencoded({ extended: true, limit: '100kb' }));
   app.use(cookieParser());
 
   // Request correlation ID & structured logging

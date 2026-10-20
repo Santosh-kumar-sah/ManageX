@@ -61,6 +61,8 @@ import {
 import { listOrganisationAuditLogs } from '../platform/audit/auditService.js';
 import { eventsRouter } from './events.js';
 import { meetingsRouter } from './meetings.js';
+import { projectsRouter } from './projects.js';
+import { listMyTasks } from '../platform/projects/projectService.js';
 import { sendSuccess } from '../platform/common/responses.js';
 import { ValidationError } from '../platform/common/errors.js';
 
@@ -523,16 +525,26 @@ organisationsRouter.use('/:orgId/events', eventsRouter);
 // -----------------------------------------------------------------------------
 organisationsRouter.use('/:orgId/meetings', meetingsRouter);
 
+// -----------------------------------------------------------------------------
+// 16. Projects & Tasks Module Core Router (Phase 8A: PRJ-001, PRJ-002)
+// -----------------------------------------------------------------------------
+organisationsRouter.use('/:orgId/projects', projectsRouter);
+
+// -----------------------------------------------------------------------------
+// 17. Tasks Cross-Project Views Router (Phase 8B: PRJ-006, docs/api-contracts.md)
+// -----------------------------------------------------------------------------
 organisationsRouter.get(
-  '/:orgId/projects',
+  '/:orgId/tasks/my',
   requireOrgMembership,
   requireModuleEntitlement('projects'),
-  requireOrgPermission('project.view'),
-  async (req, res) => {
-    return sendSuccess(res, 200, {
-      module: 'projects',
-      entitled: true,
-      message: 'Projects module is active and accessible for this organisation.',
-    });
+  requireOrgPermission('task.read'),
+  async (req, res, next) => {
+    try {
+      const result = await listMyTasks(req.organisation.id, req.query, req.user.id);
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
   }
 );
+

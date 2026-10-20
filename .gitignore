@@ -13,3 +13,6 @@ Thumbs.db
 
 .vscode/
 .idea/
+
+backend/scripts/
+scratch/

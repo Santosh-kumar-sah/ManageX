@@ -86,6 +86,7 @@ export async function validateSession(rawToken) {
       u.email,
       u.full_name,
       u.is_platform_admin,
+      u.platform_role,
       u.status AS user_status,
       u.email_verified_at
     FROM sessions s
@@ -135,7 +136,8 @@ export async function validateSession(rawToken) {
       id: row.user_id,
       email: row.email,
       fullName: row.full_name,
-      isPlatformAdmin: row.is_platform_admin,
+      isPlatformAdmin: Boolean(row.is_platform_admin),
+      platformRole: row.platform_role || (row.is_platform_admin ? 'platform_super_admin' : null),
       status: row.user_status,
       emailVerifiedAt: row.email_verified_at,
     },

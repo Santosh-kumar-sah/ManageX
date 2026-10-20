@@ -28,8 +28,18 @@ describe('Phase 6A — Events Core, Lifecycle & Visibility Suite', () => {
     // 1. Create test users inside system transaction
     const passwordHash = await hashPassword('SecurePassword123!');
     const users = await withSystemTransaction(async (client) => {
-      // Clean up previous test users if any
-      await client.query("DELETE FROM users WHERE email LIKE 'evt6a_%@managex.local'");
+      // Clean up previous test users and organisations if any
+      const prevUsers = await client.query("SELECT id FROM users WHERE email LIKE 'evt6a_%@managex.local'");
+      const prevUserIds = prevUsers.rows.map(r => r.id);
+      if (prevUserIds.length > 0) {
+        await client.query("DELETE FROM event_registrations WHERE organisation_id IN (SELECT id FROM organisations WHERE name LIKE 'Phase6A%')");
+        await client.query("DELETE FROM events WHERE organisation_id IN (SELECT id FROM organisations WHERE name LIKE 'Phase6A%')");
+        await client.query("DELETE FROM membership_roles WHERE organisation_id IN (SELECT id FROM organisations WHERE name LIKE 'Phase6A%')");
+        await client.query("DELETE FROM organisation_memberships WHERE organisation_id IN (SELECT id FROM organisations WHERE name LIKE 'Phase6A%') OR user_id = ANY($1)", [prevUserIds]);
+        await client.query("DELETE FROM organisation_module_entitlements WHERE organisation_id IN (SELECT id FROM organisations WHERE name LIKE 'Phase6A%')");
+        await client.query("DELETE FROM organisations WHERE name LIKE 'Phase6A%'");
+        await client.query("DELETE FROM users WHERE id = ANY($1)", [prevUserIds]);
+      }
 
       const res = await client.query(`
         INSERT INTO users (full_name, email, password_hash, status, email_verified_at)

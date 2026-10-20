@@ -38,6 +38,28 @@ export function errorHandler(err, req, res, next) {
     );
   }
 
+  // Handle invalid Unicode or null byte sequences (SEC-002)
+  if (err.code === '22021' || (err.message && err.message.includes('invalid byte sequence'))) {
+    return res.status(400).json(
+      errorResponse({
+        code: 'INVALID_ENCODING',
+        message: 'The request contains invalid characters or null bytes.',
+        requestId,
+      })
+    );
+  }
+
+  // Handle oversized request payloads (SEC-006)
+  if (err.status === 413 || err.type === 'entity.too.large') {
+    return res.status(413).json(
+      errorResponse({
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'The request payload exceeds the maximum allowed size (100KB).',
+        requestId,
+      })
+    );
+  }
+
   // Handle custom AppError instances
   if (err instanceof AppError) {
     return res.status(err.statusCode).json(

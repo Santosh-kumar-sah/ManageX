@@ -302,7 +302,7 @@ authRouter.post('/login', loginLimiter, async (req, res, next) => {
 
     // Query user by email
     const userRes = await pool.query(`
-      SELECT id, full_name, email, password_hash, status, is_platform_admin, email_verified_at
+      SELECT id, full_name, email, password_hash, status, is_platform_admin, platform_role, email_verified_at
       FROM users
       WHERE LOWER(email) = $1
     `, [normalizedEmail]);
@@ -345,7 +345,8 @@ authRouter.post('/login', loginLimiter, async (req, res, next) => {
         id: user.id,
         email: user.email,
         fullName: user.full_name,
-        isPlatformAdmin: user.is_platform_admin,
+        isPlatformAdmin: Boolean(user.is_platform_admin),
+        platformRole: user.platform_role || (user.is_platform_admin ? 'platform_super_admin' : null),
         status: user.status,
       },
       session: {

@@ -316,7 +316,7 @@ export async function listMeetings(organisationId, query = {}, viewerUserId, vie
       pIdx++;
     }
 
-    if (status) {
+    if (status && status !== 'all') {
       conditions.push(`m.status = $${pIdx}`);
       params.push(status);
       pIdx++;
