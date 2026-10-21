@@ -106,7 +106,7 @@ export function OrgAuditLogsPage() {
       <Breadcrumbs
         items={[
           { label: 'Workspace', href: '/app' },
-          { label: activeOrg?.name || 'Organisation', href: `/app/organisations/${effectiveOrgId}/settings` },
+          { label: activeOrg?.name || 'Organisation', href: '/app' },
           { label: 'Security & Audit Log' },
         ]}
       />

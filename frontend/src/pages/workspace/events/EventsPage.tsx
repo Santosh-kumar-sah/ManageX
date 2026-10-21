@@ -106,7 +106,7 @@ export function EventsPage() {
           <Breadcrumbs
             items={[
               { label: 'Workspace', href: '/app' },
-              { label: activeOrg?.name || 'Organisation', href: `/app/organisations/${effectiveOrgId}/events` },
+              { label: activeOrg?.name || 'Organisation', href: '/app' },
               { label: 'Events & Hackathons' },
             ]}
           />

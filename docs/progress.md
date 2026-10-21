@@ -575,4 +575,32 @@ This document tracks progress across implementation phases, completed requiremen
   - Frontend test suite: 14/14 passing tests across 2 suites in `vitest run` (0 failures).
   - Frontend typecheck and production build: `tsc && vite build` completed cleanly with 0 errors in 8.54s.
 
+---
+
+## Post-Phase-10 Role-Based UX & Navigation Refinements Deliverables Summary
+- **Login Redirection (`AUTH-003`, Persona-Aware UX):**
+  - Updated `AuthContext.tsx` to return verified `User` on `refreshUser()`.
+  - Updated `LoginPage.tsx`: routes Platform Super Admins and Support Agents (`user.isPlatformAdmin === true`) directly to `/platform`, while routing regular organisation users to `/app`. Preserves authorized deep links.
+- **Frontend Route Guards (`SEC-009`, `PLAT-001`, `AUTH-005`):**
+  - Added `RequireAuth` in `RouteGuards.tsx` protecting `/app/*` with loading indicators during session hydration and redirection of unauthenticated requests to `/auth/login`.
+  - Added `RequirePlatformAdmin` in `RouteGuards.tsx` protecting `/platform/*` with loading indicators, redirecting unauthenticated users to `/auth/login` and non-platform users away to `/app`.
+- **Permission-Based Workspace Navigation (`RBAC-001`, `RBAC-003`, `RBAC-004`):**
+  - Updated `WorkspaceLayout.tsx` to dynamically evaluate effective permissions (`activeDetails?.membership?.permissions`) and roles.
+  - Granularly filters `Members & Roles`, `Modules & Entitlements`, `Security & Audit Log`, and `Organisation Settings`.
+  - Completely hides the `Organisation Admin` sidebar section in both desktop and mobile drawer when an ordinary member holds no administrative permissions.
+- **Operator Console Workspace Shortcut:**
+  - Added a prominent `Operator Console` button in the `WorkspaceLayout` header for verified platform administrators, enabling 1-click transit between tenant workspaces and the platform console.
+- **Context-Aware Zero-Organisation Empty State:**
+  - Updated `WorkspaceOverviewPage.tsx` and `WorkspaceLayout.tsx` banner: truthful, helpful messaging distinguishing between Platform Admins with no tenant workspaces (offering both Operator Console and Create Organisation) and regular members (offering Create Organisation and invitation guidance without assuming student persona or claiming unverified event registrations).
+- **Automated Verification & Evidence:**
+  - `RouteGuards.test.tsx`: 7/7 tests passing (verifies loading, unauthenticated redirects, non-platform admin redirects, and authenticated outlets).
+  - `WorkspaceLayout.test.tsx`: 4/4 tests passing (verifies permission-based sidebar filtering and header operator shortcut rendering).
+  - `WorkspaceOverviewPage.test.tsx`: 7/7 tests passing (verifies dynamic metadata, truthful zero-org regular state, and platform admin zero-org state).
+  - `LoginPage.test.tsx`: verified form rendering and login helpers.
+  - Frontend test suite: 33/33 tests passing across 6 test suites in `npm test --prefix frontend` (0 failures).
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) completed with 0 errors.
+  - Frontend build: `npm run build --prefix frontend` (`tsc && vite build`) completed with 0 errors in 15.92s.
+  - Frontend lint: `npm run lint --prefix frontend` completed with 0 errors.
+  - Backend test suite: 275/275 tests passing across 19 suites in `npm test --prefix backend` (0 failures).
+
 

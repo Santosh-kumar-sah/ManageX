@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import { PublicLayout } from '@/layouts/PublicLayout';
 import { WorkspaceLayout } from '@/layouts/WorkspaceLayout';
 import { PlatformLayout } from '@/layouts/PlatformLayout';
+import { RequireAuth, RequirePlatformAdmin } from '@/components/auth/RouteGuards';
 
 import { HomePage } from '@/pages/HomePage';
 import { ModulesPage } from '@/pages/ModulesPage';
@@ -48,28 +49,32 @@ export function App() {
       </Route>
 
       {/* Authenticated Workspace Routes */}
-      <Route path="/app" element={<WorkspaceLayout />}>
-        <Route index element={<WorkspaceOverviewPage />} />
-        <Route path="organisations" element={<OrganisationsPage />} />
-        <Route path="organisations/:orgId/events" element={<EventsPage />} />
-        <Route path="organisations/:orgId/events/:eventId" element={<EventDetailPage />} />
-        <Route path="organisations/:orgId/meetings" element={<MeetingsPage />} />
-        <Route path="organisations/:orgId/meetings/:meetingId" element={<MeetingDetailPage />} />
-        <Route path="organisations/:orgId/projects" element={<ProjectsPage />} />
-        <Route path="organisations/:orgId/projects/:projectId" element={<ProjectDetailPage />} />
-        <Route path="organisations/:orgId/members" element={<MembersPage />} />
-        <Route path="organisations/:orgId/modules" element={<OrgModulesPage />} />
-        <Route path="organisations/:orgId/audit-logs" element={<OrgAuditLogsPage />} />
-        <Route path="organisations/:orgId/settings" element={<OrgSettingsPage />} />
+      <Route element={<RequireAuth />}>
+        <Route path="/app" element={<WorkspaceLayout />}>
+          <Route index element={<WorkspaceOverviewPage />} />
+          <Route path="organisations" element={<OrganisationsPage />} />
+          <Route path="organisations/:orgId/events" element={<EventsPage />} />
+          <Route path="organisations/:orgId/events/:eventId" element={<EventDetailPage />} />
+          <Route path="organisations/:orgId/meetings" element={<MeetingsPage />} />
+          <Route path="organisations/:orgId/meetings/:meetingId" element={<MeetingDetailPage />} />
+          <Route path="organisations/:orgId/projects" element={<ProjectsPage />} />
+          <Route path="organisations/:orgId/projects/:projectId" element={<ProjectDetailPage />} />
+          <Route path="organisations/:orgId/members" element={<MembersPage />} />
+          <Route path="organisations/:orgId/modules" element={<OrgModulesPage />} />
+          <Route path="organisations/:orgId/audit-logs" element={<OrgAuditLogsPage />} />
+          <Route path="organisations/:orgId/settings" element={<OrgSettingsPage />} />
+        </Route>
       </Route>
 
       {/* Platform Administration Routes */}
-      <Route path="/platform" element={<PlatformLayout />}>
-        <Route index element={<PlatformOverviewPage />} />
-        <Route path="accounts" element={<PlatformAccountsPage />} />
-        <Route path="organisations" element={<PlatformOrganisationsPage />} />
-        <Route path="modules" element={<PlatformModulesPage />} />
-        <Route path="audit-logs" element={<PlatformAuditLogsPage />} />
+      <Route element={<RequirePlatformAdmin />}>
+        <Route path="/platform" element={<PlatformLayout />}>
+          <Route index element={<PlatformOverviewPage />} />
+          <Route path="accounts" element={<PlatformAccountsPage />} />
+          <Route path="organisations" element={<PlatformOrganisationsPage />} />
+          <Route path="modules" element={<PlatformModulesPage />} />
+          <Route path="audit-logs" element={<PlatformAuditLogsPage />} />
+        </Route>
       </Route>
 
       {/* 404 Catch-All Route */}

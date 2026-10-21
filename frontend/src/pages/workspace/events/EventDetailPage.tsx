@@ -981,7 +981,7 @@ export function EventDetailPage() {
               { label: 'Workspace', href: '/app' },
               {
                 label: activeOrg?.name || 'Organisation',
-                href: `/app/organisations/${effectiveOrgId}/events`,
+                href: '/app',
               },
               { label: 'Events', href: `/app/organisations/${effectiveOrgId}/events` },
               { label: event.title },

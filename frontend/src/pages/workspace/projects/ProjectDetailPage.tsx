@@ -531,7 +531,7 @@ export function ProjectDetailPage() {
       <Breadcrumbs
         items={[
           { label: 'Workspace', href: '/app' },
-          { label: activeOrg?.name || 'Organisation', href: `/app/organisations/${effectiveOrgId}` },
+          { label: activeOrg?.name || 'Organisation', href: '/app' },
           { label: 'Projects & Tasks', href: `/app/organisations/${effectiveOrgId}/projects` },
           { label: project.name },
         ]}

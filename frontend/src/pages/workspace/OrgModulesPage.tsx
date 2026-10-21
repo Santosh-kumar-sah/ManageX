@@ -108,7 +108,7 @@ export function OrgModulesPage() {
       <Breadcrumbs
         items={[
           { label: 'Workspace', href: '/app' },
-          { label: activeOrg?.name || 'Organisation', href: `/app/organisations/${effectiveOrgId}/settings` },
+          { label: activeOrg?.name || 'Organisation', href: '/app' },
           { label: 'Modules & Entitlements' },
         ]}
       />

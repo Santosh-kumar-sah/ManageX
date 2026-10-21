@@ -283,7 +283,7 @@ export function MembersPage() {
       <Breadcrumbs
         items={[
           { label: 'Workspace', href: '/app' },
-          { label: activeOrg?.name || 'Organisation', href: `/app/organisations/${effectiveOrgId}/settings` },
+          { label: activeOrg?.name || 'Organisation', href: '/app' },
           { label: 'Members & Roles' },
         ]}
       />

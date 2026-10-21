@@ -189,7 +189,7 @@ export function OrgSettingsPage() {
       <Breadcrumbs
         items={[
           { label: 'Workspace', href: '/app' },
-          { label: activeOrg?.name || 'Organisation', href: '/app/organisations' },
+          { label: activeOrg?.name || 'Organisation', href: '/app' },
           { label: 'Organisation Settings' },
         ]}
       />

@@ -94,7 +94,8 @@ export function MeetingsPage() {
     <div className="space-y-6">
       <Breadcrumbs
         items={[
-          { label: activeOrg?.name || 'Organisation', href: `/app/organisations/${effectiveOrgId}` },
+          { label: 'Workspace', href: '/app' },
+          { label: activeOrg?.name || 'Organisation', href: '/app' },
           { label: 'Meetings' },
         ]}
       />

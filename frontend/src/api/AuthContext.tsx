@@ -11,6 +11,7 @@ export interface User {
   email: string;
   fullName: string;
   isPlatformAdmin: boolean;
+  platformRole?: string | null;
   status: string;
 }
 
@@ -18,7 +19,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<User | null>;
   logout: () => Promise<void>;
 }
 
@@ -28,18 +29,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (): Promise<User | null> => {
     try {
       const res = await apiClient<{ user: User }>('/auth/me');
       if (res.data?.user) {
         setUser(res.data.user);
+        return res.data.user;
       } else {
         setUser(null);
+        return null;
       }
     } catch (err) {
       if (err instanceof ApiError && (err.statusCode === 401 || err.statusCode === 403)) {
         setUser(null);
       }
+      return null;
     } finally {
       setIsLoading(false);
     }

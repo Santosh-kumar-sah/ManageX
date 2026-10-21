@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
@@ -10,6 +10,7 @@ import { useAuth } from '@/api/AuthContext';
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { refreshUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,8 +27,20 @@ export function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      await refreshUser();
-      navigate('/app');
+      const verifiedUser = await refreshUser();
+
+      const fromState = (location.state as { from?: { pathname?: string } } | null)?.from;
+      const targetPath = fromState?.pathname;
+
+      if (verifiedUser?.isPlatformAdmin) {
+        // Platform Admins / Support Agents default to /platform, or deep link
+        const destination = targetPath || '/platform';
+        navigate(destination, { replace: true });
+      } else {
+        // Regular users route to /app unless they had a non-platform deep link
+        const destination = targetPath && !targetPath.startsWith('/platform') ? targetPath : '/app';
+        navigate(destination, { replace: true });
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setErrorMessage(err.message);
