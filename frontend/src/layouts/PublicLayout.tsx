@@ -66,16 +66,73 @@ export function PublicLayout() {
       </main>
 
       {/* Enterprise Footer */}
-      <footer className="border-t border-border bg-white py-8 text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 font-medium text-slate-700">
-            <div className="h-5 w-5 rounded bg-brand-600 flex items-center justify-center text-white text-[10px] font-bold">
-              M
+      <footer className="border-t border-border bg-white text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div className="space-y-3 md:col-span-1">
+              <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                <div className="h-6 w-6 rounded-md bg-brand-600 flex items-center justify-center text-white text-xs font-bold">
+                  M
+                </div>
+                <span>ManageX Platform</span>
+              </div>
+              <p className="text-slate-500 leading-relaxed text-xs">
+                Unified operations and workspace management for teams, educational institutions, and growing organizations.
+              </p>
             </div>
-            <span>ManageX Modular Multi-Tenant SaaS</span>
+
+            <div>
+              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Core Modules</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link to="/modules" className="hover:text-brand-600 transition-colors">Events & Hackathons</Link>
+                </li>
+                <li>
+                  <Link to="/modules" className="hover:text-brand-600 transition-colors">Meetings & Minutes</Link>
+                </li>
+                <li>
+                  <Link to="/modules" className="hover:text-brand-600 transition-colors">Projects & Tasks</Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Platform & Trust</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link to="/security" className="hover:text-brand-600 transition-colors">Security Architecture</Link>
+                </li>
+                <li>
+                  <Link to="/security" className="hover:text-brand-600 transition-colors">Workspace Isolation</Link>
+                </li>
+                <li>
+                  <Link to="/security" className="hover:text-brand-600 transition-colors">Role-Based Access</Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Access</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link to="/auth/login" className="hover:text-brand-600 transition-colors">Sign In to Workspace</Link>
+                </li>
+                <li>
+                  <Link to="/auth/register" className="hover:text-brand-600 transition-colors">Create Free Account</Link>
+                </li>
+                <li>
+                  <Link to="/app" className="hover:text-brand-600 transition-colors">Go to Workspace</Link>
+                </li>
+              </ul>
+            </div>
           </div>
-          <div>
-            <span>Built with Clean Enterprise standards • Version 1.0 (Phase 1 Baseline)</span>
+
+          <div className="border-t border-border mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-400">
+            <p>© {new Date().getFullYear()} ManageX Platform. All rights reserved.</p>
+            <p className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span>All Systems Operational • Enterprise Multi-Tenant Isolation</span>
+            </p>
           </div>
         </div>
       </footer>
