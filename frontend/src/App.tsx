@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { PublicLayout } from '@/layouts/PublicLayout';
 import { WorkspaceLayout } from '@/layouts/WorkspaceLayout';
 import { PlatformLayout } from '@/layouts/PlatformLayout';
@@ -7,6 +7,7 @@ import { RequireAuth, RequirePlatformAdmin } from '@/components/auth/RouteGuards
 import { HomePage } from '@/pages/HomePage';
 import { ModulesPage } from '@/pages/ModulesPage';
 import { SecurityPage } from '@/pages/SecurityPage';
+import { PublicEventDetailPage } from '@/pages/public/PublicEventDetailPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
@@ -38,6 +39,8 @@ export function App() {
       {/* Public Routes */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
+        <Route path="/events" element={<Navigate to="/" replace />} />
+        <Route path="/events/:eventId" element={<PublicEventDetailPage />} />
         <Route path="/modules" element={<ModulesPage />} />
         <Route path="/security" element={<SecurityPage />} />
         <Route path="/auth/login" element={<LoginPage />} />

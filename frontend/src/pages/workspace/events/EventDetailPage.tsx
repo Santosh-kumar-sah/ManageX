@@ -39,6 +39,7 @@ import {
   Trophy,
   Trash2,
   Star,
+  Layers,
 } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import { useAuth } from '@/api/AuthContext';
@@ -56,6 +57,8 @@ import {
   JudgeAssignment,
   JudgeWorkItem,
   EventResultsData,
+  EventRound,
+  RoundAdvancementRule,
 } from '@/types/events';
 
 interface ParticipantsResponse {
@@ -72,15 +75,23 @@ interface ParticipantsResponse {
   };
 }
 
-export function EventDetailPage() {
+export function EventDetailPage({
+  initialEvent = null,
+  initialLoading = true,
+  initialRounds = [],
+}: {
+  initialEvent?: EventItem | null;
+  initialLoading?: boolean;
+  initialRounds?: EventRound[];
+} = {}) {
   const { orgId, eventId } = useParams<{ orgId: string; eventId: string }>();
   const { user } = useAuth();
   const { activeOrg, activeDetails } = useOrg();
 
   const effectiveOrgId = orgId && orgId !== 'default' ? orgId : activeOrg?.id;
 
-  const [event, setEvent] = useState<EventItem | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [event, setEvent] = useState<EventItem | null>(initialEvent);
+  const [isLoading, setIsLoading] = useState(initialEvent ? false : initialLoading);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -153,8 +164,49 @@ export function EventDetailPage() {
 
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [isPublishingResults, setIsPublishingResults] = useState(false);
+
+  // Shareable Public Event Link State
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
+
+  const handleCopyShareLink = async () => {
+    if (!event) return;
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        throw new Error('Clipboard API is unavailable in this environment.');
+      }
+      const shareUrl = `${window.location.origin}/events/${event.id}`;
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedShareLink(true);
+      setSuccessMsg('Shareable public event link copied to clipboard!');
+      setTimeout(() => {
+        setCopiedShareLink(false);
+      }, 3000);
+    } catch {
+      setErrorMsg('Failed to copy public link to clipboard. Please copy it manually.');
+    }
+  };
   const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false);
   const [isUnpublishingResults, setIsUnpublishingResults] = useState(false);
+
+  // Phase 02B: Multi-Round Hackathon State
+  const [rounds, setRounds] = useState<EventRound[]>(initialRounds);
+  const [isLoadingRounds, setIsLoadingRounds] = useState(false);
+  const [showRoundModal, setShowRoundModal] = useState(false);
+  const [editingRound, setEditingRound] = useState<EventRound | null>(null);
+  const [roundName, setRoundName] = useState('');
+  const [roundDesc, setRoundDesc] = useState('');
+  const [roundInstructions, setRoundInstructions] = useState('');
+  const [roundNum, setRoundNum] = useState<number | ''>('');
+  const [roundOpensAt, setRoundOpensAt] = useState('');
+  const [roundClosesAt, setRoundClosesAt] = useState('');
+  const [roundAdvRule, setRoundAdvRule] = useState<RoundAdvancementRule>('manual');
+  const [roundAdvThreshold, setRoundAdvThreshold] = useState<number | ''>('');
+  const [roundAdvTopN, setRoundAdvTopN] = useState<number | ''>('');
+  const [isSavingRound, setIsSavingRound] = useState(false);
+  const [roundToDelete, setRoundToDelete] = useState<EventRound | null>(null);
+  const [isDeletingRound, setIsDeletingRound] = useState(false);
 
   const canManageStatus =
     activeDetails?.membership?.permissions?.includes('event.status.manage') ||
@@ -165,6 +217,10 @@ export function EventDetailPage() {
   const canManageJudging =
     canManageStatus ||
     activeDetails?.membership?.permissions?.includes('event.result.publish') ||
+    activeDetails?.membership?.permissions?.includes('event.edit');
+
+  const canManageRounds =
+    canManageStatus ||
     activeDetails?.membership?.permissions?.includes('event.edit');
 
   const canViewParticipants =
@@ -339,6 +395,24 @@ export function EventDetailPage() {
     }
   }, [effectiveOrgId, eventId]);
 
+  // Phase 02B: Fetch Event Rounds
+  const fetchRoundsData = useCallback(async () => {
+    if (!effectiveOrgId || !eventId) return;
+    try {
+      setIsLoadingRounds(true);
+      const res = await apiClient<{ rounds: EventRound[] }>(
+        `/organisations/${effectiveOrgId}/events/${eventId}/rounds`
+      );
+      if (res.data?.rounds) {
+        setRounds(res.data.rounds);
+      }
+    } catch (err) {
+      console.error('Failed to load event rounds', err);
+    } finally {
+      setIsLoadingRounds(false);
+    }
+  }, [effectiveOrgId, eventId]);
+
   // Phase 6D: Fetch Judge Work
   const fetchJudgeWork = useCallback(async () => {
     if (!effectiveOrgId || !eventId || !user) return;
@@ -380,17 +454,121 @@ export function EventDetailPage() {
   useEffect(() => {
     if (event?.eventType === 'hackathon') {
       fetchTeams();
+      fetchRoundsData();
       fetchJudgingData();
       fetchJudgeWork();
       fetchEventResults();
     }
-  }, [event?.eventType, fetchTeams, fetchJudgingData, fetchJudgeWork, fetchEventResults]);
+  }, [event?.eventType, fetchTeams, fetchRoundsData, fetchJudgingData, fetchJudgeWork, fetchEventResults]);
 
   useEffect(() => {
     if (canViewParticipants && event) {
       fetchParticipants(partPage, partSearch, partStatusFilter);
     }
   }, [canViewParticipants, event, partPage, partStatusFilter, fetchParticipants, partSearch]);
+
+  // Phase 02B: Round Handlers
+  const handleOpenAddRound = () => {
+    setEditingRound(null);
+    setRoundName('');
+    setRoundDesc('');
+    setRoundInstructions('');
+    setRoundNum(rounds.length + 1);
+    setRoundOpensAt('');
+    setRoundClosesAt('');
+    setRoundAdvRule('manual');
+    setRoundAdvThreshold('');
+    setRoundAdvTopN('');
+    setShowRoundModal(true);
+  };
+
+  const handleOpenEditRound = (r: EventRound) => {
+    setEditingRound(r);
+    setRoundName(r.name);
+    setRoundDesc(r.description || '');
+    setRoundInstructions(r.instructions || '');
+    setRoundNum(r.roundNumber);
+    setRoundOpensAt(r.submissionOpensAt ? r.submissionOpensAt.substring(0, 16) : '');
+    setRoundClosesAt(r.submissionClosesAt ? r.submissionClosesAt.substring(0, 16) : '');
+    setRoundAdvRule(r.advancementRule);
+    setRoundAdvThreshold(r.advancementThreshold != null ? r.advancementThreshold : '');
+    setRoundAdvTopN(r.advancementTopN != null ? r.advancementTopN : '');
+    setShowRoundModal(true);
+  };
+
+  const handleSaveRound = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!effectiveOrgId || !eventId || !roundName.trim()) return;
+
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsSavingRound(true);
+
+    try {
+      const payload: Record<string, unknown> = {
+        name: roundName.trim(),
+        description: roundDesc.trim() || undefined,
+        instructions: roundInstructions.trim() || undefined,
+        roundNumber: roundNum !== '' ? Number(roundNum) : undefined,
+        submissionOpensAt: roundOpensAt ? new Date(roundOpensAt).toISOString() : null,
+        submissionClosesAt: roundClosesAt ? new Date(roundClosesAt).toISOString() : null,
+        advancementRule: roundAdvRule,
+        advancementThreshold:
+          roundAdvRule === 'score_threshold' && roundAdvThreshold !== '' ? Number(roundAdvThreshold) : null,
+        advancementTopN: roundAdvRule === 'top_n' && roundAdvTopN !== '' ? Number(roundAdvTopN) : null,
+      };
+
+      if (editingRound) {
+        await apiClient(`/organisations/${effectiveOrgId}/events/${eventId}/rounds/${editingRound.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        setSuccessMsg(`Round "${roundName}" updated successfully.`);
+      } else {
+        await apiClient(`/organisations/${effectiveOrgId}/events/${eventId}/rounds`, {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setSuccessMsg(`Round "${roundName}" created successfully.`);
+      }
+
+      setShowRoundModal(false);
+      fetchRoundsData();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrorMsg(err.message);
+      } else {
+        setErrorMsg('Failed to save round. Please check the form and try again.');
+      }
+    } finally {
+      setIsSavingRound(false);
+    }
+  };
+
+  const handleDeleteRound = async () => {
+    if (!effectiveOrgId || !eventId || !roundToDelete) return;
+
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsDeletingRound(true);
+
+    try {
+      await apiClient(`/organisations/${effectiveOrgId}/events/${eventId}/rounds/${roundToDelete.id}`, {
+        method: 'DELETE',
+      });
+      setSuccessMsg(`Round "${roundToDelete.name}" deleted successfully.`);
+      setRoundToDelete(null);
+      fetchRoundsData();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrorMsg(err.message);
+      } else {
+        setErrorMsg('Failed to delete round. Ensure no submissions or evaluations exist for this round.');
+      }
+    } finally {
+      setIsDeletingRound(false);
+    }
+  };
 
   // Handle Add Criterion
   const handleCreateCriterion = async () => {
@@ -1003,11 +1181,35 @@ export function EventDetailPage() {
           </div>
         </div>
 
-        <Link to={`/app/organisations/${effectiveOrgId}/events`}>
-          <Button variant="outline" className="flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" /> Back to Events
-          </Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {event.status === 'published' && event.visibility === 'public' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCopyShareLink}
+              data-testid="copy-share-link-button"
+              className="flex items-center gap-1.5 text-xs text-brand-700 border-brand-200 bg-brand-50/50 hover:bg-brand-50"
+            >
+              {copiedShareLink ? (
+                <>
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Link Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="h-3.5 w-3.5 text-brand-600" />
+                  <span>Copy Shareable Link</span>
+                </>
+              )}
+            </Button>
+          )}
+
+          <Link to={`/app/organisations/${effectiveOrgId}/events`}>
+            <Button variant="outline" className="flex items-center gap-2">
+              <ArrowLeft className="h-4 w-4" /> Back to Events
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
@@ -1713,6 +1915,132 @@ export function EventDetailPage() {
             </Card>
           )}
 
+          {/* Phase 02B: Multi-Round Hackathon Management (Staff) */}
+          {event.eventType === 'hackathon' && canManageRounds && (
+            <Card className="border-slate-200" data-testid="competition-rounds-card">
+              <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-brand-600" />
+                    <span>Competition Rounds</span>
+                    <Badge variant="brand" className="text-[10px]">
+                      {rounds.length} {rounds.length === 1 ? 'Round' : 'Rounds'}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    Configure competition stages, submission deadlines, and qualification advancement rules.
+                  </CardDescription>
+                </div>
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenAddRound}
+                    data-testid="add-round-button"
+                    className="flex items-center gap-1.5 text-xs text-brand-700 border-brand-200 bg-brand-50/50 hover:bg-brand-50"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5 text-brand-600" />
+                    <span>Add Round</span>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                {isLoadingRounds ? (
+                  <div className="py-6 text-center text-xs text-slate-500">Loading competition rounds...</div>
+                ) : rounds.length === 0 ? (
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-lg text-center text-xs text-slate-500">
+                    No rounds configured. Click "Add Round" to configure the first competition stage.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {rounds.map((r) => (
+                      <div
+                        key={r.id}
+                        data-testid={`round-item-${r.roundNumber}`}
+                        className="p-3 bg-white rounded-lg border border-slate-200 hover:border-slate-300 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="neutral" className="text-[10px] font-semibold">
+                              Round {r.roundNumber}
+                            </Badge>
+                            <span className="font-semibold text-slate-900 text-sm">{r.name}</span>
+                            <Badge
+                              variant={
+                                r.status === 'completed'
+                                  ? 'neutral'
+                                  : r.status === 'open'
+                                  ? 'success'
+                                  : r.status === 'judging'
+                                  ? 'brand'
+                                  : 'warning'
+                              }
+                              className="text-[10px] capitalize"
+                            >
+                              {r.status}
+                            </Badge>
+                            {r.resultsPublishedAt && (
+                              <Badge variant="success" className="text-[10px]">
+                                Results Published
+                              </Badge>
+                            )}
+                          </div>
+
+                          {r.description && <p className="text-slate-600 text-xs">{r.description}</p>}
+
+                          <div className="flex flex-wrap items-center gap-3 pt-1 text-slate-500 text-[11px]">
+                            <span>
+                              <strong>Rule:</strong>{' '}
+                              {r.advancementRule === 'manual'
+                                ? 'Manual Selection'
+                                : r.advancementRule === 'score_threshold'
+                                ? `Score ≥ ${r.advancementThreshold}`
+                                : `Top ${r.advancementTopN} Teams`}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              <strong>Submissions:</strong> {r.submissionCount ?? 0}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              <strong>Window:</strong>{' '}
+                              {r.submissionOpensAt
+                                ? `${new Date(r.submissionOpensAt).toLocaleDateString()} – ${
+                                    r.submissionClosesAt ? new Date(r.submissionClosesAt).toLocaleDateString() : 'End of Event'
+                                  }`
+                                : 'Event Window'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenEditRound(r)}
+                            className="text-xs h-7 px-2.5"
+                          >
+                            Edit
+                          </Button>
+                          {rounds.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setRoundToDelete(r)}
+                              className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Phase 6D: Scoring Criteria & Judge Assignments (Management) */}
           {event.eventType === 'hackathon' && canManageJudging && (
             <Card className="border-slate-200">
@@ -2042,7 +2370,7 @@ export function EventDetailPage() {
                 )}
                 <div>
                   <div className="font-medium text-slate-800 capitalize">
-                    {event.locationType.replace('_', ' ')}
+                    {event.locationType ? event.locationType.replace('_', ' ') : 'In Person'}
                   </div>
                   <div className="text-slate-700">
                     {event.location || (event.locationType === 'virtual' ? 'Virtual Meeting' : 'Venue TBD')}
@@ -2505,6 +2833,157 @@ export function EventDetailPage() {
         cancelLabel="Keep Published"
         variant="destructive"
         isLoading={isUnpublishingResults}
+      />
+
+      {/* Phase 02B: Round Modal (Add / Edit) */}
+      <Dialog
+        isOpen={showRoundModal}
+        onClose={() => !isSavingRound && setShowRoundModal(false)}
+        title={editingRound ? `Edit Round ${editingRound.roundNumber}` : 'Add Competition Round'}
+        description="Configure round ordering, submission window, and qualification advancement rule."
+      >
+        <form onSubmit={handleSaveRound} className="space-y-4 text-xs">
+          <div>
+            <label className="font-semibold text-slate-700 block mb-1">
+              Round Name <span className="text-rose-500">*</span>
+            </label>
+            <Input
+              value={roundName}
+              onChange={(e) => setRoundName(e.target.value)}
+              placeholder="e.g. Round 1: Ideation & Screening"
+              required
+              disabled={isSavingRound}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Round Number</label>
+              <Input
+                type="number"
+                min={1}
+                value={roundNum}
+                onChange={(e) => setRoundNum(e.target.value ? Number(e.target.value) : '')}
+                placeholder="e.g. 1"
+                disabled={isSavingRound}
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Advancement Rule</label>
+              <select
+                value={roundAdvRule}
+                onChange={(e) => setRoundAdvRule(e.target.value as RoundAdvancementRule)}
+                className="w-full h-9 text-xs rounded-md border border-slate-300 bg-white px-3 py-1 text-slate-900 shadow-xs focus:outline-hidden focus:ring-1 focus:ring-brand-500"
+                disabled={isSavingRound}
+              >
+                <option value="manual">Manual Selection</option>
+                <option value="score_threshold">Score Threshold</option>
+                <option value="top_n">Top-N Placement</option>
+              </select>
+            </div>
+          </div>
+
+          {roundAdvRule === 'score_threshold' && (
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">
+                Minimum Qualifying Score (0–1000) <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                type="number"
+                step="0.1"
+                min={0}
+                max={1000}
+                value={roundAdvThreshold}
+                onChange={(e) => setRoundAdvThreshold(e.target.value ? Number(e.target.value) : '')}
+                placeholder="e.g. 75"
+                required
+                disabled={isSavingRound}
+              />
+            </div>
+          )}
+
+          {roundAdvRule === 'top_n' && (
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">
+                Advancing Count (Top N) <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                type="number"
+                min={1}
+                value={roundAdvTopN}
+                onChange={(e) => setRoundAdvTopN(e.target.value ? Number(e.target.value) : '')}
+                placeholder="e.g. 10"
+                required
+                disabled={isSavingRound}
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Teams tied at the cutoff boundary will all automatically qualify.
+              </p>
+            </div>
+          )}
+
+          <div>
+            <label className="font-semibold text-slate-700 block mb-1">Description (Optional)</label>
+            <Textarea
+              value={roundDesc}
+              onChange={(e) => setRoundDesc(e.target.value)}
+              placeholder="Brief summary of this round's deliverables..."
+              rows={2}
+              disabled={isSavingRound}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Submission Opens At</label>
+              <Input
+                type="datetime-local"
+                value={roundOpensAt}
+                onChange={(e) => setRoundOpensAt(e.target.value)}
+                disabled={isSavingRound}
+              />
+            </div>
+
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Submission Closes At</label>
+              <Input
+                type="datetime-local"
+                value={roundClosesAt}
+                onChange={(e) => setRoundClosesAt(e.target.value)}
+                disabled={isSavingRound}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRoundModal(false)}
+              disabled={isSavingRound}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" isLoading={isSavingRound}>
+              {editingRound ? 'Save Changes' : 'Create Round'}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* Phase 02B: ConfirmDialog for Delete Round */}
+      <ConfirmDialog
+        isOpen={Boolean(roundToDelete)}
+        onClose={() => !isDeletingRound && setRoundToDelete(null)}
+        onConfirm={handleDeleteRound}
+        title="Delete Round"
+        description={`Are you sure you want to delete "${roundToDelete?.name}"? A round cannot be deleted if submissions or evaluations exist for it.`}
+        confirmLabel="Delete Round"
+        cancelLabel="Cancel"
+        variant="destructive"
+        isLoading={isDeletingRound}
       />
     </div>
   );

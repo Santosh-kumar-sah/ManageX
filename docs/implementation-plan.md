@@ -96,6 +96,21 @@ flowchart TD
 - **Prerequisites:** Phase 9 complete.
 - **Exit Gate:** Zero unresolved critical/high vulnerabilities; security review report signed off.
 
+### Post-Phase-10 Refinements & Phase 01: Public Events & External Registration
+- **Objective:** Resolve workspace active-state navigation defect, deliver safe single event details (`/events/:eventId`), and external student participant self-registration.
+- **Prerequisites:** Phase 10 complete.
+- **Exit Gate:** Public event listing and single event query omit internal data; external registrations succeed without creating org membership; workspace navigation highlighting fixed; 100% test pass rate across backend and frontend suites.
+
+### Phase 01C: Organisation-First Product Alignment
+- **Objective:** Decouple global event directory, redirect `/events` to `/`, preserve direct shareable hackathon links (`/events/:eventId`), and equip organisers with a workspace share-link copy action.
+- **Prerequisites:** Phase 01 complete.
+- **Exit Gate:** Global directory removed; direct event links preserved; organiser shareable link button active on published public events; 100% frontend test pass rate (44/44); clean typecheck and build.
+
+### Phase 02B: Multi-Round Hackathon Core Engine
+- **Objective:** Establish the multi-round hackathon database foundation, backward-compatible initialization, round management API, and organiser workspace round configuration UI.
+- **Prerequisites:** Phase 02A Read-Only Audit approved.
+- **Exit Gate:** Migration `025_multi_round_hackathons.sql` applied cleanly with default Round 1 backfill; `event_rounds` and `event_round_advancements` enforced under RLS; round management CRUD routes tested with 100% pass rate (81/81 backend event tests, 46/46 frontend tests); clean frontend typecheck and production build.
+
 ### Phase 11: Staging/Production Release Readiness & Free-Tier Deployment
 - **Objective:** Preflight environment configuration, Vercel frontend build/rewrite verification, Render backend deployment, Neon PostgreSQL migrations, runbook validation.
 - **Prerequisites:** Phase 10 complete.

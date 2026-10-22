@@ -603,4 +603,96 @@ This document tracks progress across implementation phases, completed requiremen
   - Frontend lint: `npm run lint --prefix frontend` completed with 0 errors.
   - Backend test suite: 275/275 tests passing across 19 suites in `npm test --prefix backend` (0 failures).
 
+---
+
+## Phase 01 Implementation: Navigation Fix + Public Events + External Registration Deliverables Summary
+- **Workspace Navigation Active-State Fix (`UI-001`, `UI-003`):**
+  - Updated `WorkspaceLayout.tsx` `isLinkActive` function and module mapping logic.
+  - Corrected active link evaluation so module links (`Events & Hackathons`, `Meetings`, `Projects & Tasks`) are never marked active on `/app/organisations` when `activeOrg === null`.
+  - Preserved active state for `All Organisations` in `adminNav` when active.
+  - Added test 5 in `WorkspaceLayout.test.tsx` verifying no false module active states when on `/app/organisations` with null active organization.
+- **Backend Public Event Details (`EVT-003`, `API-001`):**
+  - Added `getPublicEventById(eventId)` in `backend/src/platform/events/eventService.js`, with UUID and slug resolution.
+  - Enforced strict publication status (`status = 'published'`) and public visibility (`visibility = 'public'`).
+  - Returns standard 404 `NotFoundError` for non-existent, draft, or private events, preventing metadata leaks.
+  - Exposed safe public payload including hosting organisation summary (`id`, `name`, `slug`), schedule, location, capacity, and hackathon team sizes, while completely omitting internal audit history, private participant rosters, judge assignments, and internal notes.
+  - Mounted `GET /api/v1/events/:eventId` on `publicEventsRouter` in `backend/src/routes/events.js`.
+  - Added test 14 to `backend/src/platform/events/events.integration.test.js` verifying 200 on public published, 404 on draft, 404 on private, and 404 on non-existent UUIDs.
+- **Public Events Directory (`EVT-003`, `UI-001`):**
+  - Created `frontend/src/pages/public/EventsDirectoryPage.tsx` at `/events`.
+  - Implemented real-time search, event type filtering (`All Events`, `Hackathons`, `General Events`), responsive card grid, host organization badge, schedule, location/virtual indicators, empty state, and loading skeletons.
+  - Created `frontend/src/pages/public/EventsDirectoryPage.test.tsx` with passing tests.
+- **Public Event Detail & External Registration Flow (`EVT-003`, `EVT-004`, `EVT-005`):**
+  - Created `frontend/src/pages/public/PublicEventDetailPage.tsx` at `/events/:eventId`.
+  - Displays full schedule, timezone, location, guidelines, and hackathon team size constraints.
+  - Unauthenticated visitors are presented with a clear call-to-action to sign in or create an account, directing to `/auth/login` with `state.from` preserved for post-login return.
+  - Authenticated verified users have their registration status loaded via `GET /api/v1/organisations/:orgId/events/:eventId/my-registration`.
+  - Provides one-click event registration via `POST /api/v1/organisations/:orgId/events/:eventId/register` and withdrawal via `POST /api/v1/organisations/:orgId/events/:eventId/withdraw` with confirmation check.
+  - Created `frontend/src/pages/public/PublicEventDetailPage.test.tsx` with passing tests.
+- **Navigation & Routing Updates:**
+  - Added `Events` link to header and footer in `frontend/src/layouts/PublicLayout.tsx`.
+  - Registered `/events` and `/events/:eventId` routes under `PublicLayout` in `frontend/src/App.tsx`.
+- **Automated Verification & Evidence:**
+  - Full backend test suite: 276/276 passing tests across 19 suites in `npm test --prefix backend` (0 failures).
+  - Frontend test suite: 38/38 passing tests across 8 suites in `npm test --prefix frontend` (0 failures).
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) completed with 0 errors.
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) completed with 0 errors.
+
+---
+
+## Phase 02B: Multi-Round Hackathon Core Engine Implementation Summary
+- **Database Schema Migration (`20261017000025_multi_round_hackathons.sql`):**
+  - Created `event_rounds` table with composite tenant foreign keys `(organisation_id, event_id)` referencing `events(organisation_id, id)`.
+  - Enforced round number ordering constraints (`uq_event_rounds_order`), positive numbers, valid submission windows (`submission_closes_at > submission_opens_at`), and advancement rule validations (`manual`, `score_threshold`, `top_n`).
+  - Created `event_round_advancements` table with foreign keys and unique constraints tracking team or participant progression per round.
+  - Extended `event_submissions`, `event_scoring_criteria`, `event_judge_assignments`, and `event_scores` with nullable `round_id UUID REFERENCES event_rounds(id) ON DELETE SET NULL` and composite tenant indexes.
+  - Enabled and FORCED Row-Level Security (RLS) on `event_rounds` and `event_round_advancements` with `managex_app` runtime DML grants.
+- **Backward-Compatible Initialization & Backfill:**
+  - Automatically backfilled default "Round 1" for all existing events from existing event submission windows and publication metadata.
+  - Safely backfilled `round_id` for existing submissions, scoring criteria, judge assignments, and scores without breaking any single-round legacy constraints or tests.
+- **Round Management API (`roundService.js` & `routes/events.js`):**
+  - Implemented `GET /api/v1/organisations/:orgId/events/:eventId/rounds` with submission, criteria, and advancement counts.
+  - Implemented `GET /api/v1/organisations/:orgId/events/:eventId/rounds/:roundId` returning detailed round metadata.
+  - Implemented `POST /api/v1/organisations/:orgId/events/:eventId/rounds` creating new rounds with server-enforced Zod validation and audit logging (`event.round.created`).
+  - Implemented `PATCH /api/v1/organisations/:orgId/events/:eventId/rounds/:roundId` updating round configuration, deadlines, and advancement rules with audit logging (`event.round.updated`).
+  - Implemented `DELETE /api/v1/organisations/:orgId/events/:eventId/rounds/:roundId` with safety checks blocking deletion of rounds with existing submissions or evaluations (409 ConflictError) and audit logging (`event.round.deleted`).
+  - Implemented public rounds endpoint `GET /api/v1/events/:eventId/rounds` for published public events.
+- **Frontend Organiser Workspace UI (`EventDetailPage.tsx`):**
+  - Added "Competition Rounds" management card for hackathons in `EventDetailPage.tsx`.
+  - Displays list of configured rounds with badges for round number, status, advancement rule, submission counts, and windows.
+  - Provided "Add Round" and "Edit Round" modal dialogs supporting round name, number, rule selection (`manual`, `score_threshold`, `top_n`), threshold/top-N configuration, and date-time inputs.
+  - Provided delete confirmation dialog with dependency protection feedback.
+  - Updated types in `frontend/src/types/events.ts`.
+- **Automated Verification & Evidence:**
+  - Round integration test suite: 16/16 passing tests in `rounds.integration.test.js` (0 failures).
+  - Full backend events test suite: 81/81 passing tests across all 5 test files in `backend/src/platform/events/*.test.js` (0 failures).
+  - Frontend test suite: 46/46 passing tests across 9 test files in `npm test --prefix frontend` (0 failures).
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) passed with 0 errors.
+
+- **Decoupled Global Event Directory (`UI-001`, `PRD §1`):**
+  - Removed `Events` navigation link from `PublicLayout.tsx` header.
+  - Replaced standalone `/events` directory route with a clean `<Navigate to="/" replace />` in `App.tsx`.
+  - Removed `EventsDirectoryPage.tsx` and its test, confirming no other component or route imports it.
+  - Updated `PublicEventDetailPage.tsx` back navigation to link to `/` ("ManageX Home"), eliminating circular directory dependencies.
+- **Direct Event Page & Shareable URL Preservation (`EVT-003`, `EVT-004`):**
+  - Preserved `/events/:eventId` direct route under `PublicLayout`.
+  - Preserved backend `GET /api/v1/events/:eventId` supporting UUID and slug lookups.
+  - Preserved strict publication filtering (`status = 'published'` and `visibility = 'public'`) returning 404 for draft/private events.
+  - Preserved participant authentication, verification, and registration boundaries without organisation membership.
+- **Organiser Workspace Shareable Link Action (`EVT-001`, `UI-001`):**
+  - Added "Copy Shareable Link" button to the organiser workspace `EventDetailPage.tsx` header.
+  - Gated strictly by `event.status === 'published' && event.visibility === 'public'` (hidden for draft, private, or terminal events).
+  - Copies canonical URL `${window.location.origin}/events/${event.id}` using `navigator.clipboard.writeText`.
+  - Provides clear success feedback ("Link Copied!" state for 3s and success alert) and handles clipboard unavailability/failure safely without false success.
+- **Automated Verification & Evidence:**
+  - Frontend test suite: 44/44 passing tests across 9 suites in `npm test --prefix frontend` (0 failures).
+  - Route tests: `App.test.tsx` verifies `/events` redirects to `/` and `/events/:eventId` routes to `PublicEventDetailPage`.
+  - Organiser workspace tests: `EventDetailPage.test.tsx` verifies share link button presence on published public events, absence on draft/private, and URL generation.
+  - Direct detail tests: `PublicEventDetailPage.test.tsx` verifies home navigation links.
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) passed with 0 errors in 14.69s.
+  - Backend events test suite: 14/14 passing tests in `events.integration.test.js` (0 failures).
+
+
 

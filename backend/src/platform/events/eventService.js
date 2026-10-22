@@ -17,6 +17,8 @@ import {
   AuthorizationError,
 } from '../common/errors.js';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function formatEventRow(row) {
   if (!row) return null;
   return {
@@ -576,6 +578,52 @@ export async function listPublicEvents({ page = 1, limit = 20, search } = {}) {
         totalPages,
       },
     };
+  });
+}
+
+/**
+ * Public retrieval of a single published public event (EVT-003).
+ * Enforces status = 'published' AND visibility = 'public'.
+ * Returns 404 NotFoundError if the event doesn't exist or is not public/published.
+ * Does not expose participant rosters, judge lists, private submissions, or draft events.
+ */
+export async function getPublicEventById(eventId) {
+  if (!eventId) {
+    throw new NotFoundError('Event not found or is not publicly accessible.');
+  }
+
+  return withSystemTransaction(async (client) => {
+    const isUuid = UUID_REGEX.test(eventId);
+    const sql = isUuid
+      ? `
+        SELECT 
+          e.*,
+          o.name AS org_name,
+          o.slug AS org_slug
+        FROM events e
+        JOIN organisations o ON o.id = e.organisation_id
+        WHERE e.id = $1
+          AND e.status = 'published'
+          AND e.visibility = 'public'
+      `
+      : `
+        SELECT 
+          e.*,
+          o.name AS org_name,
+          o.slug AS org_slug
+        FROM events e
+        JOIN organisations o ON o.id = e.organisation_id
+        WHERE e.slug = $1
+          AND e.status = 'published'
+          AND e.visibility = 'public'
+      `;
+
+    const res = await client.query(sql, [eventId]);
+    if (res.rows.length === 0) {
+      throw new NotFoundError('Event not found or is not publicly accessible.');
+    }
+
+    return formatEventRow(res.rows[0]);
   });
 }
 

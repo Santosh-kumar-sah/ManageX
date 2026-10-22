@@ -35,6 +35,11 @@ export interface EventItem {
   submissionClosesAt?: string | null;
   resultsPublishedAt?: string | null;
   participantInstructions?: string;
+  organisation?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -208,4 +213,32 @@ export interface EventResultsData {
   }>;
   results: EventResultItem[];
 }
+
+export type RoundAdvancementRule = 'manual' | 'score_threshold' | 'top_n';
+export type RoundStatus = 'pending' | 'open' | 'judging' | 'completed';
+
+export interface EventRound {
+  id: string;
+  organisationId: string;
+  eventId: string;
+  roundNumber: number;
+  name: string;
+  description?: string | null;
+  instructions?: string | null;
+  submissionOpensAt?: string | null;
+  submissionClosesAt?: string | null;
+  advancementRule: RoundAdvancementRule;
+  advancementThreshold?: number | null;
+  advancementTopN?: number | null;
+  status: RoundStatus;
+  resultsPublishedAt?: string | null;
+  resultsPublishedById?: string | null;
+  resultsScheduledAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  submissionCount?: number;
+  criteriaCount?: number;
+  advancementCount?: number;
+}
+
 

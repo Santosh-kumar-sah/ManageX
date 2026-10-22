@@ -225,4 +225,48 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
 
     expect(html).not.toContain('Operator Console');
   });
+
+  it('5. Does not mark module navigation items as active on /app/organisations when activeOrg is null', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: {
+        id: 'member-1',
+        email: 'user@acme.org',
+        fullName: 'Regular User',
+        isPlatformAdmin: false,
+        status: 'active',
+      },
+      isLoading: false,
+      isAuthenticated: true,
+      refreshUser: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    vi.spyOn(OrgContextModule, 'useOrg').mockReturnValue({
+      organisations: [],
+      activeOrg: null,
+      activeDetails: null,
+      isLoading: false,
+      switchOrg: vi.fn(),
+      refreshOrganisations: vi.fn(),
+      createOrganisation: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations']}>
+        <WorkspaceLayout />
+      </MemoryRouter>
+    );
+
+    // Module links should be rendered with inactive styling (text-slate-600), not active styling (bg-brand-50 text-brand-700)
+    expect(html).toContain('Events &amp; Hackathons');
+    expect(html).toContain('Meetings');
+    expect(html).toContain('Projects &amp; Tasks');
+
+    // Confirm that the active class combination 'bg-brand-50 text-brand-700' is NOT applied to any module links
+    // Split on the module links and check their class lists
+    const eventLinkMatch = html.match(/<a[^>]*href="\/app\/organisations"[^>]*>[\s\S]*?Events &amp; Hackathons[\s\S]*?<\/a>/);
+    expect(eventLinkMatch).not.toBeNull();
+    expect(eventLinkMatch![0]).not.toContain('bg-brand-50');
+    expect(eventLinkMatch![0]).toContain('text-slate-600');
+  });
 });

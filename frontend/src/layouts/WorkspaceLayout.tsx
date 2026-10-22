@@ -161,7 +161,10 @@ export function WorkspaceLayout() {
     });
   }
 
-  const isLinkActive = (href: string) => {
+  const isLinkActive = (href: string, isModule = false) => {
+    if (isModule && !activeOrg) {
+      return false;
+    }
     if (href === '/app') {
       return location.pathname === '/app';
     }
@@ -273,7 +276,7 @@ export function WorkspaceLayout() {
               </div>
               <div className="space-y-1">
                 {moduleNav.map((item) => {
-                  const isActive = isLinkActive(item.href);
+                  const isActive = isLinkActive(item.href, true);
                   return (
                     <Link
                       key={item.label}
@@ -420,7 +423,7 @@ export function WorkspaceLayout() {
                   </div>
                   <div className="space-y-1">
                     {moduleNav.map((item) => {
-                      const isActive = isLinkActive(item.href);
+                      const isActive = isLinkActive(item.href, true);
                       return (
                         <Link
                           key={item.label}

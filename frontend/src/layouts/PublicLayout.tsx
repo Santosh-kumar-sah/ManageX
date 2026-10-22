@@ -29,7 +29,10 @@ export function PublicLayout() {
 
             <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
               {navLinks.map((link) => {
-                const isActive = location.pathname === link.href;
+                const isActive =
+                  link.href === '/'
+                    ? location.pathname === '/'
+                    : location.pathname.startsWith(link.href);
                 return (
                   <Link
                     key={link.href}

@@ -18,6 +18,7 @@ import {
   updateEvent,
   transitionEventStatus,
   listPublicEvents,
+  getPublicEventById,
   registerForEvent,
   withdrawRegistration,
   getRegistrationStatus,
@@ -50,6 +51,14 @@ import {
   publishEventResults,
   unpublishEventResults,
 } from '../platform/events/judgingService.js';
+import {
+  listEventRounds,
+  getEventRoundById,
+  createEventRound,
+  updateEventRound,
+  deleteEventRound,
+  listPublicEventRounds,
+} from '../platform/events/roundService.js';
 import { requireAuth, requireVerifiedUser } from '../platform/middleware/auth.js';
 import { sendSuccess } from '../platform/common/responses.js';
 import { ValidationError } from '../platform/common/errors.js';
@@ -956,6 +965,136 @@ eventsRouter.post(
   }
 );
 
+// -----------------------------------------------------------------------------
+// Phase 02B: Multi-Round Hackathons Management (EVT-010)
+// -----------------------------------------------------------------------------
+
+const createRoundSchema = z.object({
+  name: z.string().trim().min(2, 'Round name must be at least 2 characters').max(120),
+  description: z.string().trim().optional(),
+  instructions: z.string().trim().optional(),
+  roundNumber: z.number().int().positive().optional(),
+  submissionOpensAt: z.string().datetime().optional().nullable(),
+  submissionClosesAt: z.string().datetime().optional().nullable(),
+  advancementRule: z.enum(['manual', 'score_threshold', 'top_n']).default('manual'),
+  advancementThreshold: z.number().min(0).max(1000).optional().nullable(),
+  advancementTopN: z.number().int().positive().optional().nullable(),
+  status: z.enum(['pending', 'open', 'judging', 'completed']).default('pending'),
+});
+
+const updateRoundSchema = createRoundSchema.partial();
+
+eventsRouter.get(
+  '/:eventId/rounds',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireOrgPermission('event.view'),
+  async (req, res, next) => {
+    try {
+      const rounds = await listEventRounds(req.organisation.id, req.params.eventId);
+      return sendSuccess(res, 200, { rounds });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+eventsRouter.get(
+  '/:eventId/rounds/:roundId',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireOrgPermission('event.view'),
+  async (req, res, next) => {
+    try {
+      const round = await getEventRoundById(
+        req.organisation.id,
+        req.params.eventId,
+        req.params.roundId
+      );
+      return sendSuccess(res, 200, { round });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+eventsRouter.post(
+  '/:eventId/rounds',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireOrgPermission('event.edit'),
+  async (req, res, next) => {
+    try {
+      const parsed = createRoundSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed for round creation.', parsed.error.issues);
+      }
+
+      const round = await createEventRound(
+        req.organisation.id,
+        req.params.eventId,
+        parsed.data,
+        req.user.id,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 201, { round });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+eventsRouter.patch(
+  '/:eventId/rounds/:roundId',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireOrgPermission('event.edit'),
+  async (req, res, next) => {
+    try {
+      const parsed = updateRoundSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed for round update.', parsed.error.issues);
+      }
+
+      const round = await updateEventRound(
+        req.organisation.id,
+        req.params.eventId,
+        req.params.roundId,
+        parsed.data,
+        req.user.id,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, { round });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+eventsRouter.delete(
+  '/:eventId/rounds/:roundId',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireOrgPermission('event.edit'),
+  async (req, res, next) => {
+    try {
+      const result = await deleteEventRound(
+        req.organisation.id,
+        req.params.eventId,
+        req.params.roundId,
+        req.user.id,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 const handlePublicEvents = async (req, res, next) => {
   try {
     const { events, pagination } = await listPublicEvents({
@@ -982,6 +1121,26 @@ publicEventsRouter.get('/:eventId/results', async (req, res, next) => {
       { canManageResults: false, isPublic: true }
     );
     return sendSuccess(res, 200, data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Public event rounds endpoint (EVT-010)
+publicEventsRouter.get('/:eventId/rounds', async (req, res, next) => {
+  try {
+    const rounds = await listPublicEventRounds(req.params.eventId);
+    return sendSuccess(res, 200, { rounds });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Public single event detail endpoint (EVT-003)
+publicEventsRouter.get('/:eventId', async (req, res, next) => {
+  try {
+    const event = await getPublicEventById(req.params.eventId);
+    return sendSuccess(res, 200, { event });
   } catch (err) {
     next(err);
   }

@@ -491,4 +491,82 @@ describe('Phase 6A — Events Core, Lifecycle & Visibility Suite', () => {
     const statusChangedLog = logs.find((l) => l.action === 'event.status_changed');
     assert.ok(statusChangedLog, 'Expected event.status_changed audit record');
   });
+
+  // ---------------------------------------------------------------------------
+  // EVT-003: Public Event Detail Endpoint Verification
+  // ---------------------------------------------------------------------------
+  it('14. EVT-003: GET /api/v1/events/:eventId returns 200 for public published events and 404 for drafts/private', async () => {
+    // 1. Create a draft public event
+    const startAt = new Date(Date.now() + 20 * 24 * 60 * 60 * 1000).toISOString();
+    const endAt = new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString();
+
+    const draftRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/events`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Draft Detail Test Event',
+        startAt,
+        endAt,
+        timezone: 'UTC',
+        visibility: 'public',
+      });
+    assert.equal(draftRes.status, 201);
+    const draftEventId = draftRes.body.data.event.id;
+
+    // 2. Draft event should return 404 from public endpoint
+    const draftPublicRes = await request(app).get(`/api/v1/events/${draftEventId}`);
+    assert.equal(draftPublicRes.status, 404);
+
+    // 3. Publish the event
+    await request(app)
+      .post(`/api/v1/organisations/${orgAId}/events/${draftEventId}/status`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'published' });
+
+    // 4. Now public detail should return 200 with safe fields
+    const publishedRes = await request(app).get(`/api/v1/events/${draftEventId}`);
+    assert.equal(publishedRes.status, 200);
+    assert.equal(publishedRes.body.success, true);
+    const pubEvent = publishedRes.body.data.event;
+    assert.equal(pubEvent.id, draftEventId);
+    assert.equal(pubEvent.title, 'Draft Detail Test Event');
+    assert.equal(pubEvent.status, 'published');
+    assert.equal(pubEvent.visibility, 'public');
+    assert.ok(pubEvent.organisation, 'Expected host organisation data');
+    assert.equal(pubEvent.organisation.id, orgAId);
+
+    // 5. Query by slug should also return 200
+    const bySlugRes = await request(app).get(`/api/v1/events/${pubEvent.slug}`);
+    assert.equal(bySlugRes.status, 200);
+    assert.equal(bySlugRes.body.data.event.id, draftEventId);
+
+    // 6. Create and publish a private event
+    const privRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/events`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Private Detail Test Event',
+        startAt,
+        endAt,
+        timezone: 'UTC',
+        visibility: 'private',
+      });
+    const privEventId = privRes.body.data.event.id;
+    await request(app)
+      .post(`/api/v1/organisations/${orgAId}/events/${privEventId}/status`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'published' });
+
+    // 7. Private event MUST return 404 from public endpoint
+    const privPublicRes = await request(app).get(`/api/v1/events/${privEventId}`);
+    assert.equal(privPublicRes.status, 404);
+
+    // 8. Non-existent event returns 404
+    const notFoundRes = await request(app).get('/api/v1/events/00000000-0000-0000-0000-000000000000');
+    assert.equal(notFoundRes.status, 404);
+  });
 });
