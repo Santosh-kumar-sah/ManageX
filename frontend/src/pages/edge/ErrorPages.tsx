@@ -36,7 +36,7 @@ export function ForbiddenPage() {
           </div>
           <CardTitle className="text-2xl font-bold">403 - Access Denied</CardTitle>
           <CardDescription>
-            You do not have the required permissions or active module entitlement to access this resource.
+            You do not have permission to view this page, or this feature is currently disabled for your organisation.
           </CardDescription>
         </CardHeader>
         <CardFooter className="flex justify-center gap-3 pt-2">

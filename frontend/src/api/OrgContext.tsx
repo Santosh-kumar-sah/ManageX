@@ -53,21 +53,21 @@ interface OrgContextType {
 
 const OrgContext = createContext<OrgContextType | undefined>(undefined);
 
-const ACTIVE_ORG_STORAGE_KEY = 'managex_active_org_id';
+const getOrgStorageKey = (userId?: string | null) =>
+  userId ? `managex_active_org_id_${userId}` : 'managex_active_org_id';
 
 export function OrgProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [organisations, setOrganisations] = useState<UserOrganisation[]>([]);
-  const [activeOrgId, setActiveOrgId] = useState<string | null>(() => {
-    return localStorage.getItem(ACTIVE_ORG_STORAGE_KEY);
-  });
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
   const [activeDetails, setActiveDetails] = useState<ActiveOrgDetails | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // 1. Fetch user's organisations list
   const refreshOrganisations = useCallback(async () => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !user) {
       setOrganisations([]);
+      setActiveOrgId(null);
       setActiveDetails(null);
       setIsLoading(false);
       return;
@@ -79,29 +79,36 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
       const orgList = res.data?.organisations || [];
       setOrganisations(orgList);
 
+      const storageKey = getOrgStorageKey(user.id);
+      const storedId = localStorage.getItem(storageKey);
+
       if (orgList.length > 0) {
-        // If current activeOrgId is valid and user belongs to it, keep it; otherwise default to first org
-        const currentActive = orgList.find((o) => o.id === activeOrgId);
+        // If current activeOrgId is valid and user belongs to it, keep it; otherwise fallback to storedId or first org
+        const currentActive = orgList.find((o) => o.id === (activeOrgId || storedId));
         if (currentActive) {
           setActiveOrgId(currentActive.id);
+          localStorage.setItem(storageKey, currentActive.id);
         } else {
           setActiveOrgId(orgList[0].id);
-          localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, orgList[0].id);
+          localStorage.setItem(storageKey, orgList[0].id);
         }
       } else {
+        // User has 0 active organisations (e.g. participant/student persona)
         setActiveOrgId(null);
         setActiveDetails(null);
-        localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem('managex_active_org_id');
       }
     } catch (err) {
       if (err instanceof ApiError && (err.statusCode === 401 || err.statusCode === 403)) {
         setOrganisations([]);
+        setActiveOrgId(null);
         setActiveDetails(null);
       }
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, activeOrgId]);
+  }, [isAuthenticated, user, activeOrgId]);
 
   // 2. Fetch verified active organisation details & permissions whenever activeOrgId changes
   useEffect(() => {
@@ -122,7 +129,10 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
         if (err instanceof ApiError && (err.statusCode === 403 || err.statusCode === 404)) {
           // If membership was revoked or org deleted, reset and refresh
           if (isMounted) {
-            localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
+            if (user?.id) {
+              localStorage.removeItem(getOrgStorageKey(user.id));
+            }
+            localStorage.removeItem('managex_active_org_id');
             setActiveOrgId(null);
             setActiveDetails(null);
             refreshOrganisations();
@@ -136,17 +146,27 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, activeOrgId, refreshOrganisations]);
+  }, [isAuthenticated, activeOrgId, refreshOrganisations, user?.id]);
 
-  // Initial load
+  // Initial load and user session synchronization
   useEffect(() => {
-    refreshOrganisations();
-  }, [isAuthenticated]);
+    if (isAuthenticated && user) {
+      refreshOrganisations();
+    } else {
+      setOrganisations([]);
+      setActiveOrgId(null);
+      setActiveDetails(null);
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, user?.id]);
 
   // 3. Switch active organisation
   const switchOrg = useCallback(async (newOrgId: string) => {
     setActiveOrgId(newOrgId);
-    localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, newOrgId);
+    if (user?.id) {
+      localStorage.setItem(getOrgStorageKey(user.id), newOrgId);
+    }
+    localStorage.setItem('managex_active_org_id', newOrgId);
     // Explicitly refetch details
     try {
       const res = await apiClient<ActiveOrgDetails>(`/organisations/${newOrgId}`);
@@ -156,7 +176,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Handled by the effect
     }
-  }, []);
+  }, [user?.id]);
 
   // 4. Create new organisation and switch to it
   const createOrganisation = useCallback(async (data: { name: string; slug?: string }) => {
@@ -166,11 +186,14 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     });
 
     const newOrg = res.data!.organisation;
-    localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, newOrg.id);
+    if (user?.id) {
+      localStorage.setItem(getOrgStorageKey(user.id), newOrg.id);
+    }
+    localStorage.setItem('managex_active_org_id', newOrg.id);
     setActiveOrgId(newOrg.id);
     await refreshOrganisations();
     return newOrg;
-  }, [refreshOrganisations]);
+  }, [user?.id, refreshOrganisations]);
 
   const activeOrg = organisations.find((o) => o.id === activeOrgId) || null;
 
@@ -194,7 +217,23 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
 export function useOrg(): OrgContextType {
   const context = useContext(OrgContext);
   if (!context) {
-    throw new Error('useOrg must be used within an OrgProvider');
+    return {
+      organisations: [],
+      activeOrg: null,
+      activeDetails: null,
+      isLoading: false,
+      switchOrg: async () => {},
+      refreshOrganisations: async () => {},
+      createOrganisation: async () => ({
+        id: '',
+        name: '',
+        slug: '',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        memberCount: 1,
+        role: { slug: 'organisation_owner', name: 'Organisation Owner' },
+      }),
+    };
   }
   return context;
 }

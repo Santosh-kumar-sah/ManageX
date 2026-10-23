@@ -121,7 +121,7 @@ export function PlatformOrganisationsPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Customer Workspaces</h1>
             <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              PLAT-003
+              Workspace Directory
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-1">
@@ -363,9 +363,9 @@ export function PlatformOrganisationsPage() {
             </div>
 
             <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded text-[11px] text-slate-600">
-              <strong>Platform Boundary:</strong> In accordance with PRD SEC-009, platform operators inspect
-              operational metadata only. Private tenant records (events, submissions, meeting minutes, project
-              tasks, comments) remain strictly protected by database Row-Level Security.
+              <strong>Privacy Boundary:</strong> Platform operators inspect operational configuration only.
+              Private workspace content (events, submissions, meeting notes, project tasks, comments) is
+              protected by organisation-level access controls and Row-Level Security.
             </div>
           </div>
         )}

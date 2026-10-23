@@ -121,9 +121,6 @@ export function HomePage() {
     <div className="space-y-20 py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
       {/* Hero Section */}
       <section className="text-center space-y-6 max-w-4xl mx-auto pt-6">
-        <Badge variant="brand" className="px-3.5 py-1 text-xs font-semibold uppercase tracking-wide">
-          Enterprise Operations Platform
-        </Badge>
         <h1 className="text-4xl sm:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.15]">
           Three modules. One account. <br />
           <span className="text-brand-600">Total operational clarity.</span>
@@ -144,21 +141,6 @@ export function HomePage() {
               Sign In to Workspace
             </Button>
           </Link>
-        </div>
-
-        <div className="pt-6 flex flex-wrap items-center justify-center gap-8 text-xs font-medium text-slate-500">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            <span>Instant Organization Onboarding</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            <span>Strict Workspace Isolation</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            <span>Granular Role Governance</span>
-          </div>
         </div>
       </section>
 

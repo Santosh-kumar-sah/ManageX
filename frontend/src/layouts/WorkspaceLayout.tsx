@@ -17,6 +17,9 @@ import {
   Shield,
   Plus,
   Check,
+  Trophy,
+  ArrowLeft,
+  ExternalLink,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
@@ -73,6 +76,24 @@ export function WorkspaceLayout() {
     icon: LayoutDashboard,
   };
 
+  const participantNav = [
+    {
+      label: 'Participant Dashboard',
+      href: '/events/dashboard',
+      icon: Trophy,
+    },
+    {
+      label: 'Browse Public Events',
+      href: '/events',
+      icon: Calendar,
+    },
+    {
+      label: 'Create Organisation',
+      href: '/app/organisations',
+      icon: Plus,
+    },
+  ];
+
   const moduleNav = [
     {
       label: 'Events & Hackathons',
@@ -97,6 +118,74 @@ export function WorkspaceLayout() {
   const permissions = activeDetails?.membership?.permissions || [];
   const roleSlug = activeDetails?.membership?.role?.slug || activeOrg?.role?.slug;
   const isOwnerOrAdmin = roleSlug === 'organisation_owner' || roleSlug === 'organisation_admin';
+
+  // Module Workspace Detection & Dedicated Navigation (active only with verified organisation)
+  const isEventsWorkspace = Boolean(activeOrg) && location.pathname.includes('/events');
+  const isMeetingsWorkspace = Boolean(activeOrg) && location.pathname.includes('/meetings');
+  const isProjectsWorkspace = Boolean(activeOrg) && location.pathname.includes('/projects');
+  const isModuleWorkspace = isEventsWorkspace || isMeetingsWorkspace || isProjectsWorkspace;
+
+  let currentModuleInfo: {
+    slug: string;
+    title: string;
+    subtitle: string;
+    homeHref: string;
+    icon: React.ElementType;
+    nav: { label: string; href: string; icon: React.ElementType; external?: boolean }[];
+  } | null = null;
+
+  if (isEventsWorkspace) {
+    currentModuleInfo = {
+      slug: 'events',
+      title: 'ManageX Events',
+      subtitle: 'Organiser Workspace',
+      homeHref: activeOrg ? `/app/organisations/${activeOrgIdentifier}/events` : '/app/organisations',
+      icon: Trophy,
+      nav: [
+        {
+          label: 'Events Overview',
+          href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/events` : '/app/organisations',
+          icon: Calendar,
+        },
+        {
+          label: 'Public Events Portal',
+          href: '/events',
+          icon: Trophy,
+          external: true,
+        },
+      ],
+    };
+  } else if (isMeetingsWorkspace) {
+    currentModuleInfo = {
+      slug: 'meetings',
+      title: 'ManageX Meetings',
+      subtitle: 'Meetings Workspace',
+      homeHref: activeOrg ? `/app/organisations/${activeOrgIdentifier}/meetings` : '/app/organisations',
+      icon: Video,
+      nav: [
+        {
+          label: 'Meetings Overview',
+          href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/meetings` : '/app/organisations',
+          icon: Video,
+        },
+      ],
+    };
+  } else if (isProjectsWorkspace) {
+    currentModuleInfo = {
+      slug: 'projects',
+      title: 'ManageX Projects',
+      subtitle: 'Projects Workspace',
+      homeHref: activeOrg ? `/app/organisations/${activeOrgIdentifier}/projects` : '/app/organisations',
+      icon: CheckSquare,
+      nav: [
+        {
+          label: 'Projects Overview',
+          href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/projects` : '/app/organisations',
+          icon: CheckSquare,
+        },
+      ],
+    };
+  }
 
   const canAccessMembers =
     isOwnerOrAdmin ||
@@ -127,7 +216,7 @@ export function WorkspaceLayout() {
     ...(canAccessModules
       ? [
           {
-            label: 'Modules & Entitlements',
+            label: 'Modules & Features',
             href: activeOrg ? `/app/organisations/${activeOrgIdentifier}/modules` : '/app/organisations',
             icon: Layers,
           },
@@ -183,149 +272,287 @@ export function WorkspaceLayout() {
         <aside className="hidden lg:flex w-64 flex-col border-r border-border bg-white select-none">
           {/* Logo & Org Selector */}
           <div className="p-4 border-b border-border">
-            <Link to="/app" className="flex items-center gap-2.5 text-slate-900 font-bold text-base mb-4">
-              <div className="h-7 w-7 rounded-md bg-brand-600 flex items-center justify-center text-white shadow-sm">
-                <Layers className="h-4 w-4" />
-              </div>
-              <span>ManageX</span>
-            </Link>
-
-            {/* Dynamic Active Organisation Switcher */}
-            <div className="relative">
-              <button
-                onClick={() => setIsOrgDropdownOpen(!isOrgDropdownOpen)}
-                className="w-full flex items-center justify-between p-2 rounded-md border border-border bg-slate-50 hover:bg-slate-100 text-left transition-colors text-xs"
-                aria-expanded={isOrgDropdownOpen}
-              >
-                <div className="flex items-center gap-2 truncate">
-                  <div className="h-5 w-5 rounded bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-[10px] shrink-0 uppercase">
-                    {activeOrg ? activeOrg.name.charAt(0) : '?'}
+            {isModuleWorkspace && currentModuleInfo ? (
+              <>
+                <Link
+                  to={currentModuleInfo.homeHref}
+                  className="flex items-center gap-2.5 text-slate-900 font-bold text-base mb-3 group"
+                >
+                  <div className="h-7 w-7 rounded-md bg-brand-600 flex items-center justify-center text-white shadow-sm group-hover:bg-brand-700 transition-colors">
+                    <currentModuleInfo.icon className="h-4 w-4" />
                   </div>
-                  <span className="font-medium text-slate-800 truncate">
-                    {activeOrg ? activeOrg.name : 'No Organisation'}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="leading-tight text-sm font-bold text-slate-900">
+                      {currentModuleInfo.title}
+                    </span>
+                    <span className="text-[10px] font-normal text-slate-500">
+                      {currentModuleInfo.subtitle}
+                    </span>
+                  </div>
+                </Link>
+
+                <Link
+                  to="/app"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-brand-200 bg-brand-50 hover:bg-brand-100 text-brand-800 text-xs font-semibold transition-colors mb-3"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 text-brand-600 shrink-0" />
+                  <span>ManageX Dashboard</span>
+                </Link>
+
+                <div className="p-2 rounded-md border border-border bg-slate-50 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2 truncate">
+                    <div className="h-5 w-5 rounded bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-[10px] shrink-0 uppercase">
+                      {activeOrg ? activeOrg.name.charAt(0) : '?'}
+                    </div>
+                    <span className="font-medium text-slate-800 truncate">
+                      {activeOrg ? activeOrg.name : 'No Organisation'}
+                    </span>
+                  </div>
                 </div>
-                <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-              </button>
-
-              {isOrgDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-md border border-border bg-white p-1 shadow-lg text-xs max-h-64 overflow-y-auto">
-                  <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Your Organisations
+              </>
+            ) : (
+              <>
+                <Link to="/app" className="flex items-center gap-2.5 text-slate-900 font-bold text-base mb-4">
+                  <div className="h-7 w-7 rounded-md bg-brand-600 flex items-center justify-center text-white shadow-sm">
+                    <Layers className="h-4 w-4" />
                   </div>
-                  {organisations.length === 0 ? (
-                    <div className="px-2 py-2 text-slate-400 text-center">No organisations yet</div>
-                  ) : (
-                    organisations.map((org) => {
-                      const isCurrent = activeOrg?.id === org.id;
-                      return (
-                        <button
-                          key={org.id}
-                          onClick={() => {
-                            switchOrg(org.id);
-                            setIsOrgDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-2 py-1.5 rounded flex items-center justify-between transition-colors ${
-                            isCurrent
-                              ? 'bg-brand-50 text-brand-700 font-semibold'
-                              : 'hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <span className="truncate pr-1">{org.name}</span>
-                          {isCurrent && <Check className="h-3.5 w-3.5 text-brand-600 shrink-0" />}
-                        </button>
-                      );
-                    })
-                  )}
-                  <Link
-                    to="/app/organisations"
-                    onClick={() => setIsOrgDropdownOpen(false)}
-                    className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-slate-50 text-brand-600 font-medium border-t border-border mt-1"
+                  <span>ManageX</span>
+                </Link>
+
+                {/* Dynamic Active Organisation Switcher */}
+                <div className="relative">
+                  <button
+                    onClick={() => setIsOrgDropdownOpen(!isOrgDropdownOpen)}
+                    className="w-full flex items-center justify-between p-2 rounded-md border border-border bg-slate-50 hover:bg-slate-100 text-left transition-colors text-xs"
+                    aria-expanded={isOrgDropdownOpen}
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Manage organisations...</span>
-                  </Link>
+                    <div className="flex items-center gap-2 truncate">
+                      <div className="h-5 w-5 rounded bg-brand-100 text-brand-700 font-semibold flex items-center justify-center text-[10px] shrink-0 uppercase">
+                        {activeOrg ? activeOrg.name.charAt(0) : '?'}
+                      </div>
+                      <span className="font-medium text-slate-800 truncate">
+                        {activeOrg ? activeOrg.name : 'No Organisation'}
+                      </span>
+                    </div>
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  </button>
+
+                  {isOrgDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-md border border-border bg-white p-1 shadow-lg text-xs max-h-64 overflow-y-auto">
+                      <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Your Organisations
+                      </div>
+                      {organisations.length === 0 ? (
+                        <div className="px-2 py-2 text-slate-400 text-center">No organisations yet</div>
+                      ) : (
+                        organisations.map((org) => {
+                          const isCurrent = activeOrg?.id === org.id;
+                          return (
+                            <button
+                              key={org.id}
+                              onClick={() => {
+                                switchOrg(org.id);
+                                setIsOrgDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-2 py-1.5 rounded flex items-center justify-between transition-colors ${
+                                isCurrent
+                                  ? 'bg-brand-50 text-brand-700 font-semibold'
+                                  : 'hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <span className="truncate pr-1">{org.name}</span>
+                              {isCurrent && <Check className="h-3.5 w-3.5 text-brand-600 shrink-0" />}
+                            </button>
+                          );
+                        })
+                      )}
+                      <Link
+                        to="/app/organisations"
+                        onClick={() => setIsOrgDropdownOpen(false)}
+                        className="flex items-center gap-1 px-2 py-1.5 rounded hover:bg-slate-50 text-brand-600 font-medium border-t border-border mt-1"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Manage organisations...</span>
+                      </Link>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
 
           {/* Navigation Links */}
           <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
-            {/* Overview Link */}
-            <div>
-              <Link
-                to={overviewNav.href}
-                className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                  isLinkActive(overviewNav.href)
-                    ? 'bg-brand-50 text-brand-700 font-semibold'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <overviewNav.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                  <span>{overviewNav.label}</span>
+            {isModuleWorkspace && currentModuleInfo ? (
+              <>
+                {/* Module-Scoped Navigation */}
+                <div>
+                  <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    {currentModuleInfo.title}
+                  </div>
+                  <div className="space-y-1">
+                    {currentModuleInfo.nav.map((item) => {
+                      const isActive = isLinkActive(item.href);
+                      if (item.external) {
+                        return (
+                          <Link
+                            key={item.label}
+                            to={item.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                              <span>{item.label}</span>
+                            </div>
+                            <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                          </Link>
+                        );
+                      }
+                      return (
+                        <Link
+                          key={item.label}
+                          to={item.href}
+                          className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                            isActive
+                              ? 'bg-brand-50 text-brand-700 font-semibold'
+                              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                            <span>{item.label}</span>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
-              </Link>
-            </div>
 
-            {/* Modules Section */}
-            <div>
-              <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                Modules
-              </div>
-              <div className="space-y-1">
-                {moduleNav.map((item) => {
-                  const isActive = isLinkActive(item.href, true);
-                  return (
-                    <Link
-                      key={item.label}
-                      to={item.href}
-                      className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                        isActive
-                          ? 'bg-brand-50 text-brand-700 font-semibold'
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                        <span>{item.label}</span>
-                      </div>
-                      {item.badge && <Badge variant="neutral">{item.badge}</Badge>}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
+                {/* Return to ManageX Platform */}
+                <div className="pt-4 border-t border-border">
+                  <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Platform
+                  </div>
+                  <Link
+                    to="/app"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                  >
+                    <ArrowLeft className="h-4 w-4 shrink-0 text-slate-400" />
+                    <span>Return to Dashboard</span>
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Overview Link */}
+                <div>
+                  <Link
+                    to={overviewNav.href}
+                    className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                      isLinkActive(overviewNav.href)
+                        ? 'bg-brand-50 text-brand-700 font-semibold'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <overviewNav.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                      <span>{overviewNav.label}</span>
+                    </div>
+                  </Link>
+                </div>
 
-            {/* Organisation Admin Section */}
-            {adminNav.length > 0 && (
-              <div>
-                <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  Organisation Admin
-                </div>
-                <div className="space-y-1">
-                  {adminNav.map((item) => {
-                    const isActive = isLinkActive(item.href);
-                    return (
-                      <Link
-                        key={item.label}
-                        to={item.href}
-                        className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                          isActive
-                            ? 'bg-brand-50 text-brand-700 font-semibold'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                          <span>{item.label}</span>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
+                {/* Modules or Participant Links Section */}
+                {organisations.length > 0 ? (
+                  <div>
+                    <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Modules
+                    </div>
+                    <div className="space-y-1">
+                      {moduleNav.map((item) => {
+                        const isActive = isLinkActive(item.href, true);
+                        return (
+                          <Link
+                            key={item.label}
+                            to={item.href}
+                            className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                              isActive
+                                ? 'bg-brand-50 text-brand-700 font-semibold'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                              <span>{item.label}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {item.badge && <Badge variant="neutral">{item.badge}</Badge>}
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Participant Links
+                    </div>
+                    <div className="space-y-1">
+                      {participantNav.map((item) => {
+                        const isActive = location.pathname.startsWith(item.href);
+                        return (
+                          <Link
+                            key={item.label}
+                            to={item.href}
+                            className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                              isActive
+                                ? 'bg-brand-50 text-brand-700 font-semibold'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                              <span>{item.label}</span>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Organisation Admin Section */}
+                {adminNav.length > 0 && (
+                  <div>
+                    <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Organisation Admin
+                    </div>
+                    <div className="space-y-1">
+                      {adminNav.map((item) => {
+                        const isActive = isLinkActive(item.href);
+                        return (
+                          <Link
+                            key={item.label}
+                            to={item.href}
+                            className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                              isActive
+                                ? 'bg-brand-50 text-brand-700 font-semibold'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                              <span>{item.label}</span>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </nav>
 
@@ -360,16 +587,29 @@ export function WorkspaceLayout() {
               aria-label="Mobile Navigation"
             >
               <div className="p-4 border-b border-border flex items-center justify-between">
-                <Link
-                  to="/app"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="flex items-center gap-2.5 text-slate-900 font-bold text-base"
-                >
-                  <div className="h-7 w-7 rounded-md bg-brand-600 flex items-center justify-center text-white shadow-sm">
-                    <Layers className="h-4 w-4" />
-                  </div>
-                  <span>ManageX</span>
-                </Link>
+                {isModuleWorkspace && currentModuleInfo ? (
+                  <Link
+                    to={currentModuleInfo.homeHref}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-2 text-slate-900 font-bold text-base"
+                  >
+                    <div className="h-7 w-7 rounded-md bg-brand-600 flex items-center justify-center text-white shadow-sm">
+                      <currentModuleInfo.icon className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm font-bold truncate">{currentModuleInfo.title}</span>
+                  </Link>
+                ) : (
+                  <Link
+                    to="/app"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="flex items-center gap-2.5 text-slate-900 font-bold text-base"
+                  >
+                    <div className="h-7 w-7 rounded-md bg-brand-600 flex items-center justify-center text-white shadow-sm">
+                      <Layers className="h-4 w-4" />
+                    </div>
+                    <span>ManageX</span>
+                  </Link>
+                )}
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="p-1 rounded-md text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
@@ -381,6 +621,16 @@ export function WorkspaceLayout() {
 
               {/* Dynamic Organisation Selector on Mobile */}
               <div className="p-3 border-b border-border bg-slate-50">
+                {isModuleWorkspace && currentModuleInfo && (
+                  <Link
+                    to="/app"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-brand-200 bg-brand-50 hover:bg-brand-100 text-brand-800 text-xs font-semibold transition-colors mb-2.5"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5 text-brand-600 shrink-0" />
+                    <span>ManageX Dashboard</span>
+                  </Link>
+                )}
                 <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
                   Active Organisation
                 </div>
@@ -398,83 +648,181 @@ export function WorkspaceLayout() {
 
               {/* Navigation items */}
               <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
-                {/* Overview Link */}
-                <div>
-                  <Link
-                    to={overviewNav.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                      isLinkActive(overviewNav.href)
-                        ? 'bg-brand-50 text-brand-700 font-semibold'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <overviewNav.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                      <span>{overviewNav.label}</span>
+                {isModuleWorkspace && currentModuleInfo ? (
+                  <>
+                    <div>
+                      <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        {currentModuleInfo.title}
+                      </div>
+                      <div className="space-y-1">
+                        {currentModuleInfo.nav.map((item) => {
+                          const isActive = isLinkActive(item.href);
+                          if (item.external) {
+                            return (
+                              <Link
+                                key={item.label}
+                                to={item.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                                  <span>{item.label}</span>
+                                </div>
+                                <ExternalLink className="h-3.5 w-3.5 text-slate-400" />
+                              </Link>
+                            );
+                          }
+                          return (
+                            <Link
+                              key={item.label}
+                              to={item.href}
+                              onClick={() => setIsMobileMenuOpen(false)}
+                              className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                                isActive
+                                  ? 'bg-brand-50 text-brand-700 font-semibold'
+                                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                                <span>{item.label}</span>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </Link>
-                </div>
 
-                {/* Modules Section */}
-                <div>
-                  <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Modules
-                  </div>
-                  <div className="space-y-1">
-                    {moduleNav.map((item) => {
-                      const isActive = isLinkActive(item.href, true);
-                      return (
-                        <Link
-                          key={item.label}
-                          to={item.href}
-                          onClick={() => setIsMobileMenuOpen(false)}
-                          className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                            isActive
-                              ? 'bg-brand-50 text-brand-700 font-semibold'
-                              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                            <span>{item.label}</span>
-                          </div>
-                          {item.badge && <Badge variant="neutral">{item.badge}</Badge>}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
+                    <div className="pt-4 border-t border-border">
+                      <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Platform
+                      </div>
+                      <Link
+                        to="/app"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                      >
+                        <ArrowLeft className="h-4 w-4 shrink-0 text-slate-400" />
+                        <span>Return to Dashboard</span>
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Overview Link */}
+                    <div>
+                      <Link
+                        to={overviewNav.href}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                          isLinkActive(overviewNav.href)
+                            ? 'bg-brand-50 text-brand-700 font-semibold'
+                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <overviewNav.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                          <span>{overviewNav.label}</span>
+                        </div>
+                      </Link>
+                    </div>
 
-                {/* Organisation Admin Section */}
-                {adminNav.length > 0 && (
-                  <div>
-                    <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                      Organisation Admin
-                    </div>
-                    <div className="space-y-1">
-                      {adminNav.map((item) => {
-                        const isActive = isLinkActive(item.href);
-                        return (
-                          <Link
-                            key={item.label}
-                            to={item.href}
-                            onClick={() => setIsMobileMenuOpen(false)}
-                            className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                              isActive
-                                ? 'bg-brand-50 text-brand-700 font-semibold'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
-                              <span>{item.label}</span>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </div>
+                    {/* Modules or Participant Links Section */}
+                    {organisations.length > 0 ? (
+                      <div>
+                        <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                          Modules
+                        </div>
+                        <div className="space-y-1">
+                          {moduleNav.map((item) => {
+                            const isActive = isLinkActive(item.href, true);
+                            return (
+                              <Link
+                                key={item.label}
+                                to={item.href}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                                  isActive
+                                    ? 'bg-brand-50 text-brand-700 font-semibold'
+                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                                  <span>{item.label}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  {item.badge && <Badge variant="neutral">{item.badge}</Badge>}
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                          Participant Links
+                        </div>
+                        <div className="space-y-1">
+                          {participantNav.map((item) => {
+                            const isActive = location.pathname.startsWith(item.href);
+                            return (
+                              <Link
+                                key={item.label}
+                                to={item.href}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                                  isActive
+                                    ? 'bg-brand-50 text-brand-700 font-semibold'
+                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                                  <span>{item.label}</span>
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Organisation Admin Section */}
+                    {adminNav.length > 0 && (
+                      <div>
+                        <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                          Organisation Admin
+                        </div>
+                        <div className="space-y-1">
+                          {adminNav.map((item) => {
+                            const isActive = isLinkActive(item.href);
+                            return (
+                              <Link
+                                key={item.label}
+                                to={item.href}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                                  isActive
+                                    ? 'bg-brand-50 text-brand-700 font-semibold'
+                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <item.icon className="h-4 w-4 shrink-0 text-slate-400" />
+                                  <span>{item.label}</span>
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </nav>
 
@@ -507,13 +855,37 @@ export function WorkspaceLayout() {
               >
                 {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
-              <span className="text-xs font-medium text-slate-500 hidden sm:inline">
-                Workspace / {activeOrg ? activeOrg.name : 'No Organisation Selected'}
-              </span>
+              {isModuleWorkspace && currentModuleInfo ? (
+                <div className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                  <Link to="/app" className="hover:text-slate-800 transition-colors">
+                    ManageX
+                  </Link>
+                  <span>/</span>
+                  <span>{activeOrg ? activeOrg.name : 'Workspace'}</span>
+                  <span>/</span>
+                  <span className="text-slate-900 font-semibold">{currentModuleInfo.title}</span>
+                </div>
+              ) : (
+                <span className="text-xs font-medium text-slate-500 hidden sm:inline">
+                  Workspace / {activeOrg ? activeOrg.name : (organisations.length > 0 ? 'Select Organisation' : 'Participant View')}
+                </span>
+              )}
             </div>
 
             {/* User Profile Menu & Platform Shortcut */}
             <div className="flex items-center gap-4">
+              {isModuleWorkspace && (
+                <Link to="/app">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-brand-700 hover:bg-brand-50 font-medium"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">ManageX Dashboard</span>
+                  </Button>
+                </Link>
+              )}
               {user?.isPlatformAdmin && (
                 <Link to="/platform">
                   <Button
@@ -534,12 +906,12 @@ export function WorkspaceLayout() {
                     {user?.fullName || 'Guest'}
                   </div>
                   <div className="text-[10px] text-slate-400">
-                    {activeOrg?.role?.name || (user?.isPlatformAdmin ? 'Platform Admin' : 'Member')}
+                    {activeOrg?.role?.name || (user?.isPlatformAdmin ? 'Platform Admin' : (organisations.length > 0 ? 'Member' : 'Participant'))}
                   </div>
                 </div>
               </div>
               <button
-                onClick={logout}
+                onClick={() => logout()}
                 title="Logout"
                 className="text-slate-400 hover:text-slate-600 p-1 rounded"
               >
@@ -550,13 +922,19 @@ export function WorkspaceLayout() {
 
           {/* Onboarding Notice if 0 organisations */}
           {organisations.length === 0 && (
-            <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex items-center justify-between text-xs text-amber-800">
+            <div className="bg-amber-50 border-b border-amber-200 px-4 py-3 flex flex-wrap items-center justify-between text-xs text-amber-800 gap-2">
               <span>
                 {user?.isPlatformAdmin
                   ? 'You are signed in as a Platform Administrator without an active organisation workspace.'
-                  : 'You do not belong to any organisations yet. Create your first organisation to start collaborating.'}
+                  : 'You do not belong to any organisations yet. If you are a participant or student, access your Participant Dashboard.'}
               </span>
-              <div className="flex items-center gap-3 shrink-0 ml-4">
+              <div className="flex items-center gap-3 shrink-0">
+                <Link
+                  to="/events/dashboard"
+                  className="font-semibold text-brand-700 hover:text-brand-900 underline hover:no-underline"
+                >
+                  Participant Dashboard &rarr;
+                </Link>
                 {user?.isPlatformAdmin && (
                   <Link
                     to="/platform"

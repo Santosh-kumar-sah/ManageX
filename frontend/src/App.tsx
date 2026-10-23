@@ -1,13 +1,16 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { PublicLayout } from '@/layouts/PublicLayout';
+import { EventPortalLayout } from '@/layouts/EventPortalLayout';
 import { WorkspaceLayout } from '@/layouts/WorkspaceLayout';
 import { PlatformLayout } from '@/layouts/PlatformLayout';
-import { RequireAuth, RequirePlatformAdmin } from '@/components/auth/RouteGuards';
+import { RequireAuth, RequirePlatformAdmin, RequireOrgAccess } from '@/components/auth/RouteGuards';
 
 import { HomePage } from '@/pages/HomePage';
 import { ModulesPage } from '@/pages/ModulesPage';
 import { SecurityPage } from '@/pages/SecurityPage';
+import { EventsPortalHomePage } from '@/pages/public/EventsPortalHomePage';
 import { PublicEventDetailPage } from '@/pages/public/PublicEventDetailPage';
+import { StudentDashboardPage } from '@/pages/public/StudentDashboardPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
@@ -36,11 +39,18 @@ import { NotFoundPage } from '@/pages/edge/ErrorPages';
 export function App() {
   return (
     <Routes>
+      {/* Event Portal Routes */}
+      <Route element={<EventPortalLayout />}>
+        <Route path="/events" element={<EventsPortalHomePage />} />
+        <Route element={<RequireAuth />}>
+          <Route path="/events/dashboard" element={<StudentDashboardPage />} />
+        </Route>
+        <Route path="/events/:eventId" element={<PublicEventDetailPage />} />
+      </Route>
+
       {/* Public Routes */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
-        <Route path="/events" element={<Navigate to="/" replace />} />
-        <Route path="/events/:eventId" element={<PublicEventDetailPage />} />
         <Route path="/modules" element={<ModulesPage />} />
         <Route path="/security" element={<SecurityPage />} />
         <Route path="/auth/login" element={<LoginPage />} />
@@ -56,16 +66,18 @@ export function App() {
         <Route path="/app" element={<WorkspaceLayout />}>
           <Route index element={<WorkspaceOverviewPage />} />
           <Route path="organisations" element={<OrganisationsPage />} />
-          <Route path="organisations/:orgId/events" element={<EventsPage />} />
-          <Route path="organisations/:orgId/events/:eventId" element={<EventDetailPage />} />
-          <Route path="organisations/:orgId/meetings" element={<MeetingsPage />} />
-          <Route path="organisations/:orgId/meetings/:meetingId" element={<MeetingDetailPage />} />
-          <Route path="organisations/:orgId/projects" element={<ProjectsPage />} />
-          <Route path="organisations/:orgId/projects/:projectId" element={<ProjectDetailPage />} />
-          <Route path="organisations/:orgId/members" element={<MembersPage />} />
-          <Route path="organisations/:orgId/modules" element={<OrgModulesPage />} />
-          <Route path="organisations/:orgId/audit-logs" element={<OrgAuditLogsPage />} />
-          <Route path="organisations/:orgId/settings" element={<OrgSettingsPage />} />
+          <Route element={<RequireOrgAccess />}>
+            <Route path="organisations/:orgId/events" element={<EventsPage />} />
+            <Route path="organisations/:orgId/events/:eventId" element={<EventDetailPage />} />
+            <Route path="organisations/:orgId/meetings" element={<MeetingsPage />} />
+            <Route path="organisations/:orgId/meetings/:meetingId" element={<MeetingDetailPage />} />
+            <Route path="organisations/:orgId/projects" element={<ProjectsPage />} />
+            <Route path="organisations/:orgId/projects/:projectId" element={<ProjectDetailPage />} />
+            <Route path="organisations/:orgId/members" element={<MembersPage />} />
+            <Route path="organisations/:orgId/modules" element={<OrgModulesPage />} />
+            <Route path="organisations/:orgId/audit-logs" element={<OrgAuditLogsPage />} />
+            <Route path="organisations/:orgId/settings" element={<OrgSettingsPage />} />
+          </Route>
         </Route>
       </Route>
 

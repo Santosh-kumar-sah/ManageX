@@ -43,7 +43,7 @@ export function RegisterPage() {
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
           <CardDescription>
-            Register for ManageX to manage workspaces or join an organisation.
+            Create your ManageX account to participate in events or collaborate with your team.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

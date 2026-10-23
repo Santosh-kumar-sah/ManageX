@@ -85,7 +85,7 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
 
     expect(html).toContain('Organisation Admin');
     expect(html).toContain('Members &amp; Roles');
-    expect(html).toContain('Modules &amp; Entitlements');
+    expect(html).toContain('Modules &amp; Features');
     expect(html).toContain('Security &amp; Audit Log');
     expect(html).toContain('Organisation Settings');
   });
@@ -242,8 +242,26 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
     });
 
     vi.spyOn(OrgContextModule, 'useOrg').mockReturnValue({
-      organisations: [],
-      activeOrg: null,
+      organisations: [
+        {
+          id: 'org-1',
+          name: 'Acme Corp',
+          slug: 'acme-corp',
+          status: 'active',
+          memberCount: 2,
+          role: { slug: 'organisation_member', name: 'Organisation Member' },
+          createdAt: '2026-01-01',
+        },
+      ],
+      activeOrg: {
+        id: 'org-1',
+        name: 'Acme Corp',
+        slug: 'acme-corp',
+        status: 'active',
+        memberCount: 2,
+        role: { slug: 'organisation_member', name: 'Organisation Member' },
+        createdAt: '2026-01-01',
+      },
       activeDetails: null,
       isLoading: false,
       switchOrg: vi.fn(),
@@ -264,9 +282,246 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
 
     // Confirm that the active class combination 'bg-brand-50 text-brand-700' is NOT applied to any module links
     // Split on the module links and check their class lists
-    const eventLinkMatch = html.match(/<a[^>]*href="\/app\/organisations"[^>]*>[\s\S]*?Events &amp; Hackathons[\s\S]*?<\/a>/);
+    const eventLinkMatch = html.match(/<a[^>]*href="\/app\/organisations\/org-1\/events"[^>]*>[\s\S]*?Events &amp; Hackathons[\s\S]*?<\/a>/);
     expect(eventLinkMatch).not.toBeNull();
     expect(eventLinkMatch![0]).not.toContain('bg-brand-50');
     expect(eventLinkMatch![0]).toContain('text-slate-600');
+  });
+
+  it('6. Renders dedicated Events module workspace branding, return link, and module nav when in events workspace', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: {
+        id: 'member-1',
+        email: 'user@acme.org',
+        fullName: 'Regular User',
+        isPlatformAdmin: false,
+        status: 'active',
+      },
+      isLoading: false,
+      isAuthenticated: true,
+      refreshUser: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    vi.spyOn(OrgContextModule, 'useOrg').mockReturnValue({
+      organisations: [
+        {
+          id: 'org-1',
+          name: 'Acme Corp',
+          slug: 'acme-corp',
+          status: 'active',
+          memberCount: 5,
+          role: { slug: 'organisation_member', name: 'Organisation Member' },
+          createdAt: '2026-01-01',
+        },
+      ],
+      activeOrg: {
+        id: 'org-1',
+        name: 'Acme Corp',
+        slug: 'acme-corp',
+        status: 'active',
+        memberCount: 5,
+        role: { slug: 'organisation_member', name: 'Organisation Member' },
+        createdAt: '2026-01-01',
+      },
+      activeDetails: {
+        organisation: {
+          id: 'org-1',
+          name: 'Acme Corp',
+          slug: 'acme-corp',
+          status: 'active',
+        },
+        membership: {
+          id: 'mem-1',
+          role: { slug: 'organisation_member', name: 'Organisation Member' },
+          permissions: ['event.view'],
+        },
+      },
+      isLoading: false,
+      switchOrg: vi.fn(),
+      refreshOrganisations: vi.fn(),
+      createOrganisation: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-1/events']}>
+        <WorkspaceLayout />
+      </MemoryRouter>
+    );
+
+    // Module workspace title and subtitle
+    expect(html).toContain('ManageX Events');
+    expect(html).toContain('Organiser Workspace');
+    // Dedicated return link
+    expect(html).toContain('ManageX Dashboard');
+    expect(html).toContain('Events Overview');
+    // Module logo link points to module homepage
+    expect(html).toContain('href="/app/organisations/org-1/events"');
+  });
+
+  it('7. Renders dedicated Meetings module workspace branding when in meetings workspace', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: {
+        id: 'member-1',
+        email: 'user@acme.org',
+        fullName: 'Regular User',
+        isPlatformAdmin: false,
+        status: 'active',
+      },
+      isLoading: false,
+      isAuthenticated: true,
+      refreshUser: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    vi.spyOn(OrgContextModule, 'useOrg').mockReturnValue({
+      organisations: [
+        {
+          id: 'org-1',
+          name: 'Acme Corp',
+          slug: 'acme-corp',
+          status: 'active',
+          memberCount: 5,
+          role: { slug: 'organisation_member', name: 'Organisation Member' },
+          createdAt: '2026-01-01',
+        },
+      ],
+      activeOrg: {
+        id: 'org-1',
+        name: 'Acme Corp',
+        slug: 'acme-corp',
+        status: 'active',
+        memberCount: 5,
+        role: { slug: 'organisation_member', name: 'Organisation Member' },
+        createdAt: '2026-01-01',
+      },
+      activeDetails: null,
+      isLoading: false,
+      switchOrg: vi.fn(),
+      refreshOrganisations: vi.fn(),
+      createOrganisation: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-1/meetings']}>
+        <WorkspaceLayout />
+      </MemoryRouter>
+    );
+
+    expect(html).toContain('ManageX Meetings');
+    expect(html).toContain('Meetings Workspace');
+    expect(html).toContain('ManageX Dashboard');
+    expect(html).toContain('Meetings Overview');
+  });
+
+  it('8. Keeps module navigation within the same tab without target="_blank"', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: {
+        id: 'member-1',
+        email: 'user@acme.org',
+        fullName: 'Regular User',
+        isPlatformAdmin: false,
+        status: 'active',
+      },
+      isLoading: false,
+      isAuthenticated: true,
+      refreshUser: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    vi.spyOn(OrgContextModule, 'useOrg').mockReturnValue({
+      organisations: [
+        {
+          id: 'org-1',
+          name: 'Acme Corp',
+          slug: 'acme-corp',
+          status: 'active',
+          memberCount: 5,
+          role: { slug: 'organisation_member', name: 'Organisation Member' },
+          createdAt: '2026-01-01',
+        },
+      ],
+      activeOrg: {
+        id: 'org-1',
+        name: 'Acme Corp',
+        slug: 'acme-corp',
+        status: 'active',
+        memberCount: 5,
+        role: { slug: 'organisation_member', name: 'Organisation Member' },
+        createdAt: '2026-01-01',
+      },
+      activeDetails: null,
+      isLoading: false,
+      switchOrg: vi.fn(),
+      refreshOrganisations: vi.fn(),
+      createOrganisation: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app']}>
+        <WorkspaceLayout />
+      </MemoryRouter>
+    );
+
+    // Module links in platform sidebar do not open new tabs
+    expect(html).not.toContain('target="_blank"');
+    expect(html).not.toContain('rel="noopener noreferrer"');
+    expect(html).toContain('/app/organisations/org-1/events');
+    expect(html).toContain('/app/organisations/org-1/meetings');
+    expect(html).toContain('/app/organisations/org-1/projects');
+  });
+
+  it('9. Enforces Participant persona isolation when user has 0 organisations: displays Participant role, hides internal modules, and shows participant links', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: {
+        id: 'student-42',
+        email: 'student@managex.edu',
+        fullName: 'Student Participant',
+        isPlatformAdmin: false,
+        status: 'active',
+      },
+      isLoading: false,
+      isAuthenticated: true,
+      refreshUser: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    vi.spyOn(OrgContextModule, 'useOrg').mockReturnValue({
+      organisations: [],
+      activeOrg: null,
+      activeDetails: null,
+      isLoading: false,
+      switchOrg: vi.fn(),
+      refreshOrganisations: vi.fn(),
+      createOrganisation: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app']}>
+        <WorkspaceLayout />
+      </MemoryRouter>
+    );
+
+    // 1. Role under avatar must be 'Participant', NEVER 'Member'
+    expect(html).toContain('Participant');
+    expect(html).not.toContain('<div class="text-[10px] text-slate-400">Member</div>');
+
+    // 2. Header must indicate Participant View
+    expect(html).toContain('Workspace / Participant View');
+
+    // 3. Navigation must show Participant Links and not Internal Modules
+    expect(html).toContain('Participant Links');
+    expect(html).toContain('Participant Dashboard');
+    expect(html).toContain('Browse Public Events');
+    expect(html).not.toContain('Modules &amp; Entitlements');
+
+    // 4. If participant enters a route containing /meetings, module workspace must NOT activate without activeOrg
+    const meetingRouteHtml = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/some-org/meetings']}>
+        <WorkspaceLayout />
+      </MemoryRouter>
+    );
+    expect(meetingRouteHtml).not.toContain('Meetings Workspace');
+    expect(meetingRouteHtml).toContain('Participant View');
   });
 });

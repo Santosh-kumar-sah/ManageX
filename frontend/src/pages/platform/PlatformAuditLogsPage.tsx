@@ -6,6 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { Dialog } from '@/components/ui/Dialog';
 import { ShieldCheck, AlertTriangle, Eye, Clock, User } from 'lucide-react';
 import { apiClient } from '@/api/client';
+import { formatAuditAction } from '@/pages/workspace/OrgAuditLogsPage';
 import { PlatformAuditLog } from '@/types/platform';
 
 export function PlatformAuditLogsPage() {
@@ -55,7 +56,7 @@ export function PlatformAuditLogsPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Platform Audit Logs</h1>
             <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              PLAT-007
+              Security Audit
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-1">
@@ -120,9 +121,12 @@ export function PlatformAuditLogsPage() {
                       </span>
                     </TableCell>
                     <TableCell>
-                      <code className="text-[11px] font-mono bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">
+                      <div className="text-xs font-medium text-slate-800">
+                        {formatAuditAction(log.action)}
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
                         {log.action}
-                      </code>
+                      </span>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">
                       <span className="capitalize font-medium">{log.entityType}</span>
@@ -223,7 +227,7 @@ export function PlatformAuditLogsPage() {
             </div>
 
             <div className="text-[11px] text-slate-500 italic">
-              In accordance with PRD SEC-007/AUD-003, credentials, passwords, session tokens, and confidential bodies are strictly redacted from audit payloads.
+              Credentials, passwords, session tokens, and confidential fields are automatically redacted from audit records.
             </div>
           </div>
         )}

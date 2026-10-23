@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/Table';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
+import { Dialog, ConfirmDialog } from '@/components/ui/Dialog';
 import { FormField } from '@/components/ui/FormField';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
@@ -69,6 +69,17 @@ export function MembersPage() {
   const [roleToAssign, setRoleToAssign] = useState<string>('');
   const [isAssigningRole, setIsAssigningRole] = useState(false);
   const [roleModalError, setRoleModalError] = useState<string | null>(null);
+
+  // Accessible confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    variant?: 'primary' | 'destructive';
+    isLoading?: boolean;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
 
   const effectiveOrgId = orgId && orgId !== 'default' ? orgId : activeOrg?.id;
 
@@ -156,42 +167,60 @@ export function MembersPage() {
   }
 
   // Handle invitation revocation
-  async function handleRevokeInvite(invitationId: string) {
-    if (!confirm('Are you sure you want to revoke this invitation?')) return;
-
-    try {
-      await apiClient(`/organisations/${effectiveOrgId}/invitations/${invitationId}/revoke`, {
-        method: 'POST',
-      });
-      setSuccessMsg('Invitation revoked successfully.');
-      await fetchMembers();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg('Failed to revoke invitation.');
-      }
-    }
+  function handleRevokeInvite(invitationId: string) {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Revoke Invitation',
+      description: 'Are you sure you want to revoke this invitation? The recipient will no longer be able to use the invitation link.',
+      confirmLabel: 'Revoke Invitation',
+      variant: 'destructive',
+      onConfirm: async () => {
+        try {
+          await apiClient(`/organisations/${effectiveOrgId}/invitations/${invitationId}/revoke`, {
+            method: 'POST',
+          });
+          setSuccessMsg('Invitation revoked successfully.');
+          await fetchMembers();
+        } catch (err) {
+          if (err instanceof ApiError) {
+            setErrorMsg(err.message);
+          } else {
+            setErrorMsg('Failed to revoke invitation.');
+          }
+        } finally {
+          setConfirmDialog(null);
+        }
+      },
+    });
   }
 
   // Handle member removal
-  async function handleRemoveMember(targetUserId: string, targetName: string) {
-    if (!confirm(`Are you sure you want to remove ${targetName} from this organisation?`)) return;
-
-    try {
-      await apiClient(`/organisations/${effectiveOrgId}/members/${targetUserId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'removed' }),
-      });
-      setSuccessMsg(`Member ${targetName} removed from organisation.`);
-      await fetchMembers();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setErrorMsg(err.message);
-      } else {
-        setErrorMsg('Failed to remove member.');
-      }
-    }
+  function handleRemoveMember(targetUserId: string, targetName: string) {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Remove Member',
+      description: `Are you sure you want to remove ${targetName} from this organisation? They will lose access to all organisation workspaces and modules.`,
+      confirmLabel: 'Remove Member',
+      variant: 'destructive',
+      onConfirm: async () => {
+        try {
+          await apiClient(`/organisations/${effectiveOrgId}/members/${targetUserId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'removed' }),
+          });
+          setSuccessMsg(`Member ${targetName} removed from organisation.`);
+          await fetchMembers();
+        } catch (err) {
+          if (err instanceof ApiError) {
+            setErrorMsg(err.message);
+          } else {
+            setErrorMsg('Failed to remove member.');
+          }
+        } finally {
+          setConfirmDialog(null);
+        }
+      },
+    });
   }
 
   // Open Role Management modal
@@ -688,6 +717,19 @@ export function MembersPage() {
           </div>
         </div>
       </Dialog>
+      {/* Accessible Confirmation Dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          onClose={() => setConfirmDialog(null)}
+          onConfirm={confirmDialog.onConfirm}
+          title={confirmDialog.title}
+          description={confirmDialog.description}
+          confirmLabel={confirmDialog.confirmLabel || 'Confirm'}
+          variant={confirmDialog.variant || 'destructive'}
+          isLoading={confirmDialog.isLoading || false}
+        />
+      )}
     </div>
   );
 }

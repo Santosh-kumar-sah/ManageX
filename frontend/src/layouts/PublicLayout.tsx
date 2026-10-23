@@ -1,15 +1,21 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Layers } from 'lucide-react';
+import { Layers, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { Avatar } from '@/components/ui/Avatar';
 import { ColdStartBanner } from '@/components/ui/ColdStartBanner';
+import { useAuth } from '@/api/AuthContext';
+import { useOrg } from '@/api/OrgContext';
 
 export function PublicLayout() {
   const location = useLocation();
+  const { user, isAuthenticated, logout } = useAuth();
+  const { organisations } = useOrg();
 
   const navLinks = [
     { label: 'Overview', href: '/' },
+    { label: 'Events & Hackathons', href: '/events' },
     { label: 'Modules', href: '/modules' },
-    { label: 'Security & Tenancy', href: '/security' },
+    { label: 'Security & Privacy', href: '/security' },
   ];
 
   return (
@@ -49,16 +55,61 @@ export function PublicLayout() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link to="/auth/login">
-              <Button variant="ghost" size="sm">
-                Sign In
-              </Button>
-            </Link>
-            <Link to="/auth/register">
-              <Button size="sm">
-                Get Started
-              </Button>
-            </Link>
+            {isAuthenticated && user ? (
+              <div className="flex items-center gap-3">
+                <Link
+                  to={organisations.length > 0 ? '/app' : '/events/dashboard'}
+                  className="flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <Avatar name={user.fullName || user.email} size="sm" />
+                  <span className="font-semibold text-slate-900 hidden sm:inline">
+                    {user.fullName || user.email}
+                  </span>
+                </Link>
+                {organisations.length > 0 ? (
+                  <>
+                    <Link to="/app">
+                      <Button variant="outline" size="sm">
+                        Workspace
+                      </Button>
+                    </Link>
+                    <Link to="/events/dashboard">
+                      <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-xs text-slate-600">
+                        Participant Dashboard
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <Link to="/events/dashboard">
+                    <Button variant="outline" size="sm">
+                      Participant Dashboard
+                    </Button>
+                  </Link>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => logout('/')}
+                  className="text-slate-600 hover:text-red-600 gap-1.5"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="hidden sm:inline">Log Out</span>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <Link to="/auth/login" state={{ from: { pathname: location.pathname } }}>
+                  <Button variant="ghost" size="sm">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link to="/auth/register" state={{ from: { pathname: location.pathname } }}>
+                  <Button size="sm">
+                    Get Started
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -134,7 +185,7 @@ export function PublicLayout() {
             <p>© {new Date().getFullYear()} ManageX Platform. All rights reserved.</p>
             <p className="flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
-              <span>All Systems Operational • Enterprise Multi-Tenant Isolation</span>
+              <span>All Systems Operational • Organisation-level access controls</span>
             </p>
           </div>
         </div>

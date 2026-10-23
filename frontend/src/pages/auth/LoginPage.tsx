@@ -37,9 +37,23 @@ export function LoginPage() {
         const destination = targetPath || '/platform';
         navigate(destination, { replace: true });
       } else {
-        // Regular users route to /app unless they had a non-platform deep link
-        const destination = targetPath && !targetPath.startsWith('/platform') ? targetPath : '/app';
-        navigate(destination, { replace: true });
+        // Regular users route to targetPath if provided
+        if (targetPath && !targetPath.startsWith('/platform')) {
+          navigate(targetPath, { replace: true });
+        } else {
+          // If no deep link, check if user has organisation memberships
+          try {
+            const orgsRes = await apiClient<{ organisations: unknown[] }>('/organisations');
+            if (orgsRes.data?.organisations && orgsRes.data.organisations.length > 0) {
+              navigate('/app', { replace: true });
+            } else {
+              // Participant with no organisation membership defaults to participant dashboard
+              navigate('/events/dashboard', { replace: true });
+            }
+          } catch {
+            navigate('/events/dashboard', { replace: true });
+          }
+        }
       }
     } catch (err) {
       if (err instanceof ApiError) {
@@ -58,7 +72,7 @@ export function LoginPage() {
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">Sign In to ManageX</CardTitle>
           <CardDescription>
-            Enter your credentials to access your organisation workspace.
+            Enter your email and password to access your account.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

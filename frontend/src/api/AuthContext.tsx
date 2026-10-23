@@ -20,7 +20,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   refreshUser: () => Promise<User | null>;
-  logout: () => Promise<void>;
+  logout: (redirectTo?: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -58,12 +58,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
   }, [refreshUser]);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (redirectTo?: string) => {
+    const destination = typeof redirectTo === 'string' ? redirectTo : '/auth/login';
     try {
       await apiClient('/auth/logout', { method: 'POST' });
     } finally {
+      // Clear all active org storage keys to prevent cross-account / persona leakage
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('managex_active_org_id')) {
+            keysToRemove.push(key);
+          }
+        }
+        keysToRemove.forEach((k) => localStorage.removeItem(k));
+        sessionStorage.clear();
+      } catch {
+        // Safe fallback in restricted environments
+      }
       setUser(null);
-      window.location.href = '/auth/login';
+      window.location.href = destination;
     }
   }, []);
 

@@ -38,46 +38,45 @@ vi.mock('@/api/client', () => ({
   },
 }));
 
-describe('App Routing — Organisation-First Alignment', () => {
+describe('App Routing — Event Portal & Platform Navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('1. /events route is configured to redirect to /', () => {
+  it('1. /events route is configured to render EventsPortalHomePage under EventPortalLayout', () => {
     const appElement = App();
     const routes = Array.isArray(appElement.props.children)
       ? appElement.props.children
       : [appElement.props.children];
 
-    const publicLayoutRoute = routes.find(
-      (r: any) => r?.props?.element?.type?.name === 'PublicLayout'
+    const portalLayoutRoute = routes.find(
+      (r: any) => r?.props?.element?.type?.name === 'EventPortalLayout'
     );
-    expect(publicLayoutRoute).toBeDefined();
+    expect(portalLayoutRoute).toBeDefined();
 
-    const children = Array.isArray(publicLayoutRoute.props.children)
-      ? publicLayoutRoute.props.children
-      : [publicLayoutRoute.props.children];
+    const children = Array.isArray(portalLayoutRoute.props.children)
+      ? portalLayoutRoute.props.children
+      : [portalLayoutRoute.props.children];
 
     const eventsRoute = children.find((r: any) => r?.props?.path === '/events');
     expect(eventsRoute).toBeDefined();
-    expect(eventsRoute.props.element.props.to).toBe('/');
-    expect(eventsRoute.props.element.props.replace).toBe(true);
+    expect(eventsRoute.props.element.type.name).toBe('EventsPortalHomePage');
   });
 
-  it('2. /events/:eventId directly routes to PublicEventDetailPage', () => {
+  it('2. /events/:eventId routes to PublicEventDetailPage under EventPortalLayout', () => {
     const appElement = App();
     const routes = Array.isArray(appElement.props.children)
       ? appElement.props.children
       : [appElement.props.children];
 
-    const publicLayoutRoute = routes.find(
-      (r: any) => r?.props?.element?.type?.name === 'PublicLayout'
+    const portalLayoutRoute = routes.find(
+      (r: any) => r?.props?.element?.type?.name === 'EventPortalLayout'
     );
-    expect(publicLayoutRoute).toBeDefined();
+    expect(portalLayoutRoute).toBeDefined();
 
-    const children = Array.isArray(publicLayoutRoute.props.children)
-      ? publicLayoutRoute.props.children
-      : [publicLayoutRoute.props.children];
+    const children = Array.isArray(portalLayoutRoute.props.children)
+      ? portalLayoutRoute.props.children
+      : [portalLayoutRoute.props.children];
 
     const eventDetailRoute = children.find(
       (r: any) => r?.props?.path === '/events/:eventId'
@@ -86,15 +85,72 @@ describe('App Routing — Organisation-First Alignment', () => {
     expect(eventDetailRoute.props.element.type.name).toBe('PublicEventDetailPage');
   });
 
-  it('3. /events renders Navigate component and never displays a public directory', () => {
+  it('3. /events/dashboard routes to StudentDashboardPage protected by RequireAuth', () => {
+    const appElement = App();
+    const routes = Array.isArray(appElement.props.children)
+      ? appElement.props.children
+      : [appElement.props.children];
+
+    const portalLayoutRoute = routes.find(
+      (r: any) => r?.props?.element?.type?.name === 'EventPortalLayout'
+    );
+    expect(portalLayoutRoute).toBeDefined();
+
+    const children = Array.isArray(portalLayoutRoute.props.children)
+      ? portalLayoutRoute.props.children
+      : [portalLayoutRoute.props.children];
+
+    const authGuardRoute = children.find(
+      (r: any) => r?.props?.element?.type?.name === 'RequireAuth'
+    );
+    expect(authGuardRoute).toBeDefined();
+
+    const authChildren = Array.isArray(authGuardRoute.props.children)
+      ? authGuardRoute.props.children
+      : [authGuardRoute.props.children];
+
+    const dashboardRoute = authChildren.find(
+      (r: any) => r?.props?.path === '/events/dashboard'
+    );
+    expect(dashboardRoute).toBeDefined();
+    expect(dashboardRoute.props.element.type.name).toBe('StudentDashboardPage');
+  });
+
+  it('4. Platform homepage / renders independently under PublicLayout', () => {
     const html = renderToStaticMarkup(
-      <MemoryRouter initialEntries={['/events']}>
+      <MemoryRouter initialEntries={['/']}>
         <App />
       </MemoryRouter>
     );
 
-    // Global events directory header and search controls must NOT be present
-    expect(html).not.toContain('Public Directory');
-    expect(html).not.toContain('Search events by title or keyword...');
+    // Platform marketing navbar and content
+    expect(html).toContain('ManageX');
+    expect(html).toContain('Overview');
+    expect(html).toContain('Security &amp; Privacy');
+  });
+
+  it('5. Static /events/dashboard route takes precedence before dynamic /events/:eventId', () => {
+    const appElement = App();
+    const routes = Array.isArray(appElement.props.children)
+      ? appElement.props.children
+      : [appElement.props.children];
+
+    const portalLayoutRoute = routes.find(
+      (r: any) => r?.props?.element?.type?.name === 'EventPortalLayout'
+    );
+    const children = Array.isArray(portalLayoutRoute.props.children)
+      ? portalLayoutRoute.props.children
+      : [portalLayoutRoute.props.children];
+
+    const dashboardGuardIndex = children.findIndex(
+      (r: any) => r?.props?.element?.type?.name === 'RequireAuth'
+    );
+    const eventDetailIndex = children.findIndex(
+      (r: any) => r?.props?.path === '/events/:eventId'
+    );
+
+    expect(dashboardGuardIndex).toBeGreaterThan(-1);
+    expect(eventDetailIndex).toBeGreaterThan(-1);
+    expect(dashboardGuardIndex).toBeLessThan(eventDetailIndex);
   });
 });
