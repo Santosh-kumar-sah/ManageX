@@ -45,6 +45,36 @@ const ACTION_BADGE_VARIANTS: Record<string, 'brand' | 'success' | 'warning' | 'd
   'module.disabled': 'warning',
 };
 
+export function formatAuditAction(action: string): string {
+  const map: Record<string, string> = {
+    'org.created': 'Organisation Created',
+    'org.updated': 'Organisation Updated',
+    'org.ownership_transferred': 'Ownership Transferred',
+    'member.invited': 'Member Invited',
+    'member.joined': 'Member Joined',
+    'member.removed': 'Member Removed',
+    'member.role_assigned': 'Role Assigned',
+    'member.role_removed': 'Role Revoked',
+    'invitation.revoked': 'Invitation Revoked',
+    'module.enabled': 'Module Activated',
+    'module.disabled': 'Module Deactivated',
+    'event.created': 'Event Created',
+    'event.updated': 'Event Updated',
+    'event.status_changed': 'Event Status Changed',
+    'meeting.created': 'Meeting Created',
+    'meeting.updated': 'Meeting Updated',
+    'meeting.status_changed': 'Meeting Status Changed',
+    'project.created': 'Project Created',
+    'project.updated': 'Project Updated',
+    'project.status_changed': 'Project Status Changed',
+  };
+  if (map[action]) return map[action];
+  return action
+    .split(/[\._]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 export function OrgAuditLogsPage() {
   const { orgId } = useParams<{ orgId: string }>();
   const { activeOrg, activeDetails } = useOrg();
@@ -214,7 +244,7 @@ export function OrgAuditLogsPage() {
                         })}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={badgeVariant}>{log.action}</Badge>
+                        <Badge variant={badgeVariant}>{formatAuditAction(log.action)}</Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
