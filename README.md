@@ -74,6 +74,11 @@ manageX/
    ```bash
    npm run dev:backend
    ```
+   To create local demo accounts in the Docker PostgreSQL database, run:
+   ```bash
+   npm run seed
+   ```
+   The seed command prints the demo email addresses and password after it completes.
 4. Start the frontend Vite development server (runs on `http://localhost:5173`):
    ```bash
    npm run dev:frontend
