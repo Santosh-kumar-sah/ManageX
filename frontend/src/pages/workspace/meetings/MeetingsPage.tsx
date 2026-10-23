@@ -17,6 +17,7 @@ import {
   Users,
   ListOrdered,
   Lock,
+  ShieldAlert,
 } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import { useOrg } from '@/api/OrgContext';
@@ -36,6 +37,7 @@ export function MeetingsPage() {
   const [meetings, setMeetings] = useState<MeetingItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [timeframeFilter, setTimeframeFilter] = useState<'upcoming' | 'past' | 'all'>('upcoming');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -52,6 +54,7 @@ export function MeetingsPage() {
     try {
       setIsLoading(true);
       setErrorMsg(null);
+      setAccessDenied(null);
 
       const params = new URLSearchParams();
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
@@ -65,7 +68,11 @@ export function MeetingsPage() {
       setMeetings(res.data?.meetings || []);
     } catch (err) {
       if (err instanceof ApiError) {
-        setErrorMsg(err.message);
+        if (err.statusCode === 403 || err.statusCode === 401) {
+          setAccessDenied(err.message || 'Access to organisation meetings is restricted to active members.');
+        } else {
+          setErrorMsg(err.message);
+        }
       } else {
         setErrorMsg('Failed to load meetings.');
       }
@@ -121,13 +128,34 @@ export function MeetingsPage() {
         )}
       </div>
 
-      {errorMsg && (
-        <Alert variant="error" title="Error Loading Meetings">
-          {errorMsg}
-        </Alert>
-      )}
+      {accessDenied ? (
+        <Card className="border-red-200 bg-red-50/20 p-8 text-center max-w-xl mx-auto my-8">
+          <CardContent className="space-y-4">
+            <div className="mx-auto h-12 w-12 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-600">
+              <ShieldAlert className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold text-slate-900">Access Restricted</h2>
+              <p className="text-xs text-slate-600 max-w-md mx-auto">{accessDenied}</p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Link to="/app">
+                <Button size="sm" variant="outline">
+                  Return to Workspace
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {errorMsg && (
+            <Alert variant="error" title="Error Loading Meetings">
+              {errorMsg}
+            </Alert>
+          )}
 
-      {/* Filter and Search Bar */}
+          {/* Filter and Search Bar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-lg border border-border shadow-xs">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -330,6 +358,8 @@ export function MeetingsPage() {
             fetchMeetings();
           }}
         />
+      )}
+        </>
       )}
     </div>
   );

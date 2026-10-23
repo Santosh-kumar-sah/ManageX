@@ -15,6 +15,7 @@ import {
   Clock,
   ArrowRight,
   Code2,
+  ShieldAlert,
 } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import { useOrg } from '@/api/OrgContext';
@@ -34,6 +35,7 @@ export function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [accessDenied, setAccessDenied] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -50,6 +52,7 @@ export function EventsPage() {
     try {
       setIsLoading(true);
       setErrorMsg(null);
+      setAccessDenied(null);
 
       const params = new URLSearchParams();
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
@@ -65,7 +68,11 @@ export function EventsPage() {
       }
     } catch (err) {
       if (err instanceof ApiError) {
-        setErrorMsg(err.message);
+        if (err.statusCode === 403 || err.statusCode === 401) {
+          setAccessDenied(err.message || 'Access to organisation events is restricted to active members.');
+        } else {
+          setErrorMsg(err.message);
+        }
       } else {
         setErrorMsg('Failed to load organisation events.');
       }
@@ -130,9 +137,30 @@ export function EventsPage() {
         )}
       </div>
 
-      {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
+      {accessDenied ? (
+        <Card className="border-red-200 bg-red-50/20 p-8 text-center max-w-xl mx-auto my-8">
+          <CardContent className="space-y-4">
+            <div className="mx-auto h-12 w-12 rounded-full bg-red-50 border border-red-100 flex items-center justify-center text-red-600">
+              <ShieldAlert className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold text-slate-900">Access Restricted</h2>
+              <p className="text-xs text-slate-600 max-w-md mx-auto">{accessDenied}</p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Link to="/app">
+                <Button size="sm" variant="outline">
+                  Return to Workspace
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
 
-      {/* Filter and Search Bar */}
+          {/* Filter and Search Bar */}
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -273,6 +301,8 @@ export function EventsPage() {
           orgId={effectiveOrgId}
           onEventCreated={handleEventCreated}
         />
+      )}
+        </>
       )}
     </div>
   );

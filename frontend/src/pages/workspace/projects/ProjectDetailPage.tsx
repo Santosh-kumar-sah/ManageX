@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Input } from '@/components/ui/Input';
+import { ConfirmDialog } from '@/components/ui/Dialog';
 import {
   FolderKanban,
   Users,
@@ -123,6 +124,10 @@ export function ProjectDetailPage() {
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const [createTaskInitialStatus, setCreateTaskInitialStatus] = useState<TaskStatus>('backlog');
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
+
+  // Member removal confirm state
+  const [memberToRemove, setMemberToRemove] = useState<string | null>(null);
+  const [isRemovingMember, setIsRemovingMember] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Activity Timeline State (Phase 8C: PRJ-008)
@@ -463,14 +468,18 @@ export function ProjectDetailPage() {
     }
   }
 
-  async function handleRemoveMember(memberUserId: string) {
-    if (!effectiveOrgId || !projectId) return;
-    if (!window.confirm('Are you sure you want to remove this member from the project?')) return;
+  function handleRemoveMember(memberUserId: string) {
+    setMemberToRemove(memberUserId);
+  }
+
+  async function confirmRemoveMember() {
+    if (!effectiveOrgId || !projectId || !memberToRemove) return;
 
     try {
+      setIsRemovingMember(true);
       setErrorMsg(null);
       await apiClient(
-        `/organisations/${effectiveOrgId}/projects/${projectId}/members/${memberUserId}`,
+        `/organisations/${effectiveOrgId}/projects/${projectId}/members/${memberToRemove}`,
         {
           method: 'DELETE',
         }
@@ -480,16 +489,19 @@ export function ProjectDetailPage() {
         prev
           ? {
               ...prev,
-              members: prev.members.filter((m) => m.userId !== memberUserId),
+              members: prev.members.filter((m) => m.userId !== memberToRemove),
             }
           : null
       );
+      setMemberToRemove(null);
     } catch (err) {
       if (err instanceof ApiError) {
         setErrorMsg(err.message);
       } else {
         setErrorMsg('Failed to remove member.');
       }
+    } finally {
+      setIsRemovingMember(false);
     }
   }
 
@@ -1450,6 +1462,17 @@ export function ProjectDetailPage() {
           onTaskDeleted={handleTaskDeleted}
         />
       )}
+      {/* Remove Member Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!memberToRemove}
+        onClose={() => setMemberToRemove(null)}
+        onConfirm={confirmRemoveMember}
+        title="Remove Project Member"
+        description="Are you sure you want to remove this member from the project? They will no longer have access to private project tasks."
+        confirmLabel="Remove Member"
+        variant="destructive"
+        isLoading={isRemovingMember}
+      />
     </div>
   );
 }

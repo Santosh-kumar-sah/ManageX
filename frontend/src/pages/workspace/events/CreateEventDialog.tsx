@@ -69,6 +69,9 @@ export function CreateEventDialog({
   const [location, setLocation] = useState('');
   const [virtualUrl, setVirtualUrl] = useState('');
   const [capacity, setCapacity] = useState<string>('');
+  const [registrationOpensAt, setRegistrationOpensAt] = useState('');
+  const [registrationClosesAt, setRegistrationClosesAt] = useState('');
+  const [participantInstructions, setParticipantInstructions] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -95,6 +98,41 @@ export function CreateEventDialog({
       return;
     }
 
+    let regOpenDate: Date | null = null;
+    let regCloseDate: Date | null = null;
+
+    if (registrationOpensAt) {
+      regOpenDate = new Date(registrationOpensAt);
+      if (isNaN(regOpenDate.getTime())) {
+        setErrorMsg('Invalid registration opening date-time.');
+        return;
+      }
+    }
+
+    if (registrationClosesAt) {
+      regCloseDate = new Date(registrationClosesAt);
+      if (isNaN(regCloseDate.getTime())) {
+        setErrorMsg('Invalid registration closing date-time.');
+        return;
+      }
+      if (regCloseDate > startDate) {
+        setErrorMsg('Registration closing time cannot be after the event start time.');
+        return;
+      }
+      if (regOpenDate && regCloseDate <= regOpenDate) {
+        setErrorMsg('Registration closing time must be after opening time.');
+        return;
+      }
+    }
+
+    if (capacity) {
+      const capNum = Number(capacity);
+      if (!Number.isInteger(capNum) || capNum <= 0) {
+        setErrorMsg('Capacity must be a positive integer.');
+        return;
+      }
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -111,7 +149,12 @@ export function CreateEventDialog({
         location: locationType !== 'virtual' && location.trim() ? location.trim() : undefined,
         virtualUrl:
           locationType !== 'in_person' && virtualUrl.trim() ? virtualUrl.trim() : undefined,
+        registrationOpensAt: regOpenDate ? regOpenDate.toISOString() : undefined,
+        registrationClosesAt: regCloseDate ? regCloseDate.toISOString() : undefined,
         capacity: capacity ? parseInt(capacity, 10) : undefined,
+        participantInstructions: participantInstructions.trim()
+          ? participantInstructions.trim()
+          : undefined,
       };
 
       const res = await apiClient<{ event: EventItem }>(`/organisations/${orgId}/events`, {
@@ -221,7 +264,7 @@ export function CreateEventDialog({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
-              Timezone (IANA) <span className="text-rose-500">*</span>
+              Event Timezone <span className="text-rose-500">*</span>
             </label>
             <select
               value={timezone}
@@ -289,6 +332,32 @@ export function CreateEventDialog({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
+              Registration Opens At (Optional)
+            </label>
+            <Input
+              type="datetime-local"
+              value={registrationOpensAt}
+              onChange={(e) => setRegistrationOpensAt(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Registration Closes At (Optional)
+            </label>
+            <Input
+              type="datetime-local"
+              value={registrationClosesAt}
+              onChange={(e) => setRegistrationClosesAt(e.target.value)}
+              disabled={isSubmitting}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Max Capacity (Optional)
             </label>
             <Input
@@ -323,6 +392,20 @@ export function CreateEventDialog({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Brief overview of the event theme, agenda, and expectations..."
+            className="w-full rounded-md border border-slate-300 p-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            disabled={isSubmitting}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            Participant Instructions (Optional, Visible to Registrants)
+          </label>
+          <textarea
+            rows={2}
+            value={participantInstructions}
+            onChange={(e) => setParticipantInstructions(e.target.value)}
+            placeholder="Instructions or links displayed to confirmed registrants..."
             className="w-full rounded-md border border-slate-300 p-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
             disabled={isSubmitting}
           />

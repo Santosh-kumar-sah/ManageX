@@ -96,6 +96,7 @@ export interface RegistrationItem {
     email: string;
     fullName: string;
   };
+  participantInstructions?: string | null;
 }
 
 export interface TeamMember {
@@ -108,6 +109,7 @@ export interface TeamMember {
     email: string;
     fullName: string;
   };
+  participantInstructions?: string | null;
 }
 
 export interface TeamItem {
@@ -129,10 +131,32 @@ export interface TeamItem {
   };
 }
 
+export interface TeamInvitation {
+  id: string;
+  teamId: string;
+  invitedEmail: string;
+  status: 'pending' | 'accepted' | 'rejected' | 'revoked' | 'expired';
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt?: string | null;
+  revokedAt?: string | null;
+}
+
+export interface MyPendingInvitation {
+  id: string;
+  teamId: string;
+  teamName: string;
+  teamSlug: string;
+  invitedByName: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 export interface SubmissionItem {
   id: string;
   organisationId: string;
   eventId: string;
+  roundId?: string | null;
   teamId?: string | null;
   teamName?: string | null;
   submitterUserId: string;
@@ -152,6 +176,7 @@ export interface ScoringCriterion {
   id: string;
   organisationId: string;
   eventId: string;
+  roundId?: string | null;
   name: string;
   description?: string | null;
   orderIndex: number;
@@ -239,6 +264,56 @@ export interface EventRound {
   submissionCount?: number;
   criteriaCount?: number;
   advancementCount?: number;
+}
+
+export type AdvancementStatus = 'qualified' | 'eliminated' | 'disqualified';
+
+export interface EventRoundAdvancement {
+  id: string;
+  organisationId: string;
+  eventId: string;
+  roundId: string;
+  teamId?: string | null;
+  teamName?: string | null;
+  participantUserId?: string | null;
+  participantName?: string | null;
+  participantEmail?: string | null;
+  status: AdvancementStatus;
+  qualificationScore?: number | null;
+  qualificationRank?: number | null;
+  advancedById: string;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoundResultsData {
+  eventId: string;
+  roundId: string;
+  roundNumber: number;
+  roundName: string;
+  isPublished: boolean;
+  publishedAt?: string | null;
+  criteria: Array<{
+    id: string;
+    name: string;
+    maxScore: number;
+  }>;
+  results: Array<{
+    submissionId: string;
+    title: string;
+    description?: string | null;
+    repositoryUrl?: string | null;
+    demoUrl?: string | null;
+    teamId?: string | null;
+    teamName?: string | null;
+    submitterUserId?: string | null;
+    submitterName?: string | null;
+    totalScore: number;
+    scoreCount: number;
+    rank: number;
+    qualificationStatus?: AdvancementStatus | null;
+  }>;
 }
 
 

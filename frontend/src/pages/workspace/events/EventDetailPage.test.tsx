@@ -392,4 +392,27 @@ describe('EventDetailPage — Phase 02B Multi-Round Hackathon Management', () =>
 
     expect(html).not.toContain('competition-rounds-card');
   });
+
+  it('3. Renders Phase 02C Round Advancement and Results buttons on competition round cards', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-kiet/events/evt-hackathon-multi']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId"
+            element={
+              <EventDetailPage
+                initialEvent={mockHackathonEvent as any}
+                initialRounds={mockRounds as any}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(html).toContain('round-advance-btn-1');
+    expect(html).toContain('round-results-btn-1');
+    expect(html).toContain('Advance');
+    expect(html).toContain('Results');
+  });
 });

@@ -5,13 +5,13 @@ import {
   Video,
   CheckSquare,
   Activity,
-  ArrowRight,
   Plus,
   Users,
   Building2,
   Layers,
   CheckCircle2,
   Shield,
+  Trophy,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
@@ -151,15 +151,29 @@ export function WorkspaceOverviewPage() {
               <div className="space-y-1">
                 <h2 className="text-base font-semibold text-slate-900">No Organisation Workspace</h2>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  You do not currently belong to any organisation workspace. Create your first organisation below to start managing events, meetings, and projects, or contact your administrator for an invite.
+                  You do not currently belong to any organisation workspace. If you are participating in an event or hackathon, access your participant dashboard. Otherwise, create your organisation below to start collaborating.
                 </p>
               </div>
-              <Link to="/app/organisations">
-                <Button size="sm" className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  <span>Create Organisation</span>
-                </Button>
-              </Link>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <Link to="/events/dashboard">
+                  <Button size="sm" className="gap-2 bg-brand-600 hover:bg-brand-700 text-white">
+                    <Trophy className="h-4 w-4" />
+                    <span>Participant Dashboard</span>
+                  </Button>
+                </Link>
+                <Link to="/events">
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Calendar className="h-4 w-4" />
+                    <span>Browse Public Events</span>
+                  </Button>
+                </Link>
+                <Link to="/app/organisations">
+                  <Button variant="ghost" size="sm" className="gap-2 text-slate-600">
+                    <Plus className="h-4 w-4" />
+                    <span>Create Organisation</span>
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -297,9 +311,8 @@ export function WorkspaceOverviewPage() {
                   <CardContent className="p-5 pt-0">
                     {item.isEnabled ? (
                       <Link to={targetRoute}>
-                        <Button variant="outline" size="sm" className="w-full text-xs gap-1.5 justify-center">
-                          <span>Open {item.name.split(' ')[0]}</span>
-                          <ArrowRight className="h-3 w-3" />
+                        <Button variant="outline" size="sm" className="w-full text-xs justify-center">
+                          <span>Open {item.name.split(' ')[0]} Workspace</span>
                         </Button>
                       </Link>
                     ) : activeOrg ? (

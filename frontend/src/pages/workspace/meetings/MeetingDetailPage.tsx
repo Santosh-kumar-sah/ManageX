@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
-import { Dialog } from '@/components/ui/Dialog';
+import { Dialog, ConfirmDialog } from '@/components/ui/Dialog';
 import {
   Calendar,
   Clock,
@@ -118,6 +118,21 @@ export function MeetingDetailPage() {
   const [isSendingInvites, setIsSendingInvites] = useState(false);
   const [inviteStatusMessage, setInviteStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Organisation members for searchable member picker
+  const [orgMembers, setOrgMembers] = useState<Array<{ userId: string; fullName: string; email: string; status: string }>>([]);
+
+  // Confirm dialog state (replaces window.confirm)
+  const [confirmState, setConfirmState] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    variant?: 'primary' | 'destructive';
+    isLoading?: boolean;
+    onConfirm: () => Promise<void> | void;
+  } | null>(null);
+
   const isTerminal = meeting?.status === 'completed' || meeting?.status === 'cancelled';
 
   const canManageStatus =
@@ -202,6 +217,18 @@ export function MeetingDetailPage() {
       } catch {
         setActionItems([]);
       }
+
+      // Fetch organisation members for searchable picker
+      try {
+        const membersRes = await apiClient<{ members: Array<{ userId: string; fullName: string; email: string; status: string }> }>(
+          `/organisations/${effectiveOrgId}/members`
+        );
+        if (membersRes.data?.members) {
+          setOrgMembers(membersRes.data.members.filter((m) => m.status === 'active'));
+        }
+      } catch {
+        // Graceful fallback if user lacks members view permission
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setErrorMsg(err.message);
@@ -220,8 +247,11 @@ export function MeetingDetailPage() {
   // Current user's attendee record
   const currentAttendee = attendees.find((a) => a.userId === user?.id);
 
+  // Available organisation members not yet added as attendees
+  const availableMembers = orgMembers.filter((m) => !attendees.some((a) => a.userId === m.userId));
+
   // Status transition handler
-  const handleTransition = async (newStatus: string) => {
+  const handleTransition = (newStatus: string) => {
     if (!effectiveOrgId || !meetingId) return;
 
     const confirmMessage =
@@ -229,34 +259,42 @@ export function MeetingDetailPage() {
         ? 'Are you sure you want to cancel this meeting? This is a terminal action.'
         : newStatus === 'completed'
         ? 'Are you sure you want to complete this meeting? It cannot be edited after completion.'
-        : `Change status to ${newStatus}?`;
+        : `Are you sure you want to change the meeting status to ${newStatus}?`;
 
-    if (!window.confirm(confirmMessage)) return;
+    setConfirmState({
+      isOpen: true,
+      title: newStatus === 'cancelled' ? 'Cancel Meeting' : newStatus === 'completed' ? 'Complete Meeting' : 'Update Meeting Status',
+      description: confirmMessage,
+      confirmLabel: newStatus === 'cancelled' ? 'Cancel Meeting' : 'Confirm',
+      variant: newStatus === 'cancelled' ? 'destructive' : 'primary',
+      onConfirm: async () => {
+        try {
+          setIsTransitioning(true);
+          setActionError(null);
 
-    try {
-      setIsTransitioning(true);
-      setActionError(null);
+          const res = await apiClient<{ meeting: MeetingItem }>(
+            `/organisations/${effectiveOrgId}/meetings/${meetingId}/status`,
+            {
+              method: 'PATCH',
+              body: JSON.stringify({ status: newStatus }),
+            }
+          );
 
-      const res = await apiClient<{ meeting: MeetingItem }>(
-        `/organisations/${effectiveOrgId}/meetings/${meetingId}/status`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ status: newStatus }),
+          if (res.data?.meeting) {
+            setMeeting(res.data.meeting);
+          }
+        } catch (err) {
+          if (err instanceof ApiError) {
+            setActionError(err.message);
+          } else {
+            setActionError('Failed to change meeting status.');
+          }
+        } finally {
+          setIsTransitioning(false);
+          setConfirmState(null);
         }
-      );
-
-      if (res.data?.meeting) {
-        setMeeting(res.data.meeting);
-      }
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setActionError(err.message);
-      } else {
-        setActionError('Failed to change meeting status.');
-      }
-    } finally {
-      setIsTransitioning(false);
-    }
+      },
+    });
   };
 
   // RSVP handler
@@ -338,24 +376,34 @@ export function MeetingDetailPage() {
   };
 
   // Delete Agenda Item
-  const handleDeleteAgenda = async (itemId: string) => {
+  const handleDeleteAgenda = (itemId: string) => {
     if (!effectiveOrgId || !meetingId) return;
-    if (!window.confirm('Delete this agenda item?')) return;
 
-    try {
-      await apiClient(
-        `/organisations/${effectiveOrgId}/meetings/${meetingId}/agenda/${itemId}`,
-        { method: 'DELETE' }
-      );
+    setConfirmState({
+      isOpen: true,
+      title: 'Delete Agenda Item',
+      description: 'Are you sure you want to delete this agenda item? This action cannot be undone.',
+      confirmLabel: 'Delete Item',
+      variant: 'destructive',
+      onConfirm: async () => {
+        try {
+          await apiClient(
+            `/organisations/${effectiveOrgId}/meetings/${meetingId}/agenda/${itemId}`,
+            { method: 'DELETE' }
+          );
 
-      setAgendaItems((prev) => prev.filter((i) => i.id !== itemId));
-    } catch (err) {
-      if (err instanceof ApiError) {
-        alert(err.message);
-      } else {
-        alert('Failed to delete agenda item.');
-      }
-    }
+          setAgendaItems((prev) => prev.filter((i) => i.id !== itemId));
+        } catch (err) {
+          if (err instanceof ApiError) {
+            setAgendaError(err.message);
+          } else {
+            setAgendaError('Failed to delete agenda item.');
+          }
+        } finally {
+          setConfirmState(null);
+        }
+      },
+    });
   };
 
   // Reorder Agenda Items
@@ -452,24 +500,34 @@ export function MeetingDetailPage() {
   };
 
   // Remove Attendee
-  const handleRemoveAttendee = async (attendeeId: string) => {
+  const handleRemoveAttendee = (attendeeId: string) => {
     if (!effectiveOrgId || !meetingId) return;
-    if (!window.confirm('Remove this attendee from the meeting?')) return;
 
-    try {
-      await apiClient(
-        `/organisations/${effectiveOrgId}/meetings/${meetingId}/attendees/${attendeeId}`,
-        { method: 'DELETE' }
-      );
+    setConfirmState({
+      isOpen: true,
+      title: 'Remove Attendee',
+      description: 'Are you sure you want to remove this attendee from the meeting?',
+      confirmLabel: 'Remove Attendee',
+      variant: 'destructive',
+      onConfirm: async () => {
+        try {
+          await apiClient(
+            `/organisations/${effectiveOrgId}/meetings/${meetingId}/attendees/${attendeeId}`,
+            { method: 'DELETE' }
+          );
 
-      setAttendees((prev) => prev.filter((a) => a.id !== attendeeId));
-    } catch (err) {
-      if (err instanceof ApiError) {
-        alert(err.message);
-      } else {
-        alert('Failed to remove attendee.');
-      }
-    }
+          setAttendees((prev) => prev.filter((a) => a.id !== attendeeId));
+        } catch (err) {
+          if (err instanceof ApiError) {
+            setErrorMsg(err.message);
+          } else {
+            setErrorMsg('Failed to remove attendee.');
+          }
+        } finally {
+          setConfirmState(null);
+        }
+      },
+    });
   };
 
   // Save Confidential Minutes (MTG-005)
@@ -584,54 +642,73 @@ export function MeetingDetailPage() {
   };
 
   // Delete Action Item (MTG-006)
-  const handleDeleteActionItem = async (itemId: string) => {
+  const handleDeleteActionItem = (itemId: string) => {
     if (!effectiveOrgId || !meetingId) return;
-    if (!window.confirm('Are you sure you want to delete this action item?')) return;
 
-    try {
-      await apiClient(
-        `/organisations/${effectiveOrgId}/meetings/${meetingId}/action-items/${itemId}`,
-        { method: 'DELETE' }
-      );
-      setActionItems((prev) => prev.filter((item) => item.id !== itemId));
-    } catch (err) {
-      alert(err instanceof ApiError ? err.message : 'Failed to delete action item.');
-    }
+    setConfirmState({
+      isOpen: true,
+      title: 'Delete Action Item',
+      description: 'Are you sure you want to delete this action item? This action cannot be undone.',
+      confirmLabel: 'Delete Action Item',
+      variant: 'destructive',
+      onConfirm: async () => {
+        try {
+          await apiClient(
+            `/organisations/${effectiveOrgId}/meetings/${meetingId}/action-items/${itemId}`,
+            { method: 'DELETE' }
+          );
+          setActionItems((prev) => prev.filter((item) => item.id !== itemId));
+        } catch (err) {
+          setItemError(err instanceof ApiError ? err.message : 'Failed to delete action item.');
+        } finally {
+          setConfirmState(null);
+        }
+      },
+    });
   };
 
   // Send Email Invitations (MTG-007)
-  const handleSendInvitations = async () => {
+  const handleSendInvitations = () => {
     if (!effectiveOrgId || !meetingId) return;
-    if (!window.confirm('Send email invitations to pending attendees?')) return;
 
-    try {
-      setIsSendingInvites(true);
-      setInviteStatusMessage(null);
+    setConfirmState({
+      isOpen: true,
+      title: 'Send Invitations',
+      description: 'Send email invitations to all pending attendees for this meeting?',
+      confirmLabel: 'Send Invitations',
+      variant: 'primary',
+      onConfirm: async () => {
+        try {
+          setIsSendingInvites(true);
+          setInviteStatusMessage(null);
 
-      const res = await apiClient<{ sentCount: number; failedCount: number }>(
-        `/organisations/${effectiveOrgId}/meetings/${meetingId}/send-invites`,
-        {
-          method: 'POST',
-          body: JSON.stringify({}),
+          const res = await apiClient<{ sentCount: number; failedCount: number }>(
+            `/organisations/${effectiveOrgId}/meetings/${meetingId}/send-invites`,
+            {
+              method: 'POST',
+              body: JSON.stringify({}),
+            }
+          );
+
+          if (res.data) {
+            setInviteStatusMessage({
+              type: 'success',
+              text: `Successfully dispatched ${res.data.sentCount} invitation(s).${
+                res.data.failedCount > 0 ? ` (${res.data.failedCount} failed delivery)` : ''
+              }`,
+            });
+          }
+        } catch (err) {
+          setInviteStatusMessage({
+            type: 'error',
+            text: err instanceof ApiError ? err.message : 'Failed to send invitations.',
+          });
+        } finally {
+          setIsSendingInvites(false);
+          setConfirmState(null);
         }
-      );
-
-      if (res.data) {
-        setInviteStatusMessage({
-          type: 'success',
-          text: `Successfully dispatched ${res.data.sentCount} invitation(s).${
-            res.data.failedCount > 0 ? ` (${res.data.failedCount} failed delivery)` : ''
-          }`,
-        });
-      }
-    } catch (err) {
-      setInviteStatusMessage({
-        type: 'error',
-        text: err instanceof ApiError ? err.message : 'Failed to send invitations.',
-      });
-    } finally {
-      setIsSendingInvites(false);
-    }
+      },
+    });
   };
 
   const formatMeetingDate = (isoString?: string, timezone?: string) => {
@@ -1538,14 +1615,29 @@ export function MeetingDetailPage() {
           {attendeeType === 'internal' ? (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Member User ID <span className="text-red-500">*</span>
+                Organisation Member <span className="text-red-500">*</span>
               </label>
-              <Input
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-                placeholder="UUID of active organisation member"
-                required
-              />
+              {availableMembers.length === 0 ? (
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-500">
+                  {orgMembers.length === 0
+                    ? 'Loading members or no members available...'
+                    : 'All organisation members are already attendees in this meeting.'}
+                </div>
+              ) : (
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  required
+                  className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  <option value="">-- Select Organisation Member --</option>
+                  {availableMembers.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.fullName || 'Member'} ({m.email})
+                    </option>
+                  ))}
+                </select>
+              )}
               <p className="text-xs text-slate-400 mt-1">
                 Must be an active member of this organisation.
               </p>
@@ -1622,32 +1714,38 @@ export function MeetingDetailPage() {
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Assignee <span className="text-red-500">*</span>
             </label>
-            {attendees.filter((a) => a.userId).length > 0 ? (
-              <select
-                value={actionAssigneeId}
-                onChange={(e) => setActionAssigneeId(e.target.value)}
-                required
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              >
-                <option value="">-- Select Member Attendee --</option>
-                {attendees
-                  .filter((a) => a.userId)
-                  .map((a) => (
-                    <option key={a.id} value={a.userId!}>
-                      {a.fullName ? `${a.fullName} (${a.email || 'Member'})` : a.email || a.userId}
-                    </option>
-                  ))}
-              </select>
-            ) : (
-              <Input
-                value={actionAssigneeId}
-                onChange={(e) => setActionAssigneeId(e.target.value)}
-                placeholder="Active Member User UUID"
-                required
-              />
-            )}
+            <select
+              value={actionAssigneeId}
+              onChange={(e) => setActionAssigneeId(e.target.value)}
+              required
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              <option value="">-- Select Assignee --</option>
+              {attendees.filter((a) => a.userId).length > 0 && (
+                <optgroup label="Meeting Attendees">
+                  {attendees
+                    .filter((a) => a.userId)
+                    .map((a) => (
+                      <option key={`att-${a.id}`} value={a.userId!}>
+                        {a.fullName ? `${a.fullName} (${a.email || 'Attendee'})` : a.email || a.userId}
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+              {orgMembers.filter((m) => !attendees.some((a) => a.userId === m.userId)).length > 0 && (
+                <optgroup label="Other Organisation Members">
+                  {orgMembers
+                    .filter((m) => !attendees.some((a) => a.userId === m.userId))
+                    .map((m) => (
+                      <option key={`org-${m.userId}`} value={m.userId}>
+                        {m.fullName} ({m.email})
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+            </select>
             <p className="text-xs text-slate-400 mt-1">
-              Must be an active member of this organisation.
+              Assign to a meeting attendee or active organisation member.
             </p>
           </div>
 
@@ -1728,6 +1826,21 @@ export function MeetingDetailPage() {
           </div>
         </form>
       </Dialog>
+
+      {/* Accessible Confirmation Dialog */}
+      {confirmState && (
+        <ConfirmDialog
+          isOpen={confirmState.isOpen}
+          onClose={() => setConfirmState(null)}
+          onConfirm={confirmState.onConfirm}
+          title={confirmState.title}
+          description={confirmState.description}
+          confirmLabel={confirmState.confirmLabel || 'Confirm'}
+          cancelLabel={confirmState.cancelLabel || 'Cancel'}
+          variant={confirmState.variant || 'primary'}
+          isLoading={confirmState.isLoading || false}
+        />
+      )}
     </div>
   );
 }

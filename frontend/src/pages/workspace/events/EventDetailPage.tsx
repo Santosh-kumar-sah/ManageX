@@ -40,10 +40,12 @@ import {
   Trash2,
   Star,
   Layers,
+  Edit3,
 } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import { useAuth } from '@/api/AuthContext';
 import { useOrg } from '@/api/OrgContext';
+import { EditEventDialog } from './EditEventDialog';
 import {
   EventItem,
   EventStatus,
@@ -59,6 +61,7 @@ import {
   EventResultsData,
   EventRound,
   RoundAdvancementRule,
+  RoundResultsData,
 } from '@/types/events';
 
 interface ParticipantsResponse {
@@ -156,6 +159,8 @@ export function EventDetailPage({
   const [assignJudgeUserId, setAssignJudgeUserId] = useState('');
   const [assignSubmissionId, setAssignSubmissionId] = useState('');
   const [isAssigningJudge, setIsAssigningJudge] = useState(false);
+  const [orgMembers, setOrgMembers] = useState<Array<{ userId: string; fullName: string; email: string; status: string }>>([]);
+  const [eventSubmissions, setEventSubmissions] = useState<Array<{ id: string; title: string }>>([]);
 
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [activeSubForScoring, setActiveSubForScoring] = useState<JudgeWorkItem | null>(null);
@@ -208,6 +213,18 @@ export function EventDetailPage({
   const [roundToDelete, setRoundToDelete] = useState<EventRound | null>(null);
   const [isDeletingRound, setIsDeletingRound] = useState(false);
 
+  // Phase 02C: Multi-Round Submissions, Advancement & Round Results
+  const [selectedRoundId, setSelectedRoundId] = useState<string | null>(null);
+  const [advancingRound, setAdvancingRound] = useState<EventRound | null>(null);
+  const [advRule, setAdvRule] = useState<RoundAdvancementRule>('top_n');
+  const [advTopN, setAdvTopN] = useState<number | ''>(2);
+  const [advThreshold, setAdvThreshold] = useState<number | ''>('');
+  const [isAdvancingRound, setIsAdvancingRound] = useState(false);
+  const [viewingResultsRound, setViewingResultsRound] = useState<EventRound | null>(null);
+  const [roundResultsData, setRoundResultsData] = useState<RoundResultsData | null>(null);
+  const [isLoadingRoundResults, setIsLoadingRoundResults] = useState(false);
+  const [isPublishingRoundResults, setIsPublishingRoundResults] = useState(false);
+
   const canManageStatus =
     activeDetails?.membership?.permissions?.includes('event.status.manage') ||
     activeDetails?.membership?.role?.slug === 'organisation_owner' ||
@@ -227,6 +244,13 @@ export function EventDetailPage({
     canManageStatus ||
     activeDetails?.membership?.permissions?.includes('event.view') ||
     activeDetails?.membership?.role?.slug === 'event_staff';
+
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const canEditEvent =
+    (canManageStatus ||
+      activeDetails?.membership?.permissions?.includes('event.edit')) &&
+    event !== null &&
+    !['completed', 'archived'].includes(event.status);
 
   // 1. Fetch Event Details
   const fetchEvent = useCallback(async () => {
@@ -390,6 +414,28 @@ export function EventDetailPage({
       if (judgeRes.data?.assignments) {
         setJudgeAssignments(judgeRes.data.assignments);
       }
+
+      // Fetch active organisation members for judge assignment picker
+      apiClient<{ members: Array<{ userId: string; fullName: string; email: string; status: string }> }>(
+        `/organisations/${effectiveOrgId}/members`
+      )
+        .then((mRes) => {
+          if (mRes.data?.members) {
+            setOrgMembers(mRes.data.members.filter((m) => m.status === 'active'));
+          }
+        })
+        .catch(() => {});
+
+      // Fetch event submissions for assignment targeting
+      apiClient<{ submissions: Array<{ id: string; title: string }> }>(
+        `/organisations/${effectiveOrgId}/events/${eventId}/submissions`
+      )
+        .then((sRes) => {
+          if (sRes.data?.submissions) {
+            setEventSubmissions(sRes.data.submissions);
+          }
+        })
+        .catch(() => {});
     } catch (err) {
       console.error('Failed to load judging data', err);
     }
@@ -567,6 +613,101 @@ export function EventDetailPage({
       }
     } finally {
       setIsDeletingRound(false);
+    }
+  };
+
+  // Phase 02C: Handle Round Advancement
+  const handleOpenAdvanceRound = (r: EventRound) => {
+    setAdvancingRound(r);
+    setAdvRule(r.advancementRule || 'top_n');
+    setAdvTopN(r.advancementTopN || 2);
+    setAdvThreshold(r.advancementThreshold || '');
+  };
+
+  const handleExecuteAdvancement = async () => {
+    if (!effectiveOrgId || !eventId || !advancingRound) return;
+
+    try {
+      setIsAdvancingRound(true);
+      setErrorMsg(null);
+      setSuccessMsg(null);
+
+      const res = await apiClient<{
+        success: boolean;
+        qualifiedCount: number;
+        eliminatedCount: number;
+      }>(
+        `/organisations/${effectiveOrgId}/events/${eventId}/rounds/${advancingRound.id}/advance`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            rule: advRule,
+            topN: advRule === 'top_n' && advTopN !== '' ? Number(advTopN) : undefined,
+            threshold: advRule === 'score_threshold' && advThreshold !== '' ? Number(advThreshold) : undefined,
+          }),
+        }
+      );
+
+      setSuccessMsg(
+        `Round "${advancingRound.name}" advanced: ${res.data?.qualifiedCount ?? 0} teams qualified, ${res.data?.eliminatedCount ?? 0} eliminated.`
+      );
+      setAdvancingRound(null);
+      fetchRoundsData();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrorMsg(err.message);
+      } else {
+        setErrorMsg('Failed to execute round advancement.');
+      }
+    } finally {
+      setIsAdvancingRound(false);
+    }
+  };
+
+  // Phase 02C: Handle Round Results View & Publication
+  const handleOpenRoundResults = async (r: EventRound) => {
+    if (!effectiveOrgId || !eventId) return;
+    setViewingResultsRound(r);
+    setIsLoadingRoundResults(true);
+    setRoundResultsData(null);
+
+    try {
+      const res = await apiClient<RoundResultsData>(
+        `/organisations/${effectiveOrgId}/events/${eventId}/rounds/${r.id}/results`
+      );
+      setRoundResultsData(res.data || null);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrorMsg(err.message);
+      } else {
+        setErrorMsg('Failed to load round results.');
+      }
+    } finally {
+      setIsLoadingRoundResults(false);
+    }
+  };
+
+  const handlePublishRoundResults = async () => {
+    if (!effectiveOrgId || !eventId || !viewingResultsRound) return;
+
+    try {
+      setIsPublishingRoundResults(true);
+      setErrorMsg(null);
+      await apiClient(
+        `/organisations/${effectiveOrgId}/events/${eventId}/rounds/${viewingResultsRound.id}/publish-results`,
+        { method: 'POST' }
+      );
+      setSuccessMsg(`Results for "${viewingResultsRound.name}" published successfully!`);
+      handleOpenRoundResults(viewingResultsRound);
+      fetchRoundsData();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setErrorMsg(err.message);
+      } else {
+        setErrorMsg('Failed to publish round results.');
+      }
+    } finally {
+      setIsPublishingRoundResults(false);
     }
   };
 
@@ -1003,8 +1144,12 @@ export function EventDetailPage({
       setErrorMsg(null);
       setSuccessMsg(null);
 
+      const targetUrl = selectedRoundId
+        ? `/organisations/${effectiveOrgId}/events/${eventId}/rounds/${selectedRoundId}/submissions`
+        : `/organisations/${effectiveOrgId}/events/${eventId}/submissions`;
+
       const res = await apiClient<{ submission: SubmissionItem }>(
-        `/organisations/${effectiveOrgId}/events/${eventId}/submissions`,
+        targetUrl,
         {
           method: 'POST',
           body: JSON.stringify({
@@ -1061,6 +1206,8 @@ export function EventDetailPage({
 
     const effectiveClosesAt = event.registrationClosesAt
       ? new Date(event.registrationClosesAt).getTime()
+      : event.endAt
+      ? new Date(event.endAt).getTime()
       : new Date(event.startAt).getTime();
 
     if (event.status !== 'published') {
@@ -1204,6 +1351,19 @@ export function EventDetailPage({
             </Button>
           )}
 
+          {canEditEvent && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditOpen(true)}
+              data-testid="edit-event-button"
+              className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 border-slate-300"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+              <span>Edit Event</span>
+            </Button>
+          )}
+
           <Link to={`/app/organisations/${effectiveOrgId}/events`}>
             <Button variant="outline" className="flex items-center gap-2">
               <ArrowLeft className="h-4 w-4" /> Back to Events
@@ -1220,43 +1380,56 @@ export function EventDetailPage({
         <Card className="border-brand-100 bg-brand-50/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center justify-between">
-              <span>Lifecycle State Machine</span>
-              <span className="text-xs font-normal text-slate-500 font-mono">
-                Current: <strong className="text-slate-800">{event.status}</strong>
-              </span>
+              <span>Event Status & Actions</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-normal text-slate-500">Current Status:</span>
+                <Badge variant={EVENT_STATUS_VARIANTS[event.status] || 'neutral'}>
+                  {EVENT_STATUS_LABELS[event.status] || event.status}
+                </Badge>
+              </div>
             </CardTitle>
             <CardDescription>
-              Valid canonical transitions defined by PRD §7.2. Terminal states (completed, cancelled, archived) lock event editing.
+              Manage the current stage of this event. Concluded or cancelled events cannot be modified.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="flex flex-wrap items-center gap-2">
               {allowedTransitions.length === 0 ? (
                 <span className="text-xs text-slate-500 italic">
-                  This event is in terminal state ({event.status}) and cannot be transitioned further.
+                  This event is complete or archived and no further status changes are available.
                 </span>
               ) : (
                 allowedTransitions.map((targetStatus) => {
                   let icon = <Play className="h-3.5 w-3.5 mr-1" />;
                   let variant: 'primary' | 'outline' | 'destructive' = 'outline';
+                  let actionLabel = `Move to ${EVENT_STATUS_LABELS[targetStatus]}`;
 
                   if (targetStatus === 'published') {
                     variant = 'primary';
                     icon = <Share2 className="h-3.5 w-3.5 mr-1" />;
+                    actionLabel = 'Publish Event';
                   } else if (targetStatus === 'in_progress') {
                     variant = 'primary';
                     icon = <Play className="h-3.5 w-3.5 mr-1" />;
+                    actionLabel = 'Start Event';
                   } else if (targetStatus === 'completed') {
                     variant = 'outline';
                     icon = <CheckCircle className="h-3.5 w-3.5 mr-1 text-emerald-600" />;
+                    actionLabel = 'Mark as Completed';
                   } else if (targetStatus === 'cancelled') {
                     variant = 'destructive';
                     icon = <XCircle className="h-3.5 w-3.5 mr-1" />;
+                    actionLabel = 'Cancel Event';
                   } else if (targetStatus === 'archived') {
                     variant = 'outline';
                     icon = <Archive className="h-3.5 w-3.5 mr-1" />;
+                    actionLabel = 'Archive Event';
                   } else if (targetStatus === 'registration_closed') {
                     icon = <Lock className="h-3.5 w-3.5 mr-1 text-amber-600" />;
+                    actionLabel = 'Close Registration';
+                  } else if (targetStatus === 'draft') {
+                    variant = 'outline';
+                    actionLabel = 'Revert to Draft';
                   }
 
                   return (
@@ -1269,7 +1442,7 @@ export function EventDetailPage({
                       className="flex items-center text-xs"
                     >
                       {icon}
-                      Move to {EVENT_STATUS_LABELS[targetStatus]}
+                      {actionLabel}
                     </Button>
                   );
                 })
@@ -1476,6 +1649,31 @@ export function EventDetailPage({
               </div>
             </CardHeader>
             <CardContent className="pt-0">
+              {rounds.length > 0 && (
+                <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium text-xs">Stage:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {rounds.map((r) => {
+                      const isSelected = selectedRoundId === r.id || (!selectedRoundId && r.roundNumber === 1);
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setSelectedRoundId(r.id)}
+                          data-testid={`submission-round-tab-${r.roundNumber}`}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                            isSelected
+                              ? 'bg-brand-600 text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          Round {r.roundNumber}: {r.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {mySubmission ? (
                 <div className="p-4 rounded-lg border border-slate-200 bg-slate-50/50 space-y-3 text-xs">
                   <div className="flex items-center justify-between">
@@ -2017,6 +2215,28 @@ export function EventDetailPage({
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => handleOpenRoundResults(r)}
+                            data-testid={`round-results-btn-${r.roundNumber}`}
+                            className="text-xs h-7 px-2.5 flex items-center gap-1 text-slate-700"
+                          >
+                            <Trophy className="h-3 w-3 text-amber-500" />
+                            <span>Results</span>
+                          </Button>
+                          {canManageRounds && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenAdvanceRound(r)}
+                              data-testid={`round-advance-btn-${r.roundNumber}`}
+                              className="text-xs h-7 px-2.5 flex items-center gap-1 text-brand-700 bg-brand-50/50 border-brand-200 hover:bg-brand-50"
+                            >
+                              <Award className="h-3 w-3 text-brand-600" />
+                              <span>Advance</span>
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => handleOpenEditRound(r)}
                             className="text-xs h-7 px-2.5"
                           >
@@ -2214,7 +2434,7 @@ export function EventDetailPage({
                   <span className="text-slate-500">Closes:</span>
                   <span className="font-medium text-slate-700">
                     {formatDateTime(
-                      event.registrationClosesAt || event.startAt,
+                      event.registrationClosesAt || event.endAt || event.startAt,
                       event.timezone
                     )}
                   </span>
@@ -2678,26 +2898,49 @@ export function EventDetailPage({
         isOpen={showAssignJudgeModal}
         onClose={() => setShowAssignJudgeModal(false)}
         title="Assign Judge"
-        description="Assign an organisation member or event judge to evaluate hackathon submissions."
+        description="Select an organisation member to evaluate hackathon submissions."
       >
         <div className="space-y-4 text-xs">
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Judge User ID (UUID) *</label>
-            <Input
-              placeholder="Enter active user UUID"
-              value={assignJudgeUserId}
-              onChange={(e) => setAssignJudgeUserId(e.target.value)}
-              disabled={isAssigningJudge}
-            />
+            <label className="font-semibold text-slate-700 block mb-1">Select Judge *</label>
+            {orgMembers.length === 0 ? (
+              <Input
+                placeholder="Enter active user UUID"
+                value={assignJudgeUserId}
+                onChange={(e) => setAssignJudgeUserId(e.target.value)}
+                disabled={isAssigningJudge}
+              />
+            ) : (
+              <select
+                value={assignJudgeUserId}
+                onChange={(e) => setAssignJudgeUserId(e.target.value)}
+                disabled={isAssigningJudge}
+                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              >
+                <option value="">-- Select Member to Assign as Judge --</option>
+                {orgMembers.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.fullName || 'Member'} ({m.email})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
-            <label className="font-semibold text-slate-700 block mb-1">Submission ID Scope (Optional)</label>
-            <Input
-              placeholder="Leave blank to assign to all submissions in this event"
+            <label className="font-semibold text-slate-700 block mb-1">Submission Target</label>
+            <select
               value={assignSubmissionId}
               onChange={(e) => setAssignSubmissionId(e.target.value)}
               disabled={isAssigningJudge}
-            />
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              <option value="">All submissions in this event</option>
+              {eventSubmissions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title || `Submission #${s.id.slice(0, 8)}`}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button
@@ -2985,6 +3228,184 @@ export function EventDetailPage({
         variant="destructive"
         isLoading={isDeletingRound}
       />
+
+      {/* Phase 02C: Dialog for Advance Round */}
+      <Dialog
+        isOpen={Boolean(advancingRound)}
+        onClose={() => !isAdvancingRound && setAdvancingRound(null)}
+        title={`Advance Round: ${advancingRound?.name || ''}`}
+        description="Calculate qualifications and advance qualifying teams to the next round based on evaluation scores."
+      >
+        <div className="space-y-4 py-2 text-xs">
+          <div>
+            <label className="font-semibold text-slate-700 block mb-1">Advancement Rule</label>
+            <select
+              value={advRule}
+              onChange={(e) => setAdvRule(e.target.value as RoundAdvancementRule)}
+              disabled={isAdvancingRound}
+              className="w-full h-8 px-2.5 rounded-md border border-slate-300 bg-white text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="top_n">Top-N Teams (ties at cutoff qualify)</option>
+              <option value="score_threshold">Score Threshold (score ≥ cutoff)</option>
+              <option value="manual">Manual Selection</option>
+            </select>
+          </div>
+
+          {advRule === 'top_n' && (
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Top-N Cutoff</label>
+              <Input
+                type="number"
+                min="1"
+                value={advTopN}
+                onChange={(e) => setAdvTopN(e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10)))}
+                placeholder="e.g. 3"
+                disabled={isAdvancingRound}
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Top N teams advance. Any teams tied at the cutoff score will also qualify.
+              </p>
+            </div>
+          )}
+
+          {advRule === 'score_threshold' && (
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Minimum Score Threshold</label>
+              <Input
+                type="number"
+                min="0"
+                value={advThreshold}
+                onChange={(e) => setAdvThreshold(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                placeholder="e.g. 75"
+                disabled={isAdvancingRound}
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Teams with total evaluated score greater than or equal to this threshold advance.
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAdvancingRound(null)}
+              disabled={isAdvancingRound}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleExecuteAdvancement}
+              isLoading={isAdvancingRound}
+              data-testid="confirm-advance-btn"
+            >
+              Execute Advancement
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Phase 02C: Dialog for Round Results */}
+      <Dialog
+        isOpen={Boolean(viewingResultsRound)}
+        onClose={() => setViewingResultsRound(null)}
+        title={`Results: ${viewingResultsRound?.name || ''}`}
+        description="Leaderboard rankings and scores for this competition round."
+      >
+        <div className="space-y-4 py-2 text-xs">
+          {isLoadingRoundResults ? (
+            <div className="py-8 text-center text-slate-500">Loading round results...</div>
+          ) : !roundResultsData || roundResultsData.results.length === 0 ? (
+            <div className="py-8 text-center text-slate-500">No scored submissions found for this round.</div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs pb-2 border-b border-slate-100">
+                <span className="text-slate-600">
+                  Total Entries: <strong>{roundResultsData.results.length}</strong>
+                </span>
+                <div>
+                  {roundResultsData.isPublished ? (
+                    <Badge variant="success" className="text-[10px]">
+                      Published on {roundResultsData.publishedAt ? new Date(roundResultsData.publishedAt).toLocaleDateString() : 'Now'}
+                    </Badge>
+                  ) : (
+                    <Badge variant="warning" className="text-[10px]">
+                      Unpublished Draft
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {roundResultsData.results.map((item) => (
+                  <div
+                    key={item.submissionId}
+                    className="p-2.5 rounded-lg border border-slate-200 bg-white flex items-center justify-between gap-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 text-center font-bold text-slate-700">#{item.rank}</span>
+                      <div>
+                        <div className="font-semibold text-slate-900">{item.teamName || item.title}</div>
+                        <div className="text-[11px] text-slate-400">{item.title}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-slate-900">{item.totalScore} pts</span>
+                      {item.qualificationStatus && (
+                        <Badge
+                          variant={item.qualificationStatus === 'qualified' ? 'success' : 'neutral'}
+                          className="text-[10px] capitalize"
+                        >
+                          {item.qualificationStatus}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                <div>
+                  {!roundResultsData.isPublished && canManageJudging && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handlePublishRoundResults}
+                      isLoading={isPublishingRoundResults}
+                      className="text-xs"
+                      data-testid="publish-round-results-btn"
+                    >
+                      Publish Round Results
+                    </Button>
+                  )}
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setViewingResultsRound(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Dialog>
+
+      {/* Edit Event Dialog (Phase 6A) */}
+      {isEditOpen && effectiveOrgId && event && (
+        <EditEventDialog
+          isOpen={isEditOpen}
+          onClose={() => setIsEditOpen(false)}
+          orgId={effectiveOrgId}
+          event={event}
+          onEventUpdated={(updated) => {
+            setEvent(updated);
+            setSuccessMsg('Event details updated successfully.');
+            setIsEditOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
