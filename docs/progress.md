@@ -4,6 +4,33 @@ This document tracks progress across implementation phases, completed requiremen
 
 ---
 
+## Evaluation Hardening — Phase 1
+
+Phase 1 implementation is complete in the working tree for backend authorization and immediate defects:
+
+- Fixed evaluation caller judge detection so panel/configuration reads no longer reference an undefined variable.
+- Added dedicated evaluation view, configuration, judge-management, schedule-management, and schedule-publication permissions.
+- Added strict tenant-scoped route guards that do not allow platform-admin bypass for evaluation data.
+- Preserved external assigned-judge and participant service/RLS scope handling.
+- Added the forward-only `no_show` status constraint update; migration 032 is applied and verified in both `managex_test` and the protected development database `managex`.
+- Added unit coverage for explicit permission grants, denial of generic `event.edit`/platform bypass, and external assignment-scoped requests.
+- Verification remediation now limits organiser projection to management permissions and filters panel reads to assigned judges; participants, unrelated users, and revoked judges receive no panel records.
+
+- Database-backed evaluation integration tests passed against the isolated `managex_test` database.
+
+## Judge Scheduling & Evaluation — Phase 2
+
+Phase 2 backend scheduling hardening is implemented in the existing evaluation service:
+
+- Serializes team and judge scheduling resources with transaction-scoped advisory locks.
+- Applies the shared conflict validator to generated schedules as well as individual reservations.
+- Validates explicit generated teams belong to the selected event.
+- Preserves round scope for rescheduling, cancellation, and status updates.
+- Preserves cancellation reasons in audit metadata while keeping historical sessions.
+- Stabilizes session listing order for deterministic schedule projections.
+
+Focused verification passed against `managex_test`: 27 tests passed, 0 failed, including unit projection, scheduling, conflict detection, rescheduling, cancellation auditability, meeting-link privacy, judge synchronization, scoring compatibility, and tenant isolation.
+
 ## Current Status: Phase 9 Accepted | Phase 10 Preflight Complete
 
 | Phase | Description | Status | Requirements Completed | Gate / Blocker |
@@ -215,12 +242,24 @@ This document tracks progress across implementation phases, completed requiremen
     - "Re-register" button for withdrawn users.
     - Capacity and slot indicator (e.g., active registrations vs capacity).
     - Event Staff "Participants Roster" with search, filter tabs (All, Active, Withdrawn), registrant table with avatar and timestamps, and accessible pagination.
+  - `PublicEventDetailPage.tsx` updated with:
+    - Confidential participant instructions delivered solely via authenticated `my-registration` response for `status === 'registered'`.
+    - Dynamic action states: unauthenticated CTA redirect, registered badge + instructions + withdrawal prompt, withdrawn notice + re-registration button.
+    - Public serializer (`formatPublicEventRow`) categorically omits `participant_instructions` from public payloads.
+- **Participant Area & My Registrations Dashboard (`/events/dashboard`, `EVT-004`, `EVT-005`):**
+  - Enhanced `StudentDashboardPage.tsx` with:
+    - Quick stats summary counters: Active Registrations, Withdrawn, Past Events, and Total Enrolled.
+    - Category filter tabs: All Events, Active, Withdrawn, and Past Events with dynamic counts and tailored empty states.
+    - Enriched registration metadata: Displays `registered_at`, `reactivated_at`, `withdrawn_at`, and event lifecycle state.
+    - Re-registration CTA for withdrawn participants linking directly to event registration.
+    - Confidential participant instructions delivered solely to active confirmed registrants.
+  - Route precedence: Static `/events/dashboard` declared before dynamic `/events/:eventId` in `App.tsx`.
+  - Authentication guard: Protected by `<RequireAuth />` redirecting unauthenticated users to `/auth/login` with safe return path.
 - **Automated Verification & Evidence:**
-  - Backend: 97/97 tests passing across 9 test suites in `npm test` (including 13 comprehensive registration tests in `registrations.integration.test.js`).
-  - Frontend: 8/8 tests passing in `vitest`.
+  - Frontend vitest: 63/63 tests passing across 11 suites (including 4 new tests in `StudentDashboardPage.test.tsx` and route precedence test in `App.test.tsx`).
   - Frontend typecheck: `tsc --noEmit` passes with 0 errors.
-  - Frontend lint: `eslint` passes with 0 errors.
-  - Frontend build: `tsc && vite build` completes with 0 errors.
+  - Frontend build: `tsc && vite build` completes cleanly in 13.70s.
+  - Backend integration tests: **NOT VERIFIED** due to local environment port mismatch (`backend/.env` configured with port 5433 while host PostgreSQL is on port 5432, resulting in `ECONNREFUSED`). Both `/api/v1/events/participant/dashboard` and `/api/v1/events/my-registrations` routes are wired to `getParticipantDashboard(req.user.id)`.
 
 ---
 
@@ -670,6 +709,40 @@ This document tracks progress across implementation phases, completed requiremen
   - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
   - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) passed with 0 errors.
 
+---
+
+## Phase 02C Deliverables Summary (Multi-Round Submissions, Advancement & Scoring)
+- **Database Migration (`20261017000026_round_scoped_submissions_evaluations.sql`):**
+  - Replaced single-round unique submission constraint with round-scoped partial unique indexes (`uq_event_submissions_round_team` and `uq_event_submissions_round_user`).
+  - Added composite foreign keys linking `(event_id, round_id)` on `event_submissions`, `event_scoring_criteria`, `event_scores`, and `event_round_advancements` ensuring relational integrity across rounds and events.
+  - Replaced `NULLS NOT DISTINCT` on `event_round_advancements` with partial unique indexes allowing multiple teams or solo participants per round.
+- **Round-Scoped Submissions Service (`submissionService.js`):**
+  - Implemented `createOrUpdateRoundSubmission`: enforces server-side round eligibility (Round 1 open to registered participants; Round $N$ requires explicit qualification in Round $N-1$).
+  - Implemented `getMyRoundSubmission` and `listRoundSubmissions`.
+  - Maintained 100% backward compatibility for single-round legacy submission workflows.
+- **Round Advancement Engine (`advancementService.js`):**
+  - Implemented `advanceRound` supporting `top_n`, `score_threshold`, and `manual` rules.
+  - Invariant verified: Top-N advancement automatically qualifies all participants or teams tied at the cutoff threshold score.
+  - Persists qualification ranks and scores into `event_round_advancements`.
+  - Automatically transitions next stage from `pending` to `open`.
+- **Round Scoring, Leaderboard & Privacy (`judgingService.js`):**
+  - Round-scoped scoring criteria and judge assignments.
+  - Round scores persist `round_id` matching evaluated submission.
+  - `getRoundResults` calculates leaderboard with straight sum and competition shared ranks for tied scores.
+  - Unpublished score privacy strictly enforced (participants receive 403 `RESULTS_NOT_PUBLISHED` until explicitly published).
+  - `publishRoundResults` and `unpublishRoundResults` management endpoints.
+- **Frontend Workspace & Participant UI (`EventDetailPage.tsx`):**
+  - Added "Results" and "Advance" actions directly on round cards in `EventDetailPage.tsx`.
+  - Added `AdvanceRoundDialog` for configuring rules and executing advancement.
+  - Added `RoundResultsDialog` for inspecting leaderboard rankings and publishing round results.
+  - Added Round Stage selector tabs in the Project Submission card for participants.
+- **Automated Verification & Evidence:**
+  - Multi-Round advancement integration test suite: 15/15 passing tests in `advancement.integration.test.js` (0 failures).
+  - Full backend events test suite: 96/96 passing tests across all 6 test files in `backend/src/platform/events/*.test.js` (0 failures).
+  - Frontend test suite: 47/47 passing tests across 9 test files in `npm test --prefix frontend` (0 failures).
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) passed with 0 errors.
+
 - **Decoupled Global Event Directory (`UI-001`, `PRD §1`):**
   - Removed `Events` navigation link from `PublicLayout.tsx` header.
   - Replaced standalone `/events` directory route with a clean `<Navigate to="/" replace />` in `App.tsx`.
@@ -696,3 +769,403 @@ This document tracks progress across implementation phases, completed requiremen
 
 
 
+
+---
+
+## Phase 02D Deliverables Summary (Multi-Round Hackathon Finalization & Integrity Hardening)
+- **Database Migration (`20261017000027_multi_round_hardening_integrity.sql`):**
+  - Added `is_manual BOOLEAN NOT NULL DEFAULT FALSE` to `event_round_advancements` to protect manual advancement decisions from automated overwrites.
+  - Replaced `uq_judge_assignments_event_judge_sub` with `uq_judge_assignments_event_round_judge_sub` (`event_id, round_id, judge_user_id, submission_id`) supporting round-scoped judge assignments.
+  - Added composite foreign key `(event_id, round_id)` on `event_judge_assignments` referencing `event_rounds(event_id, id)` with `ON DELETE RESTRICT`.
+  - Added index `idx_advancements_round_manual` for fast lookup of manual advancement decisions.
+- **Advancement Engine Consistency & Invariants (`advancementService.js`):**
+  - Incomplete judging guard: Advancing via `top_n` or `score_threshold` when scoring criteria exist and judges are assigned requires 100% completed evaluations across all assigned judges and criteria; blocked with `409 INCOMPLETE_EVALUATION` otherwise.
+  - Manual decision preservation: Pre-existing manual qualifications (`is_manual = true`) are strictly protected from being downgraded to `eliminated` during automated `top_n` or `score_threshold` recalculations.
+  - Target participant validation: Targets in `manualAdvancements` are validated against actual round submissions; invalid targets rejected with `ValidationError` (`TARGET_NOT_IN_ROUND`).
+  - Idempotency: Repeated advancement requests succeed idempotently under serialized row-level locking (`SELECT ... FOR UPDATE`).
+- **Round-Scoped Judging & Score Lockout (`judgingService.js`):**
+  - Round-scoped judge assignment via `POST /:eventId/judges` with `roundId`.
+  - Judges assigned specifically to a round cannot score submissions in another round (`403 JUDGE_NOT_ASSIGNED`).
+  - Score edit lockout: Attempting to submit or modify scores on a completed/advanced round is blocked with `409 ROUND_ADVANCEMENT_LOCKED`.
+  - Public visibility filter: Public results and details strictly verify `visibility = 'public'` and non-draft status, returning 404 for private/draft events.
+- **Safe Round Deletion Guards (`roundService.js`):**
+  - Deletion blocked if criteria exist (`409 ROUND_HAS_CRITERIA`).
+  - Deletion blocked if judge assignments exist (`409 ROUND_HAS_JUDGE_ASSIGNMENTS`).
+  - Deletion blocked if submissions exist (`409 ROUND_HAS_SUBMISSIONS`).
+  - Deletion blocked if advancements exist (`409 ROUND_HAS_ADVANCEMENTS`).
+- **Automated Verification & Evidence:**
+  - Dedicated hardening regression suite: 12/12 passing tests in `hardening.integration.test.js` (0 failures).
+  - Full backend events integration suite: 108/108 passing tests across all 7 test suites in `backend/src/platform/events/*.test.js` (0 failures).
+  - Frontend test suite: 47/47 passing tests across 9 test files in `npm test --prefix frontend` (0 failures).
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+
+---
+
+## Event Portal Navigation & Student Experience Fix Deliverables Summary
+- **Database Migration (`20261017000028_participant_dashboard_rls.sql`):**
+  - Updated PostgreSQL Row-Level Security policies on `events` and `event_rounds` to permit registered participants (`EXISTS (SELECT 1 FROM event_registrations ... WHERE user_id = app.current_user_id)`) to query their enrolled events and rounds even after an event transitions to `registration_closed`, `in_progress`, or `completed`.
+- **Backend Participant Dashboard API:**
+  - Created `getParticipantDashboard(userId)` in `backend/src/platform/events/eventService.js`.
+  - Added authenticated endpoint `GET /api/v1/events/participant/dashboard` in `backend/src/routes/events.js` (mounted before `/:eventId` to prevent route shadowing), protected with `requireAuth` and `requireVerifiedUser`.
+  - Returns complete student event portfolio: registered event metadata, registration details, hackathon team roster & leadership status, multi-round deliverables & deadlines, submission URLs & timestamps, round qualification status, and published results.
+  - Strict privacy & RLS isolation: unauthenticated requests return 401; users can only view their own registrations/teams/submissions; unpublished judge scores and criteria evaluations are never exposed.
+- **Frontend Event Portal Navigation (`EventPortalLayout.tsx`):**
+  - Created dedicated portal layout for `/events`, `/events/:eventId`, and `/events/dashboard`.
+  - Brand header with "ManageX Events" logo linking directly to the portal homepage (`/events`).
+  - Clear navigation links: "Browse Events" (`/events`), "My Dashboard" (`/events/dashboard`), and "Platform Home" (`/`).
+  - Contextual authentication area:
+    - Unauthenticated: displays "Sign In" with return destination in state (`state={{ from: { pathname: location.pathname } }}`) and "Get Started".
+    - Authenticated: displays user name & avatar, direct link to "My Dashboard", and working "Log Out" action that invokes `logout('/events')` returning the user to the Event portal.
+- **Frontend Event Portal Public Homepage (`EventsPortalHomePage.tsx`):**
+  - Created dedicated Events & Hackathons homepage at `/events`.
+  - Hero banner with real-time search input and event type filter tabs ("All Events", "Hackathons", "General Events").
+  - Card-based event directory rendering dates, timezones, virtual/in-person badges, host organisation names, and "View Details & Register" linking to `/events/:eventId`.
+  - Skeleton loading states, empty search results states, and error handling.
+- **Frontend Student Dashboard (`StudentDashboardPage.tsx`):**
+  - Created student/participant hub at `/events/dashboard` protected by `<RequireAuth />`.
+  - Renders registered events, hackathon team composition with team leader indicators, round-by-round deliverable statuses, demo/repository links, advancement badges (qualified, eliminated, pending), and final published results leaderboards.
+  - Clean empty state with "Browse Upcoming Events" CTA when user has zero active registrations.
+- **Public & Authentication Routing Alignment:**
+  - Updated `frontend/src/layouts/PublicLayout.tsx` to include "Events & Hackathons" (`/events`) and display authenticated user states with working logout.
+  - Updated `frontend/src/pages/public/PublicEventDetailPage.tsx` back links to return to `/events` ("All Events" / "Back to Events").
+  - Updated `frontend/src/pages/auth/LoginPage.tsx` so that users without organisation memberships automatically default to `/events/dashboard` instead of empty organisation workspaces, and deep links via `location.state.from` are preserved.
+- **Automated Verification & Evidence:**
+  - New backend integration test suite: 4/4 passing tests in `participant_dashboard.integration.test.js` (0 failures).
+  - Backend test suite: 323/323 passing tests across 23 test suites (0 failures).
+  - New frontend test suite: `EventsPortal.test.tsx` (4 tests).
+  - Frontend test suite: 52/52 passing tests across 10 test files (0 failures).
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) built cleanly with 0 errors.
+
+---
+
+## Dedicated Module Workspaces & Role-Based Separation Deliverables Summary
+- **Module-Wise Homepage & Workspace Separation (`WorkspaceLayout.tsx`):**
+  - Implemented context-aware module detection in `WorkspaceLayout` for all 3 functional modules:
+    - Events & Hackathons (`/app/organisations/:orgId/events`) -> `ManageX Events` (Organiser Workspace).
+    - Meetings (`/app/organisations/:orgId/meetings`) -> `ManageX Meetings` (Meetings Workspace).
+    - Projects & Tasks (`/app/organisations/:orgId/projects`) -> `ManageX Projects` (Projects Workspace).
+  - When within any module workspace:
+    - Sidebar brand logo links directly to that module's functional overview/homepage (not generic `/app`).
+    - Prominent `← ManageX Dashboard` button and platform return link in both desktop and mobile sidebars.
+    - Module-specific navigation items rendered in sidebar (e.g. Events Overview + link to Public Events Portal with external icon).
+    - Workspace header displays module breadcrumbs (`ManageX / {OrgName} / {Module}`) and explicit `ManageX Dashboard` return button.
+  - Navigation between pages within the selected module stays in the same tab by default.
+- **Module Selection & Browser Tab Orchestration (`WorkspaceOverviewPage.tsx` & `WorkspaceLayout.tsx`):**
+  - When an authorised user selects an enabled module from the ManageX dashboard:
+    - Module cards and quick action shortcuts open the module workspace in a new browser tab (`target="_blank" rel="noopener noreferrer"`) with `ExternalLink` icon indicators.
+    - Original ManageX dashboard remains open in the initial tab.
+    - Inside the opened module tab, all module interactions and intra-module links stay in the same tab.
+- **External Participant & Role Separation Guard:**
+  - For external participants/students with no organisation membership:
+    - `WorkspaceOverviewPage` renders dedicated CTAs to "Participant Dashboard" (`/events/dashboard`) and "Browse Public Events" (`/events`) alongside organization creation.
+    - `WorkspaceLayout` top notification banner provides a direct link to the Participant Dashboard.
+    - Organisation-level administration and management navigation are strictly hidden from users without administrative membership.
+- **Automated Verification & Evidence:**
+  - Frontend test suite: 55/55 passing tests across 10 test files in `npm test --prefix frontend` (0 failures), including 3 new test cases verifying dedicated module branding, return navigation, and new-tab module opening.
+  - Backend test suite: 323/323 passing tests across 23 test suites in `npm test --prefix backend` (0 failures).
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) built cleanly in 6.32s with 0 errors.
+
+---
+
+## Events UI Blueprint & Screen Reconciliation (Documentation Only)
+- **UI Specification Baseline (`docs/ui/events-screens.md`):**
+  - Synthesized comprehensive UI blueprint for Events & Hackathons module, strictly reconciling S1–S8 management screens, P1–P2 public screens, and P3 student dashboard against the canonical PRD (`docs/PRD.md`).
+  - Screen Coverage: S1 (Events List), S2 (Create/Edit Modal), S3 (Lifecycle Hub), S4 (Participant Roster), S5 (Teams & Invites), S6 (Rounds Engine), S7 (Judging & Evaluation), S8 (Scoring & Results Publication), P1 (Public Directory), P2 (Public Event Detail & Registration), P3 (Student Dashboard).
+  - Route Compatibility & Collision Analysis: Reconciled `/events/dashboard` priority over dynamic parametric paths, established single-segment UUID vs orgSlug dynamic resolution, and defined reserved path slugs.
+  - Security & RLS Invariants: Codified external participant boundary (no org membership), transactional capacity locking, straight-sum judging with shared tied ranks, and public response allowlist with strict redaction of drafts, internal notes, PII, and unpublished scores.
+- **Decision Log Updates (`docs/decisions/decision-log.md`):**
+  - Logged **ADR-019**: Events Route Inventory, Namespace Collision Resolution & Route Precedence.
+  - Logged **ADR-020**: Public Events Discovery Boundary & Data Allowlist.
+- **Constraints Maintained:**
+  - Strictly documentation-only task; zero application code, migrations, or tests were executed. All Clean Enterprise design tokens and WCAG 2.2 AA standards preserved.
+
+---
+
+## Phase 6A — Core Events & Lifecycle Implementation Summary
+- **S1 — Events List (`/app/organisations/:orgId/events`):**
+  - Confirmed organisation isolation with `organisation_id` scoping in backend transactions and PostgreSQL RLS.
+  - Supports canonical 7 lifecycle statuses (`draft`, `published`, `registration_closed`, `in_progress`, `completed`, `cancelled`, `archived`) with text search and status filter dropdown.
+  - Displays event type badges, start/end dates formatted in configured IANA timezone, venue/virtual tags, and capacity indicator.
+  - Gated Create Event action by `event.create` permission (or organisation owner/admin).
+- **S2 — Create and Edit Event Dialogs:**
+  - `CreateEventDialog.tsx`: Modal form with server validation for title, slug, type (`general_event` vs `hackathon`), visibility (`private` vs `public`), start/end UTC timestamps, IANA timezone, location/virtual URL, registration open/close boundaries, capacity, and participant instructions.
+  - `EditEventDialog.tsx`: Dedicated editing dialog launched from `EventDetailPage` allowing authorized users (`event.edit`, `organisation_owner`, `organisation_admin`, `event_admin`) to update event properties before terminal status (`completed`, `archived`).
+  - Strict client and server validation: `startAt < endAt`, `registrationClosesAt <= startAt`, `registrationClosesAt > registrationOpensAt`, `capacity > 0`.
+- **S3 — Event Management & Lifecycle Hub (`/app/organisations/:orgId/events/:eventId`):**
+  - Full details view with status badge, type, visibility, IANA timezone, and date schedule.
+  - `Edit Event` button conditionally displayed for permitted users on non-terminal events.
+  - Shareable link button generates `${origin}/events/${event.id}` with clipboard copy confirmation.
+  - Deterministic 7-status lifecycle transition panel enforcing PRD §7.1 (`EVT-002`) state machine with audit logging on every change (`AUD-001`).
+- **Backend Endpoints Verified:**
+  - `GET /api/v1/organisations/:orgId/events` (scoped to org, draft filter)
+  - `POST /api/v1/organisations/:orgId/events` (`event.create`, Zod validation, RLS insert)
+  - `GET /api/v1/organisations/:orgId/events/:eventId` (scoped to org)
+  - `PATCH /api/v1/organisations/:orgId/events/:eventId` (`event.edit`, partial Zod validation)
+  - `PATCH /api/v1/organisations/:orgId/events/:eventId/status` (`event.status.manage`, deterministic transitions)
+  - `GET /api/v1/events` & `GET /api/v1/events/:eventId` (public read, only published + public events)
+- **Verification Evidence:**
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Frontend test suite: `npm test --prefix frontend` (55/55 passing tests across 10 test files, 0 failures).
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) built cleanly in 15.74s with 0 errors.
+
+---
+
+## Phase 6C-1 — Teams & Event-Scoped Membership Summary
+- **Backend Service Implementation (`teamService.js`):**
+  - Added `getMyEventTeam(organisationId, eventId, userId)`: Resolves current user's team membership in a hackathon event, returning formatted team details, member count, and complete member list with user metadata and owner flags.
+  - Added `joinEventTeam(organisationId, eventId, teamId, userId, { ipAddress, userAgent })`: Direct join for open hackathon teams. Verifies event is active `hackathon`, verifies caller has active registration (`status = 'registered'`), verifies caller does not already belong to an active team in the event (`uq_event_team_members_event_user`), locks target team row `FOR UPDATE` to serialize concurrent joins, enforces `team_size_max`, creates membership record, and emits immutable audit log `event.team.member_joined`.
+- **API Routing (`events.js`):**
+  - Mounted `GET /api/v1/organisations/:orgId/events/:eventId/my-team` with `requireAuth`, `requireVerifiedUser`, `resolveOrgContext`, `requireModuleEntitlement('events')`.
+  - Mounted `POST /api/v1/organisations/:orgId/events/:eventId/teams/:teamId/join` with `requireAuth`, `requireVerifiedUser`, `resolveOrgContext`, `requireModuleEntitlement('events')`.
+  - Reused pre-existing `POST /teams`, `GET /teams`, `GET /teams/:teamId`, `POST /teams/:teamId/leave`, and `DELETE /teams/:teamId/members/:userId` endpoints.
+- **Frontend Public Event Detail Integration (`PublicEventDetailPage.tsx`):**
+  - Integrated hackathon teams management section directly into the public event detail page (P2).
+  - Conditionally rendered for `eventType === 'hackathon'`.
+  - Displays "Your Team" banner with team name, description, owner badge, member roster with joined dates, and "Leave Team" button with confirmation modal (`ConfirmDialog`).
+  - Displays "Create Team" dialog form with name and optional description when participant is registered but not in a team.
+  - Displays "Event Teams" roster with real-time member counts vs `teamSizeMax`, full-capacity warnings, and "Join Team" button with loading indicators.
+  - Displays clear "Registration Required for Teams" advisory when visitor is unauthenticated or unregistered.
+- **Automated Verification & Evidence:**
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Frontend test suite: `npm test --prefix frontend` — all 66 tests passed across 11 test files (0 failures), including 3 new test cases in `PublicEventDetailPage.test.tsx` verifying team creation CTA, available teams roster, active team card, owner badge, member roster, and registration requirement gates.
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) built cleanly in 13.26s with 0 errors.
+  - Backend integration test suite: `teams_submissions.integration.test.js` remains **NOT VERIFIED** due to host port limitation (PostgreSQL listens on 5432 while `.env` is configured for 5433). Zero environment credentials modified in compliance with safety policy.
+
+---
+
+## Phase 6C & Events Module Final Closure Summary
+- **Complete Team Invitations Workflow (`teamService.js` & `events.js`):**
+  - Implemented `listTeamInvitations(organisationId, eventId, teamId, actorUserId)`: Redacts raw cryptographic hashes, computes dynamic `is_expired` status based on UTC 7-day cutoff.
+  - Implemented `revokeTeamInvitation(organisationId, eventId, teamId, invitationId, actorUserId, metadata)`: Enforces team owner permissions, serializes via `SELECT ... FOR UPDATE`, transitions unexpired invitation to `revoked`, and logs `event.team.invitation_revoked`.
+  - Implemented `rejectTeamInvitation(organisationId, eventId, token, userId, metadata)`: Cryptographically verifies SHA-256 token hash, checks intended recipient email, verifies invitation is pending and unexpired, updates status to `rejected`, and emits `event.team.invitation_rejected`.
+  - Implemented `getMyTeamInvitations(organisationId, eventId, userId)`: Surfaces pending, valid team invitations matching the authenticated user's email address.
+  - Mounted API routes:
+    - `GET /organisations/:orgId/events/:eventId/teams/:teamId/invites`
+    - `DELETE /organisations/:orgId/events/:eventId/teams/:teamId/invites/:invitationId`
+    - `POST /organisations/:orgId/events/:eventId/team-invites/:token/reject`
+    - `GET /organisations/:orgId/events/:eventId/my-team-invitations`
+- **Submissions and Deliverables Implementation (`EVT-007`):**
+  - Verified backend URL validation (strict http/https URI scheme, SSRF prevention, no local/internal hostnames).
+  - Verified submission window guard (`submission_deadline` enforcement, reject on closed/ineligible event status).
+  - Verified ownership and team boundary (submitter must be registered or belong to submitting team; single submission per team/participant).
+  - Public Event Detail (P2) integration: Integrated Project Submission card displaying submission status, title, description, external repository link, live demo link, deadline enforcement, and interactive submission dialog modal (`SubmissionDialog`).
+- **Judging, Scoring & Official Results Publication (`EVT-008`, `EVT-009`):**
+  - Straight-sum score computation verified (`straight_sum = sum(scores)`).
+  - Tied ranks shared (dense/standard rank alignment per ADR-009).
+  - Complete criteria check enforced before publication (cannot publish unsubmitted scores or partial judge evaluations).
+  - Unpublish / publish state machine verified with audit logging.
+  - Public Event Detail (P2) integration: Rendered official Leaderboard & Results card with rank badges (#1 Gold, #2 Silver, #3 Bronze), submitter/team names, project titles, demo links, and aggregate straight-sum points when results are published.
+- **Automated Verification & Evidence:**
+  - Frontend typecheck: `npm run typecheck --prefix frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Frontend test suite: `npm test --prefix frontend` (`vitest run`) passed with 69/69 passing tests across 11 test suites (0 failures), including 3 new test cases verifying team invitations, project submissions, and official leaderboard rendering.
+  - Frontend production build: `npm run build --prefix frontend` (`tsc && vite build`) passed with 0 errors, bundling in 6.52s.
+  - Backend integration test suites (`teams_submissions.integration.test.js`, `judging_results.integration.test.js`): Configured for port 5433 while host PostgreSQL listens on 5432; strictly reported as **NOT VERIFIED** in adherence to non-destructive credential policies.
+
+---
+
+## ManageX — Student/Participant vs Organisation Identity Leakage Resolution & RBAC Boundary Enforcement Summary
+- **Root Cause Analysis:**
+  - **Global Storage Key Contamination:** `OrgContext.tsx` previously saved `activeOrgId` under the un-namespaced key `managex_active_org_id`. When User A (Organisation Owner) logged out and User B (Participant / Student) logged in on the same browser, User B inherited User A's active organisation ID before `/api/v1/organisations` returned.
+  - **Session & Logout Cleanup Gap:** `AuthContext.tsx` `logout()` invalidated backend session cookies but did not scrub `managex_active_org_id*` from `localStorage` or clear session storage, causing persona leakage across account switches.
+  - **Missing Route Guard on Organisation Workspace:** In `App.tsx`, `/app` and `/app/organisations/:orgId/*` were wrapped solely in `<RequireAuth />`. No guard verified that the authenticated user was an active member of `:orgId`, permitting participants to land on internal organisation pages.
+  - **Persona Fabrication in Workspace Layout:** `WorkspaceLayout.tsx` previously evaluated `{activeOrg?.role?.name || (user?.isPlatformAdmin ? 'Platform Admin' : 'Member')}`, which displayed a fabricated "Member" role for users with 0 organisations. Furthermore, it activated module workspace detection (`isModuleWorkspace`) without checking `activeOrg`.
+  - **Public Shell CTA Misalignment:** `PublicLayout.tsx` displayed a prominent "Workspace" button pointing to `/app` for all authenticated users, including participants with 0 organisation memberships.
+- **Implementation & Security Hardening:**
+  - **User-Scoped Active Organisation Storage (`OrgContext.tsx`):**
+    - Active organisation key is now user-scoped: `managex_active_org_id_${user.id}`.
+    - If user has 0 organisations, `activeOrgId` and `activeDetails` are immediately set to `null`, and any stale stored keys are wiped.
+    - `useOrg()` provides a fail-safe fallback when invoked outside `OrgProvider`, eliminating crashes in isolated views or tests.
+  - **Complete Logout Storage Sanitization (`AuthContext.tsx`):**
+    - `logout()` now systematically iterates and removes all `managex_active_org_id*` keys from `localStorage` and executes `sessionStorage.clear()`.
+  - **Fail-Closed Organisation Route Guard (`RequireOrgAccess` in `RouteGuards.tsx` & `App.tsx`):**
+    - Implemented `RequireOrgAccess`: inspects `:orgId` parameter and verifies active membership via `organisations.some(o => o.id === orgId && o.status === 'active')`.
+    - If user has 0 organisations (Participant persona): renders an accessible fail-closed Access Restricted card with prominent CTAs to "Participant Dashboard", "Browse Public Events", and "Create Organisation".
+    - If user belongs to other organisations: renders Access Restricted card with CTA to return to their verified workspace.
+    - Wrapped all `/app/organisations/:orgId/*` child routes in `<Route element={<RequireOrgAccess />}>`.
+  - **Strict Persona Resolution & Navigation Isolation (`WorkspaceLayout.tsx`):**
+    - Avatar role badge resolves dynamically: `{activeOrg?.role?.name || (user?.isPlatformAdmin ? 'Platform Admin' : (organisations.length > 0 ? 'Member' : 'Participant'))}` — never displays "Member" for participant accounts.
+    - When `organisations.length === 0`: sidebar hides internal organisation modules (Events, Meetings, Projects) and displays "Participant Links" ("Participant Dashboard", "Browse Public Events", "Create Organisation").
+    - `isModuleWorkspace` strictly requires `Boolean(activeOrg)`, preventing organizer workspace headers from rendering without an active organisation context.
+  - **Public and Portal Shell Persona Alignment (`PublicLayout.tsx` & `EventPortalLayout.tsx`):**
+    - `PublicLayout.tsx` conditionally renders "Workspace" (`/app`) for users with active organisations (`organisations.length > 0`) and "Dashboard" (`/events/dashboard`) for participant accounts (`organisations.length === 0`).
+    - `EventPortalLayout.tsx` provides an "Organisation Workspace" shortcut exclusively for dual-purpose accounts (`organisations.length > 0`).
+  - **Fail-Closed Top-Level Backend Router Defense (`meetings.js` & `projects.js`):**
+    - Configured top-level router middleware: `meetingsRouter.use(requireOrgMembership)` and `meetingsRouter.use(requireModuleEntitlement('meetings'))`.
+    - Matches pre-existing top-level protection in `projectsRouter.js`, ensuring fail-closed defense-in-depth on internal organisation modules.
+    - Note on `events.js`: As established in ADR-022, `eventsRouter` uses granular per-route middleware to support external participants without organisation membership.
+  - **Graceful Error States on Module Pages (`MeetingsPage.tsx`, `ProjectsPage.tsx`, `EventsPage.tsx`):**
+    - When 403 `MEMBERSHIP_REQUIRED` or `MODULE_DISABLED` is returned by the API, pages render a dedicated Access Restricted card rather than displaying interactive search bars, filters, and creation dialogs.
+- **Verification Evidence:**
+  - **Backend Live Test Suite (`npm test --prefix backend`):** 323/323 tests passed across 23 test suites (0 failures), verifying complete multi-tenant isolation, NOBYPASSRLS enforcement, and RBAC defense.
+  - **Frontend Typecheck (`npm run typecheck --prefix frontend`):** `tsc --noEmit` exited with code 0 (zero errors).
+  - **Frontend Test Suite (`npm test --prefix frontend`):** 75/75 tests passed across 11 test suites (0 failures), including dedicated test cases in `RouteGuards.test.tsx` and `WorkspaceLayout.test.tsx` verifying participant persona isolation, role labeling, and access denial.
+  - **Frontend Production Build (`npm run build --prefix frontend`):** `tsc && vite build` built cleanly in 15.54s with 0 errors.
+
+---
+
+## ManageX — Post-Fix Security Regression Verification Report
+
+### 1. Events Router Scope Audit & Middleware Correction
+- **Finding:** A previous commit had placed top-level `eventsRouter.use(requireOrgMembership)` and `eventsRouter.use(requireModuleEntitlement('events'))` at the root of `backend/src/routes/events.js`. Because `eventsRouter` also hosts participant-facing endpoints (e.g. `POST /:eventId/register`, `POST /:eventId/withdraw`, `GET /:eventId/my-registration`, `POST /:eventId/teams`, `POST /:eventId/submissions`, `GET /:eventId/my-team`), non-member participants with verified accounts were blocked with 403 `MEMBERSHIP_REQUIRED`.
+- **Resolution (ADR-022):**
+  - Removed root-level `eventsRouter.use(requireOrgMembership)` and `eventsRouter.use(requireModuleEntitlement('events'))`.
+  - Re-audited and confirmed all 27 organiser-only management routes in `eventsRouter` explicitly enforce `requireOrgMembership`, `requireModuleEntitlement('events')`, and scoped RBAC permissions (`event.create`, `event.edit`, `event.status.manage`, `event.participant.manage`, `event.judge.assign`, `event.score`, `event.results.publish`).
+  - Participant routes use `requireAuth`, `requireVerifiedUser`, `resolveOrgContext`, and `requireModuleEntitlement('events')`, along with domain checks (registration eligibility, team membership, submission ownership).
+  - Public discovery endpoints remain unauthenticated and allowlist-filtered.
+
+### 2. Meetings and Projects Route Coverage Verification
+- Audited `backend/src/routes/meetings.js` and `backend/src/routes/projects.js`.
+- Confirmed that because Meetings and Projects are purely internal organisation modules with zero external participant or public endpoints, both routers safely maintain top-level `requireOrgMembership` and `requireModuleEntitlement`.
+- Verified that confidential meeting minutes (`meeting.notes.read`) and private project/task resources cannot be accessed across tenant boundaries or by unprivileged members.
+
+### 3. Dedicated Boundary Regression Test Suite (`events_boundaries.integration.test.js`)
+Created and executed 24 comprehensive automated integration tests against live PostgreSQL on port 5433 verifying:
+1. **Anonymous Public Access:** Anonymous visitors can list published public events and view public details; draft and private events are hidden (404).
+2. **Authenticated Participant Operations (0 Org Memberships):** Participants can register, query own status, view active participant dashboard, and withdraw/reactivate registrations without organisation membership.
+3. **Team & Submission Boundaries:** Registered participants can create teams and submit project URLs; unregistered users are rejected with 403 `REGISTRATION_REQUIRED`; non-team members are rejected with 403; non-http or dangerous URLs are rejected with 422.
+4. **Organiser Lockout for Non-Members:** Participants (0 org memberships) cannot list internal events, create events, edit events, change event status, or inspect staff participant rosters (all fail closed with 403 `MEMBERSHIP_REQUIRED`).
+5. **Scoped Permission Enforcement:** Regular members lacking `event.create` or `event.status.manage` are blocked with 403 `FORBIDDEN`; privileged owners/admins perform organiser tasks normally.
+6. **Cross-Organisation Isolation:** Users belonging to Organisation B cannot read, mutate, or inspect rosters in Organisation A (403 `MEMBERSHIP_REQUIRED`).
+
+### 4. Consolidated Test & Build Verification
+- **Backend Full Test Suite (`npm test --prefix backend`):** **347/347 tests passed (100%)** across 30 suites with 0 failures.
+- **Frontend Test Suite (`npm test --prefix frontend`):** **75/75 tests passed (100%)** across 11 suites with 0 failures.
+- **Frontend Typecheck (`npm run typecheck --prefix frontend`):** `tsc --noEmit` exited with code 0 (clean).
+- **Frontend Production Build (`npm run build --prefix frontend`):** `tsc && vite build` bundled successfully in 15.74s.
+
+---
+
+## ManageX — UX Improvement Batch 1 Implementation Report
+
+### 1. Requirements Implemented
+- **Replaced Raw UUID Inputs with Searchable Member Pickers:**
+  - `MeetingDetailPage.tsx`: Meeting attendee modal now fetches active organisation members (`/organisations/:orgId/members`) and renders a member select picker filtering out members who are already attendees. Action items modal provides grouped selection (`Meeting Attendees` and `Other Organisation Members`) eliminating manual UUID inputs.
+  - `EventDetailPage.tsx`: Hackathon judge assignment modal now fetches active organisation members and event submissions, providing dropdown pickers for both judge selection and submission target scope without raw UUID inputs.
+- **Kept Users in Same Browser Tab (Internal Navigation):**
+  - `WorkspaceLayout.tsx`: Removed `target="_blank"`, `rel="noopener noreferrer"`, and external link icons from desktop and mobile sidebar module links.
+  - `WorkspaceOverviewPage.tsx`: Removed `target="_blank"`, `rel="noopener noreferrer"`, and external link icons from quick action shortcut buttons and module overview workspace action buttons.
+  - Renamed `Modules & Entitlements` to `Modules & Features` in navigation.
+- **Public Header Avatar Link:**
+  - `PublicLayout.tsx`: Avatar and user name in header now dynamically link to `/app` (organisation workspace) for users with active organisations (`organisations.length > 0`), and to `/events/dashboard` for participant-only accounts (0 organisations).
+  - Renamed navbar item `Security & Tenancy` to `Security & Privacy`.
+  - Replaced footer status copy with factual non-absolute wording `All Systems Operational • Organisation-level access controls`.
+  - Dual-purpose users retain direct header access to both their organisation workspace and their participant dashboard.
+- **Accessible Confirmation Dialogs (`<ConfirmDialog />`):**
+  - Completely replaced all 8 native browser `window.confirm()` and `alert()` popups across `MeetingDetailPage.tsx`, `MembersPage.tsx`, and `ProjectDetailPage.tsx` with accessible, non-blocking modal `<ConfirmDialog />` instances with cancel actions and destructive styling.
+- **Event Lifecycle Panel Plain-Language UI:**
+  - `EventDetailPage.tsx`: Replaced developer jargon (`Lifecycle State Machine`, `PRD §7.2`, `valid canonical transitions`) with clean `Event Status & Actions`, current status badge, and user-friendly action buttons (`Publish Event`, `Start Event`, `Close Registration`, `Mark as Completed`, `Cancel Event`, `Archive Event`, `Revert to Draft`).
+- **Copy & Jargon Polish:**
+  - `LoginPage.tsx` & `RegisterPage.tsx`: Updated auth descriptions to welcome both workspace members and event participants.
+  - `ErrorPages.tsx`: Updated 403 Forbidden description to plain English.
+  - `CreateEventDialog.tsx` & `EditEventDialog.tsx`: Changed label from `Timezone (IANA) *` to `Event Timezone *`.
+  - `PlatformOrganisationsPage.tsx` & `PlatformAuditLogsPage.tsx`: Removed PRD clause citations (`PLAT-003`, `PLAT-007`, `PRD SEC-007/AUD-003`, `PRD SEC-009`) and clarified privacy boundaries (protected by organisation-level access controls and Row-Level Security).
+- **Central Audit Action Formatter:**
+  - `OrgAuditLogsPage.tsx` & `PlatformAuditLogsPage.tsx`: Exported and applied `formatAuditAction()` converting internal dot-notation keys (`org.ownership_transferred`, `member.role_assigned`, etc.) to human-readable labels (`Ownership Transferred`, `Role Assigned`, etc.).
+- **Participant Terminology Standardisation:**
+  - Standardised on `Participant Dashboard` across `EventPortalLayout.tsx`, `StudentDashboardPage.tsx`, and related navigation.
+
+### 2. Verification & Test Results
+- **Backend Full Test Suite (`npm test --prefix backend`):** **347/347 tests passed (100%)** across 30 suites with 0 failures.
+- **Frontend Typecheck (`npm run typecheck --prefix frontend`):** `tsc --noEmit` exited with code 0 (clean).
+- **Frontend Test Suite (`npm test --prefix frontend`):** **75/75 tests passed (100%)** across 11 test suites with 0 failures.
+- **Frontend Production Build (`npm run build --prefix frontend`):** `tsc && vite build` built production bundle in 16.40s with exit code 0.
+
+---
+
+## ManageX — Phase 2A: Judge Scheduling & Evaluation Database Foundation Report
+
+### 1. Requirements Implemented
+- **Forward Database Migration for Optional Round Evaluations:**
+  - Implemented migration `database/migrations/20261017000029_evaluation_database_foundation.sql`.
+  - Added composite unique constraint `uq_event_teams_id_event UNIQUE (event_id, id)` on existing `event_teams` table to support foreign key referential integrity without cross-event leakage.
+  - Created 4 core tables:
+    1. `round_evaluations`: 1:0..1 optional relationship with `event_rounds` via `UNIQUE (round_id)`. Holds evaluation configuration (`evaluation_mode`, `status`, `session_duration_minutes`, `buffer_minutes`, `judges_per_panel`, `evaluations_per_team`, `schedule_starts_at`, `schedule_ends_at`, `default_meeting_url`).
+    2. `evaluation_panels`: Panels attached to `round_evaluations`, scoped by `(organisation_id, event_id)` and `(round_evaluation_id, panel_number)`.
+    3. `evaluation_panel_judges`: Assigned judges per panel, with composite unique constraint `uq_pjudges_eval_judge (round_evaluation_id, judge_user_id)` strictly preventing concurrent panel assignments across the same round evaluation.
+    4. `evaluation_sessions`: Time-slotted live sessions with composite foreign keys enforcing event/round/team matching `(event_id, team_id) REFERENCES event_teams(event_id, id)` and `(event_id, round_evaluation_id) REFERENCES round_evaluations(event_id, id)`.
+- **Database-Level Row-Level Security (RLS) & Non-Member Judge Access:**
+  - `FORCE ROW LEVEL SECURITY` enabled on all 4 new tables.
+  - Non-recursive RLS policy definitions prevent PostgreSQL `42P17` infinite recursion.
+  - Organization isolation strictly enforced across all operations.
+  - Assigned non-member judges are authorized for `SELECT` on their assigned panel, assignment rows, and sessions without granting them organisation membership.
+  - Participants granted `SELECT` only on published evaluation sessions and panels when registered for the event.
+  - Mutations (`INSERT`, `UPDATE`, `DELETE`) restricted to active organisation members and platform admin (fail-closed for judges/participants).
+- **Zero Schema Drift & Backward Compatibility:**
+  - Un-evaluated rounds operate normally without `round_evaluations` rows.
+  - All existing judge assignment, scoring, and advancement services remain untouched and 100% backward compatible.
+
+### 2. Files Created
+- `database/migrations/20261017000029_evaluation_database_foundation.sql`: Forward DDL and RLS migration.
+- `backend/src/platform/events/evaluation_foundation.integration.test.js`: Comprehensive 10-test suite verifying referential integrity, cross-event rejection, check constraints, RLS tenant isolation, assigned judge queries, unauthorized mutation rejection, and un-evaluated round backward compatibility.
+
+### 3. Database Migration Applied
+- Migration identifier: `20261017000029_evaluation_database_foundation.sql` (checksum tracked in `schema_migrations`). Total applied migrations: 29.
+
+### 4. Commands Executed & Test Results
+- `node database/migrate.js`: Exit code 0 (`Applied: 1, Total: 29`).
+- `node --test backend/src/platform/events/evaluation_foundation.integration.test.js`: **10/10 tests passed (100%)** (exit code 0).
+- `node --test backend/src/platform/events/rounds.integration.test.js`: **16/16 tests passed (100%)** (exit code 0).
+- `node --test backend/src/platform/events/judging_results.integration.test.js`: **20/20 tests passed (100%)** (exit code 0).
+
+### 5. Pass/Fail Results & Unresolved Failures
+- Pass rate: **100%** (46/46 tests passing across all three verified suites).
+- Unresolved failures: **None**.
+
+### 6. Security Implications & Deferred Work
+- **Security Invariants Preserved:**
+  - No organization membership granted to external judges or participants.
+  - Runtime database role (`managex_app`) retains `NOBYPASSRLS`.
+  - Transaction-local settings (`app.current_organisation_id`, `app.current_user_id`, `app.current_is_platform_admin`) govern all queries.
+  - Cross-event team linking strictly blocked at the database level by foreign key `fk_sessions_team (event_id, team_id) REFERENCES event_teams(event_id, id)`.
+- **Deferred to Phase 2B+:**
+  - Backend service implementation (`evaluationService.js`).
+  - Scheduling algorithms and slot generation.
+  - Assignment projection / synchronization to `event_judge_assignments`.
+  - Organiser and judge UI routes and components.
+  - Real-time/external meeting provider link distribution.
+
+### 7. Acceptance Criteria Verification
+- [x] Forward migration 029 applies cleanly and records in `schema_migrations`.
+- [x] Composite foreign keys prevent cross-event team/session tampering.
+- [x] Check constraints enforce duration, buffer, and positive bounds.
+- [x] Unique constraints enforce 1:0..1 round evaluation and single-panel assignment per judge per round.
+- [x] FORCE ROW LEVEL SECURITY enabled on all 4 tables with non-recursive policies.
+- [x] Automated integration suite verifies schema integrity and backward compatibility.
+- [x] Zero changes to existing authentication, organisation middleware, or PRD business logic.
+
+### 8. Exact Next Phase
+- **Phase 2A.1:** Evaluation RLS Security Hardening & Least-Privilege Enforcement.
+
+---
+
+## ManageX — Phase 2A.1: Evaluation RLS Security Hardening Report
+
+### 1. Requirements Implemented
+- **Removed Platform Support Mutation Bypass:**
+  - Implemented forward migration `database/migrations/20261017000030_evaluation_rls_security_hardening.sql`.
+  - Replaced all 12 mutation policies (`INSERT`, `UPDATE`, `DELETE`) across `round_evaluations`, `evaluation_panels`, `evaluation_panel_judges`, and `evaluation_sessions`.
+  - Completely removed `COALESCE(NULLIF(current_setting('app.current_is_platform_admin', true), ''), 'false')::boolean = true` from all mutation policies.
+  - Required strict active organisation membership (`organisation_memberships m WHERE m.status = 'active'`) and matching `organisation_id` context. Platform support agents attempting to insert, update, or delete customer operational evaluation data fail closed.
+- **Protected Meeting URLs & Private Evaluation Data:**
+  - Replaced all 4 `SELECT` policies across the evaluation tables to remove the automated `app.current_is_platform_admin` read bypass.
+  - Platform support without active tenant membership receives 0 rows when attempting to query `round_evaluations`, `evaluation_panels`, `evaluation_panel_judges`, or `evaluation_sessions`. Full meeting URLs (`default_meeting_url`, `meeting_url`) and judge user IDs are protected from support exposure at the database RLS layer.
+- **Tenant Isolation & Participant Session Scoping:**
+  - Missing tenant context (`app.current_organisation_id` is null or empty) strictly fails closed across all queries and mutations.
+  - Participants can only view their own team's session (`tm.team_id = evaluation_sessions.team_id`) when published; cannot view other teams' sessions or private meeting links.
+  - Organisers retain full administrative access to their organisation's evaluations, panels, judges, and sessions.
+
+### 2. Files Created or Changed
+- `database/migrations/20261017000030_evaluation_rls_security_hardening.sql`: Forward migration replacing 16 RLS policies with hardened least-privilege definitions.
+- `backend/src/platform/events/evaluation_foundation.integration.test.js`: Expanded from 10 to 15 tests, verifying platform support mutation lockout, zero data exposure to platform support, missing tenant context failure, participant own-team isolation, and organiser management.
+- `docs/security.md`: Documented Section 4.D Evaluation & Judge Scheduling Boundary.
+
+### 3. Verification & Test Results
+- `node database/migrate.js`: Exit code 0 (`Applied: 1, Total: 30`).
+- `node --test backend/src/platform/events/evaluation_foundation.integration.test.js`: **15/15 tests passed (100%)**.
+- `node --test backend/src/platform/events/rounds.integration.test.js`: **16/16 tests passed (100%)**.
+- `node --test backend/src/platform/events/judging_results.integration.test.js`: **20/20 tests passed (100%)**.
+
+### 4. Exact Next Phase
+- **Phase 2B:** Evaluation Service, Scheduling Algorithms, and Sync Projection.
