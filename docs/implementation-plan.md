@@ -2,6 +2,17 @@
 
 This plan defines the dependency-ordered implementation phases, vertical slices, prerequisites, and exit criteria required to build ManageX in strict alignment with `docs/PRD.md` and `docs/ManageX_Antigravity_Prompt_Pack.md`.
 
+### Evaluation Hardening Phase 1
+
+The first hardening slice for `docs/event_hack_new_prd.md` is implemented as a forward-only backend change:
+
+1. dedicated evaluation permissions and strict tenant-scoped route authorization;
+2. explicit grants for privileged existing roles plus read-only grants for existing judge/participant roles;
+3. runtime fixes for evaluation caller detection;
+4. `no_show` database constraint alignment and regression coverage.
+
+The migration must be reviewed and applied only through the normal migration process against a confirmed isolated environment. Scheduling concurrency redesign, invitation lifecycle, session-to-submission schema changes, completion workflows, and frontend work remain subsequent phases.
+
 ---
 
 ## 1. Phase Dependency Roadmap
@@ -110,6 +121,36 @@ flowchart TD
 - **Objective:** Establish the multi-round hackathon database foundation, backward-compatible initialization, round management API, and organiser workspace round configuration UI.
 - **Prerequisites:** Phase 02A Read-Only Audit approved.
 - **Exit Gate:** Migration `025_multi_round_hackathons.sql` applied cleanly with default Round 1 backfill; `event_rounds` and `event_round_advancements` enforced under RLS; round management CRUD routes tested with 100% pass rate (81/81 backend event tests, 46/46 frontend tests); clean frontend typecheck and production build.
+
+### Phase 02C: Multi-Round Submissions, Advancement & Scoring
+- **Objective:** Implement round-scoped submissions, round eligibility gating, multi-round advancement engine (`top_n` with cutoff tie qualification, `score_threshold`, `manual`), round-scoped scoring criteria and evaluation, round leaderboard calculation, unpublished score privacy, and round results publication.
+- **Prerequisites:** Phase 02B complete.
+- **Exit Gate:** Migration `20261017000026_round_scoped_submissions_evaluations.sql` applied cleanly; partial unique indexes and composite FKs prevent cross-event/cross-round leaks; 15/15 tests passing in `advancement.integration.test.js`; 96/96 tests passing across all backend event suites; 47/47 passing frontend tests; clean typecheck and Vite build.
+
+### Phase 02D: Multi-Round Hackathon Finalization & Integrity Hardening
+- **Objective:** Complete integrity hardening across advancement consistency, round-scoped judging, score edit lockout after advancement, incomplete judging prevention, immediate unpublication privacy, and safe round deletion guards.
+- **Prerequisites:** Phase 02C complete.
+- **Exit Gate:** Migration `20261017000027_multi_round_hardening_integrity.sql` applied cleanly; `is_manual` preservation verified; 12/12 tests passing in `hardening.integration.test.js`; 108/108 tests passing across all 7 backend event integration test suites; 47/47 passing frontend tests; clean frontend typecheck.
+
+### Phase 2A: Judge Scheduling & Evaluation Database Foundation
+- **Objective:** Implement the forward database schema foundation for optional round-level evaluation and scheduling (`round_evaluations`, `evaluation_panels`, `evaluation_panel_judges`, `evaluation_sessions`), composite uniqueness constraints, cross-event foreign key integrity, non-recursive RLS policies, and database-level integration tests.
+- **Prerequisites:** Approved Phase 1B / Phase 1B.1 Architecture Audit.
+- **Exit Gate:** Migration `20261017000029_evaluation_database_foundation.sql` applied cleanly; `FORCE ROW LEVEL SECURITY` on all 4 tables; 10/10 tests passing in `evaluation_foundation.integration.test.js`; 100% backward compatibility for rounds without evaluation; zero regressions across existing event test suites.
+
+### Phase 4D: Participant Evaluation Schedule
+- **Objective:** Integrate live evaluation appointments and panel schedule details into the participant experience across the Student Dashboard and Public Event pages, while upholding the 10-minute meeting URL unlock policy, redacting internal evaluator data, and enabling manual schedule refresh.
+- **Prerequisites:** Phase 4C / 4C-BE complete.
+- **Exit Gate:** Reusable `ParticipantEvaluationSchedule` component implemented with loading, error, empty, active, and lock-timer states; integrated into `StudentDashboardPage.tsx` and `PublicEventDetailPage.tsx`; 8/8 component tests passing; 97/97 total frontend tests passing; zero typecheck errors and clean Vite production bundle.
+
+### Phase 4E: End-to-End Evaluation Workflow Verification
+- **Objective:** Exhaustively verify the end-to-end evaluation lifecycle across Organiser, Judge, Participant, and Public personas: event setup, round/criteria configuration, judge token invitation & assignment, scheduling concurrency, schedule publication, external judge session scoring, participant meeting unlock, completion idempotency, results publication/unpublication, and multi-round advancement. Remediate uncovered routing gaps and enforce non-destructive test isolation.
+- **Prerequisites:** Phase 4D complete.
+- **Exit Gate:** Full lifecycle validated across 8 backend test suites (135+ tests passing on `managex_test`), 97/97 frontend tests passing, clean TypeScript compilation, clean Vite production build, zero destructive cleanup in test suites, verified route mounts in `events.js`, and documented remaining gaps.
+
+### Phase 4F: Judge Workspace Scoring UI
+- **Objective:** Implement interactive judge scoring workflow within `JudgeWorkspacePage` using existing session-scoped backend APIs (`GET/POST .../evaluation/sessions/:sessionId/work|scores`), supporting criteria display, rubric validation, score entry, private notes, duplicate prevention, state preservation on failure, and real-time total calculations.
+- **Prerequisites:** Phase 4E complete.
+- **Exit Gate:** `JudgeScoringDialog` implemented and integrated into `JudgeWorkspacePage.tsx`; 11/11 focused tests passing in `JudgeWorkspacePage.test.tsx`; 105/105 total frontend tests passing; 0 TypeScript compilation errors; clean production bundle build (`npm run build`).
 
 ### Phase 11: Staging/Production Release Readiness & Free-Tier Deployment
 - **Objective:** Preflight environment configuration, Vercel frontend build/rewrite verification, Render backend deployment, Neon PostgreSQL migrations, runbook validation.

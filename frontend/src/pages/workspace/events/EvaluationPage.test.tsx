@@ -95,6 +95,68 @@ describe('EvaluationPage', () => {
     expect(html).toContain('Invitations and completion');
   });
 
+  it('renders specific tab content according to active tab or search params', () => {
+    vi.spyOn(OrgContextModule, 'useOrg').mockReturnValue({
+      organisations: [],
+      activeOrg: null,
+      activeDetails: {
+        organisation: { id: 'org-1', name: 'Org', slug: 'org', status: 'active' },
+        membership: {
+          id: 'membership-1',
+          role: { slug: 'event_admin', name: 'Event Admin' },
+          permissions: [
+            'event.evaluation.view',
+            'event.evaluation.manage',
+            'event.evaluation.judge.manage',
+            'event.evaluation.schedule.manage',
+            'event.evaluation.schedule.publish',
+          ],
+        },
+      },
+      isLoading: false,
+      switchOrg: vi.fn(),
+      refreshOrganisations: vi.fn(),
+      createOrganisation: vi.fn(),
+    });
+
+    const htmlPanels = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-1/events/event-1/rounds/round-1/evaluation?tab=panels']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId/rounds/:roundId/evaluation"
+            element={<EvaluationPage initialLoading={false} initialTab="panels" />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(htmlPanels).toContain('No panels configured');
+
+    const htmlSchedule = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-1/events/event-1/rounds/round-1/evaluation?tab=schedule']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId/rounds/:roundId/evaluation"
+            element={<EvaluationPage initialLoading={false} initialTab="schedule" />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(htmlSchedule).toContain('Schedule start');
+    expect(htmlSchedule).toContain('Replace scheduled sessions');
+
+    const htmlInvitations = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-1/events/event-1/rounds/round-1/evaluation?tab=invitations']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId/rounds/:roundId/evaluation"
+            element={<EvaluationPage initialLoading={false} initialTab="invitations" />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(htmlInvitations).toContain('Judges need a verified account');
+  });
+
   it('generates schedules without overwrite by default and requires explicit overwrite confirmation in the page', async () => {
     const request = vi.fn().mockResolvedValue({ success: true });
     await generateEvaluationSchedule('/organisations/org-1/events/event-1/rounds/round-1/evaluation', '2026-10-24T10:00:00.000Z', false, request);

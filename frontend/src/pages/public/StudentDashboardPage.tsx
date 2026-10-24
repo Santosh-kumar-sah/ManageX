@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/api/client';
 import { useAuth } from '@/api/AuthContext';
+import { ParticipantEvaluationSchedule } from '@/components/events/ParticipantEvaluationSchedule';
 
 interface RegistrationItem {
   id: string;
@@ -659,6 +660,26 @@ export function StudentDashboardPage({
                                   </Button>
                                 </Link>
                               </div>
+
+                              {/* Scheduled Evaluation Appointment */}
+                              {team?.id ? (
+                                <div className="ml-7 pt-2.5 border-t border-border">
+                                  <ParticipantEvaluationSchedule
+                                    eventId={event.id}
+                                    roundId={round.id}
+                                    roundName={round.name}
+                                    roundNumber={round.roundNumber}
+                                    teamId={team.id}
+                                    teamName={team.name}
+                                    timezone={event.timezone}
+                                    showEmptyState={true}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="ml-7 pt-2 border-t border-border text-xs text-slate-500 italic">
+                                  Form or join a team to view scheduled round evaluation appointments.
+                                </div>
+                              )}
                             </div>
                           );
                         })}

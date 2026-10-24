@@ -139,6 +139,7 @@ describe('Phase 6B — Event Registration, Windows & External Participants Suite
         endAt: endAt.toISOString(),
         registrationClosesAt: regClosesAt.toISOString(),
         capacity: 10,
+        participantInstructions: 'Confidential Discord room: #hackathon-room-42',
       });
     publishedEventId = pubRes.body.data.event.id;
 
@@ -236,7 +237,7 @@ describe('Phase 6B — Event Registration, Windows & External Participants Suite
   // ---------------------------------------------------------------------------
   // 2. EVT-004: Own Registration Status View
   // ---------------------------------------------------------------------------
-  it('2. EVT-004: Registrant can query their own registration status', async () => {
+  it('2. EVT-004: Registrant can query their own registration status and receives confidential instructions', async () => {
     const res = await request(app)
       .get(`/api/v1/organisations/${orgAId}/events/${publishedEventId}/my-registration`)
       .set('Cookie', [externalCookie, csrfCookie]);
@@ -246,6 +247,20 @@ describe('Phase 6B — Event Registration, Windows & External Participants Suite
     assert.ok(res.body.data.registration);
     assert.equal(res.body.data.registration.status, 'registered');
     assert.equal(res.body.data.registration.userId, externalUserId);
+    assert.equal(
+      res.body.data.registration.participantInstructions,
+      'Confidential Discord room: #hackathon-room-42',
+      'Registered participant must receive participant instructions through authorized endpoint'
+    );
+
+    // Invariant: Public endpoint must NEVER leak instructions
+    const pubRes = await request(app).get(`/api/v1/events/${publishedEventId}`);
+    assert.equal(pubRes.status, 200);
+    assert.equal(
+      pubRes.body.data.event.participantInstructions,
+      undefined,
+      'Public event endpoint must strip participant instructions from response'
+    );
   });
 
   // ---------------------------------------------------------------------------
@@ -282,6 +297,11 @@ describe('Phase 6B — Event Registration, Windows & External Participants Suite
       .get(`/api/v1/organisations/${orgAId}/events/${publishedEventId}/my-registration`)
       .set('Cookie', [externalCookie, csrfCookie]);
     assert.equal(statusRes.body.data.registration.status, 'withdrawn');
+    assert.equal(
+      statusRes.body.data.registration.participantInstructions,
+      null,
+      'Withdrawn participant must not receive participant instructions'
+    );
   });
 
   // ---------------------------------------------------------------------------

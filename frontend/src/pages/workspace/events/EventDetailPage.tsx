@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -18,6 +18,7 @@ import {
   Users,
   Code2,
   Play,
+  Check,
   CheckCircle,
   XCircle,
   Archive,
@@ -78,20 +79,92 @@ interface ParticipantsResponse {
   };
 }
 
+export type EventDetailTab =
+  | 'overview'
+  | 'registrations'
+  | 'teams'
+  | 'submissions'
+  | 'judging'
+  | 'results'
+  | 'settings';
+
+export type JudgingSubTab = 'rounds' | 'criteria' | 'work';
+export type CriteriaSubTab = 'criteria' | 'judges';
+
 export function EventDetailPage({
   initialEvent = null,
   initialLoading = true,
   initialRounds = [],
+  initialTab,
+  initialJudgingSubTab,
+  initialCriteriaSubTab,
 }: {
   initialEvent?: EventItem | null;
   initialLoading?: boolean;
   initialRounds?: EventRound[];
+  initialTab?: EventDetailTab;
+  initialJudgingSubTab?: JudgingSubTab;
+  initialCriteriaSubTab?: CriteriaSubTab;
 } = {}) {
   const { orgId, eventId } = useParams<{ orgId: string; eventId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { activeOrg, activeDetails } = useOrg();
 
   const effectiveOrgId = orgId && orgId !== 'default' ? orgId : activeOrg?.id;
+
+  const paramTab = searchParams.get('tab') as EventDetailTab | null;
+  const resolvedDefaultTab: EventDetailTab =
+    initialTab ||
+    (paramTab && ['overview', 'registrations', 'teams', 'submissions', 'judging', 'results', 'settings'].includes(paramTab)
+      ? paramTab
+      : initialRounds.length > 0
+      ? 'judging'
+      : 'overview');
+
+  const [activeTab, setActiveTab] = useState<EventDetailTab>(resolvedDefaultTab);
+
+  const handleTabClick = (tab: EventDetailTab) => {
+    setActiveTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    });
+  };
+
+  const paramSubTab = searchParams.get('subtab') as JudgingSubTab | null;
+  const [judgingSubTab, setJudgingSubTab] = useState<JudgingSubTab>(
+    initialJudgingSubTab ||
+    (paramSubTab && ['rounds', 'criteria', 'work'].includes(paramSubTab) ? paramSubTab : 'rounds')
+  );
+
+  const handleJudgingSubTabChange = (subTab: JudgingSubTab) => {
+    setJudgingSubTab(subTab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'judging');
+      next.set('subtab', subTab);
+      return next;
+    });
+  };
+
+  const paramCriteriaSubTab = searchParams.get('criteriatab') as CriteriaSubTab | null;
+  const [criteriaSubTab, setCriteriaSubTab] = useState<CriteriaSubTab>(
+    initialCriteriaSubTab ||
+    (paramCriteriaSubTab && ['criteria', 'judges'].includes(paramCriteriaSubTab) ? paramCriteriaSubTab : 'criteria')
+  );
+
+  const handleCriteriaSubTabChange = (tab: CriteriaSubTab) => {
+    setCriteriaSubTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'judging');
+      next.set('subtab', 'criteria');
+      next.set('criteriatab', tab);
+      return next;
+    });
+  };
 
   const [event, setEvent] = useState<EventItem | null>(initialEvent);
   const [isLoading, setIsLoading] = useState(initialEvent ? false : initialLoading);
@@ -251,6 +324,11 @@ export function EventDetailPage({
       activeDetails?.membership?.permissions?.includes('event.edit')) &&
     event !== null &&
     !['completed', 'archived'].includes(event.status);
+
+  const effectiveJudgingSubTab: JudgingSubTab =
+    judgingSubTab === 'rounds' && !canManageRounds && judgeWork.length > 0
+      ? 'work'
+      : judgingSubTab;
 
   // 1. Fetch Event Details
   const fetchEvent = useCallback(async () => {
@@ -1298,6 +1376,7 @@ export function EventDetailPage({
 
   return (
     <div className="space-y-6">
+      
       {/* Header & Navigation */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -1320,15 +1399,67 @@ export function EventDetailPage({
               {EVENT_STATUS_LABELS[event.status]}
             </Badge>
             <Badge variant="neutral" className="uppercase tracking-wider font-mono text-[10px]">
-              {event.eventType === 'hackathon' ? 'Hackathon' : 'General Event'}
+              {event.eventType === 'hackathon' ? 'Hackathon · ' + (event.visibility === 'public' ? 'Public' : 'Private') : 'General Event · ' + (event.visibility === 'public' ? 'Public' : 'Private')}
             </Badge>
-            <span className="text-xs font-mono text-slate-400 capitalize">
-              {event.visibility}
-            </span>
           </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {formatDateTime(event.startAt, event.timezone)} to {formatDateTime(event.endAt, event.timezone)} · {event.locationType === 'virtual' ? 'Virtual Meeting' : (event.location || 'In Person')}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {canManageStatus && allowedTransitions.includes('registration_closed') && (
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={isUpdatingStatus}
+              onClick={() => handleStatusTransition('registration_closed')}
+              className="flex items-center gap-1.5 text-xs font-medium"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span>Close registration</span>
+            </Button>
+          )}
+
+          {canManageStatus && !allowedTransitions.includes('registration_closed') && allowedTransitions.includes('in_progress') && (
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={isUpdatingStatus}
+              onClick={() => handleStatusTransition('in_progress')}
+              className="flex items-center gap-1.5 text-xs font-medium"
+            >
+              <Play className="h-3.5 w-3.5" />
+              <span>Start Event</span>
+            </Button>
+          )}
+
+          {canManageStatus && !allowedTransitions.includes('registration_closed') && !allowedTransitions.includes('in_progress') && allowedTransitions.includes('published') && (
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={isUpdatingStatus}
+              onClick={() => handleStatusTransition('published')}
+              className="flex items-center gap-1.5 text-xs font-medium"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              <span>Publish Event</span>
+            </Button>
+          )}
+
+          {canEditEvent && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditOpen(true)}
+              data-testid="edit-event-button"
+              className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 border-slate-300"
+            >
+              <Edit3 className="h-3.5 w-3.5" />
+              <span>Edit Event</span>
+            </Button>
+          )}
+
           {event.status === 'published' && event.visibility === 'public' && (
             <Button
               variant="outline"
@@ -1351,22 +1482,9 @@ export function EventDetailPage({
             </Button>
           )}
 
-          {canEditEvent && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditOpen(true)}
-              data-testid="edit-event-button"
-              className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 border-slate-300"
-            >
-              <Edit3 className="h-3.5 w-3.5" />
-              <span>Edit Event</span>
-            </Button>
-          )}
-
           <Link to={`/app/organisations/${effectiveOrgId}/events`}>
-            <Button variant="outline" className="flex items-center gap-2">
-              <ArrowLeft className="h-4 w-4" /> Back to Events
+            <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Events
             </Button>
           </Link>
         </div>
@@ -1375,367 +1493,365 @@ export function EventDetailPage({
       {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
       {successMsg && <Alert variant="success">{successMsg}</Alert>}
 
-      {/* Lifecycle Transitions Panel (Staff Only) */}
-      {canManageStatus && (
-        <Card className="border-brand-100 bg-brand-50/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center justify-between">
-              <span>Event Status & Actions</span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-normal text-slate-500">Current Status:</span>
-                <Badge variant={EVENT_STATUS_VARIANTS[event.status] || 'neutral'}>
-                  {EVENT_STATUS_LABELS[event.status] || event.status}
-                </Badge>
-              </div>
-            </CardTitle>
-            <CardDescription>
-              Manage the current stage of this event. Concluded or cancelled events cannot be modified.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex flex-wrap items-center gap-2">
-              {allowedTransitions.length === 0 ? (
-                <span className="text-xs text-slate-500 italic">
-                  This event is complete or archived and no further status changes are available.
-                </span>
-              ) : (
-                allowedTransitions.map((targetStatus) => {
-                  let icon = <Play className="h-3.5 w-3.5 mr-1" />;
-                  let variant: 'primary' | 'outline' | 'destructive' = 'outline';
-                  let actionLabel = `Move to ${EVENT_STATUS_LABELS[targetStatus]}`;
-
-                  if (targetStatus === 'published') {
-                    variant = 'primary';
-                    icon = <Share2 className="h-3.5 w-3.5 mr-1" />;
-                    actionLabel = 'Publish Event';
-                  } else if (targetStatus === 'in_progress') {
-                    variant = 'primary';
-                    icon = <Play className="h-3.5 w-3.5 mr-1" />;
-                    actionLabel = 'Start Event';
-                  } else if (targetStatus === 'completed') {
-                    variant = 'outline';
-                    icon = <CheckCircle className="h-3.5 w-3.5 mr-1 text-emerald-600" />;
-                    actionLabel = 'Mark as Completed';
-                  } else if (targetStatus === 'cancelled') {
-                    variant = 'destructive';
-                    icon = <XCircle className="h-3.5 w-3.5 mr-1" />;
-                    actionLabel = 'Cancel Event';
-                  } else if (targetStatus === 'archived') {
-                    variant = 'outline';
-                    icon = <Archive className="h-3.5 w-3.5 mr-1" />;
-                    actionLabel = 'Archive Event';
-                  } else if (targetStatus === 'registration_closed') {
-                    icon = <Lock className="h-3.5 w-3.5 mr-1 text-amber-600" />;
-                    actionLabel = 'Close Registration';
-                  } else if (targetStatus === 'draft') {
-                    variant = 'outline';
-                    actionLabel = 'Revert to Draft';
-                  }
-
-                  return (
-                    <Button
-                      key={targetStatus}
-                      variant={variant}
-                      size="sm"
-                      disabled={isUpdatingStatus}
-                      onClick={() => handleStatusTransition(targetStatus)}
-                      className="flex items-center text-xs"
-                    >
-                      {icon}
-                      {actionLabel}
-                    </Button>
-                  );
-                })
-              )}
+      {/* Event status Stepper Card */}
+      <Card className="border-slate-200 bg-white shadow-xs">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex items-center justify-between pb-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Event status
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500">Current Status:</span>
+              <Badge variant={EVENT_STATUS_VARIANTS[event.status] || 'neutral'}>
+                {EVENT_STATUS_LABELS[event.status] || event.status}
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
 
-      {/* Main Details Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Event Overview</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                  Description
-                </h4>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                  {event.description || 'No description provided.'}
-                </p>
-              </div>
+          <div className="py-2">
+            <div className="flex items-center justify-between">
+              {[
+                { id: 'draft', label: 'Draft' },
+                { id: 'published', label: 'Published' },
+                { id: 'registration_closed', label: 'Registration Closed' },
+                { id: 'in_progress', label: 'In Progress' },
+                { id: 'completed', label: 'Completed' },
+              ].map((step, idx, arr) => {
+                const stepOrder = ['draft', 'published', 'registration_closed', 'in_progress', 'completed'];
+                const currentIdx = stepOrder.indexOf(event.status);
+                const isDone = currentIdx !== -1 && idx < currentIdx;
+                const isCurrent = idx === currentIdx;
 
-              {event.participantInstructions && (
-                <div className="border-t border-slate-100 pt-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
-                    Participant Instructions
-                  </h4>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                    {event.participantInstructions}
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Phase 6C: Hackathon Teams (Only for Hackathons) */}
-          {event.eventType === 'hackathon' && (
-            <Card>
-              <CardHeader className="pb-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Users className="h-4 w-4 text-brand-600" />
-                      <span>Hackathon Teams</span>
-                    </CardTitle>
-                    <CardDescription>
-                      Form teams of {event.teamSizeMin || 1} to {event.teamSizeMax || 10} members.
-                    </CardDescription>
-                  </div>
-                  {myRegistration?.status === 'registered' && !myTeam && (
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      className="text-xs flex items-center gap-1.5"
-                      onClick={() => setShowCreateTeamModal(true)}
-                    >
-                      <PlusCircle className="h-3.5 w-3.5" />
-                      Create Team
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0 space-y-4">
-                {/* Active User's Team Card */}
-                {myTeam ? (
-                  <div className="p-4 rounded-lg border border-brand-200 bg-brand-50/20 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-bold text-slate-900">{myTeam.name}</h4>
-                          <Badge variant="brand" className="text-[10px]">Your Team</Badge>
-                          {isTeamOwner && <Badge variant="success" className="text-[10px]">Team Owner</Badge>}
-                        </div>
-                        {myTeam.description && (
-                          <p className="text-xs text-slate-600 mt-1">{myTeam.description}</p>
-                        )}
+                return (
+                  <div key={step.id} className="flex flex-1 items-center last:flex-none">
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
+                          isDone
+                            ? 'bg-brand-600 text-white'
+                            : isCurrent
+                            ? 'border-2 border-brand-600 bg-brand-50 text-brand-700 ring-4 ring-brand-100'
+                            : 'border border-slate-300 bg-slate-100 text-slate-400'
+                        }`}
+                      >
+                        {isDone ? <Check className="h-4 w-4" /> : idx + 1}
                       </div>
-                      <div className="flex items-center gap-2">
-                        {isTeamOwner && (myTeam.memberCount < (event.teamSizeMax || 10)) && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs flex items-center gap-1.5"
-                            onClick={() => {
-                              setGeneratedToken(null);
-                              setShowInviteModal(true);
-                            }}
-                          >
-                            <UserPlus className="h-3.5 w-3.5" />
-                            Invite Member
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          className="text-xs flex items-center gap-1"
-                          onClick={() => setShowLeaveTeamConfirm(true)}
-                        >
-                          <LogOut className="h-3.5 w-3.5" />
-                          Leave Team
-                        </Button>
-                      </div>
+                      <span
+                        className={`mt-1.5 text-xs text-center whitespace-nowrap ${
+                          isCurrent
+                            ? 'font-semibold text-brand-700'
+                            : isDone
+                            ? 'font-medium text-slate-700'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {step.label}
+                      </span>
                     </div>
-
-                    {/* Team Members List */}
-                    <div className="pt-2 border-t border-brand-100">
-                      <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                        Team Members ({myTeam.members?.length || myTeam.memberCount} / {event.teamSizeMax || 10})
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {myTeam.members?.map((member) => (
-                          <div
-                            key={member.id}
-                            className="flex items-center gap-2 p-2 rounded bg-white border border-slate-100 text-xs"
-                          >
-                            <Avatar name={member.user?.fullName || 'User'} size="sm" className="h-6 w-6" />
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium truncate">{member.user?.fullName}</div>
-                              <div className="text-[10px] text-slate-400 font-mono truncate">
-                                {member.user?.email}
-                              </div>
-                            </div>
-                            {member.isOwner && (
-                              <Badge variant="neutral" className="text-[9px]">Owner</Badge>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-xs text-slate-500 py-3 px-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                    {myRegistration?.status === 'registered' ? (
-                      <p>You are not currently in a team. You can create a new team or ask an existing team owner to send you an invitation.</p>
-                    ) : (
-                      <p>Register for this hackathon to create or join a team.</p>
+                    {idx < arr.length - 1 && (
+                      <div
+                        className={`mx-2 mb-5 h-0.5 flex-1 transition-colors ${
+                          currentIdx !== -1 && idx < currentIdx ? 'bg-brand-600' : 'bg-slate-200'
+                        }`}
+                      />
                     )}
                   </div>
-                )}
+                );
+              })}
+            </div>
+          </div>
 
-                {/* All Teams Listing */}
-                <div>
-                  <div className="text-xs font-semibold text-slate-700 mb-2">
-                    All Registered Teams ({teams.length})
-                  </div>
-                  {teams.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic">No teams registered yet.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {teams.map((t) => (
-                        <div
-                          key={t.id}
-                          className="p-3 rounded border border-slate-200 bg-white hover:border-slate-300 transition-colors text-xs space-y-1"
+          {canManageStatus && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-slate-500 font-medium">Allowed next:</span>
+                {allowedTransitions.length === 0 ? (
+                  <span className="text-slate-400 italic">None (Concluded or Archived)</span>
+                ) : (
+                  allowedTransitions
+                    .filter((s) => s !== 'cancelled')
+                    .map((targetStatus) => {
+                      let variant: 'primary' | 'outline' = 'outline';
+                      if (targetStatus === 'published' || targetStatus === 'in_progress') {
+                        variant = 'primary';
+                      }
+                      return (
+                        <Button
+                          key={targetStatus}
+                          size="sm"
+                          variant={variant}
+                          disabled={isUpdatingStatus}
+                          onClick={() => handleStatusTransition(targetStatus)}
+                          className="h-7 text-xs"
                         >
-                          <div className="flex items-center justify-between font-medium text-slate-900">
-                            <span>{t.name}</span>
-                            <Badge variant="neutral" className="text-[10px]">
-                              {t.memberCount} members
-                            </Badge>
-                          </div>
-                          {t.description && (
-                            <p className="text-slate-500 text-[11px] line-clamp-1">{t.description}</p>
-                          )}
-                          <div className="text-[10px] text-slate-400">
-                            Created by {t.owner?.fullName || 'Owner'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          {EVENT_STATUS_LABELS[targetStatus] || targetStatus}
+                        </Button>
+                      );
+                    })
+                )}
+              </div>
+              {allowedTransitions.includes('cancelled') && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleStatusTransition('cancelled')}
+                  className="h-7 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                >
+                  Cancel event
+                </Button>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Horizontal Tab Navigation */}
+      <div className="border-b border-slate-200">
+        <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Event tabs">
+          {[
+            { id: 'overview' as const, label: 'Overview' },
+            { id: 'registrations' as const, label: 'Registrations', count: participants.length },
+            ...(event.eventType === 'hackathon'
+              ? [
+                  { id: 'teams' as const, label: 'Teams', count: teams.length },
+                  { id: 'submissions' as const, label: 'Submissions', count: eventSubmissions.length },
+                  { id: 'judging' as const, label: 'Judging', count: rounds.length },
+                  { id: 'results' as const, label: 'Results' },
+                ]
+              : []),
+            { id: 'settings' as const, label: 'Settings' },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleTabClick(tab.id)}
+                className={`flex items-center gap-2 whitespace-nowrap border-b-2 py-3 px-1 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'border-brand-600 text-brand-600'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                }`}
+                data-testid={`event-tab-${tab.id}`}
+              >
+                <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      isActive ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Tab 1: Overview */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          {/* 3 Metric Cards Grid as seen in reference mockup */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Card 1: Registration Window */}
+            <Card className="border-slate-200 shadow-xs">
+              <CardContent className="p-4 space-y-2">
+                <div className="text-xs font-medium text-slate-500">Registration window</div>
+                <div className="space-y-1 text-sm">
+                  <div className="font-semibold text-slate-900">
+                    Opens: <span className="font-normal text-slate-700">{formatDateTime(event.registrationOpensAt || event.createdAt, event.timezone)}</span>
+                  </div>
+                  <div className="font-semibold text-slate-900">
+                    Closes: <span className="font-normal text-slate-700">{formatDateTime(event.registrationClosesAt || event.endAt || event.startAt, event.timezone)}</span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-400 pt-1">
+                  Times shown in {event.timezone || 'UTC'}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Card 2: Capacity with Progress Bar */}
+            <Card className="border-slate-200 shadow-xs">
+              <CardContent className="p-4 space-y-2">
+                <div className="text-xs font-medium text-slate-500">Capacity</div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-bold text-slate-900">
+                    {partSummary.activeRegistrations}
+                  </span>
+                  <span className="text-sm text-slate-500">
+                    of {event.capacity || 'Unlimited'}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden mt-2">
+                  <div
+                    className="bg-brand-600 h-2 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${
+                        event.capacity
+                          ? Math.min(100, Math.round((partSummary.activeRegistrations / event.capacity) * 100))
+                          : Math.min(100, partSummary.activeRegistrations > 0 ? 100 : 0)
+                      }%`,
+                    }}
+                  />
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {event.capacity
+                    ? `${Math.max(0, event.capacity - partSummary.activeRegistrations)} seats remaining`
+                    : 'Open capacity'}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Card 3: Hackathon / Event Details */}
+            <Card className="border-slate-200 shadow-xs">
+              <CardContent className="p-4 space-y-2">
+                <div className="text-xs font-medium text-slate-500">
+                  {event.eventType === 'hackathon' ? 'Hackathon' : 'Event Details'}
+                </div>
+                <div className="space-y-1 text-sm">
+                  {event.eventType === 'hackathon' ? (
+                    <>
+                      <div className="font-medium text-slate-800">
+                        Teams: on ({event.teamSizeMin || 1} to {event.teamSizeMax || 4} members)
+                      </div>
+                      <div className="text-slate-600">
+                        {teams.length} teams · {eventSubmissions.length} submissions
+                      </div>
+                      <div className="text-slate-500 text-xs">
+                        Submissions close {event.submissionClosesAt ? formatDateTime(event.submissionClosesAt, event.timezone) : formatDateTime(event.endAt, event.timezone)}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="font-medium text-slate-800">Individual registration</div>
+                      <div className="text-slate-600">{partSummary.activeRegistrations} active participants</div>
+                      <div className="text-slate-500 text-xs">{event.locationType?.replace('_', ' ') || 'In Person'}</div>
+                    </>
                   )}
                 </div>
               </CardContent>
             </Card>
-          )}
+          </div>
 
-          {/* Phase 6C: Project Submissions */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FolderGit2 className="h-4 w-4 text-brand-600" />
-                    <span>Project Submission</span>
-                  </CardTitle>
-                  <CardDescription>
-                    URL-based project submission (GitHub repository & live demo URL).
-                  </CardDescription>
-                </div>
-                {myRegistration?.status === 'registered' && (
-                  <Button
-                    size="sm"
-                    variant={mySubmission ? 'outline' : 'primary'}
-                    className="text-xs flex items-center gap-1.5"
-                    onClick={() => setShowSubmissionModal(true)}
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    {mySubmission ? 'Edit Submission' : 'Submit Project'}
-                  </Button>
-                )}
-              </div>
+          {/* Wide Card: Participant instructions & Event Description */}
+          <Card className="border-slate-200 shadow-xs">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Participant instructions</CardTitle>
             </CardHeader>
-            <CardContent className="pt-0">
-              {rounds.length > 0 && (
-                <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-100">
-                  <span className="text-slate-500 font-medium text-xs">Stage:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {rounds.map((r) => {
-                      const isSelected = selectedRoundId === r.id || (!selectedRoundId && r.roundNumber === 1);
-                      return (
-                        <button
-                          key={r.id}
-                          type="button"
-                          onClick={() => setSelectedRoundId(r.id)}
-                          data-testid={`submission-round-tab-${r.roundNumber}`}
-                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                            isSelected
-                              ? 'bg-brand-600 text-white'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
-                        >
-                          Round {r.roundNumber}: {r.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {mySubmission ? (
-                <div className="p-4 rounded-lg border border-slate-200 bg-slate-50/50 space-y-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-bold text-slate-900">{mySubmission.title}</h4>
-                    <Badge variant="success" className="text-[10px] capitalize">
-                      {mySubmission.status}
-                    </Badge>
-                  </div>
-                  {mySubmission.description && (
-                    <p className="text-slate-600 text-xs whitespace-pre-wrap">{mySubmission.description}</p>
-                  )}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60">
-                    {mySubmission.repositoryUrl && (
-                      <div>
-                        <span className="text-slate-400 text-[11px] block">Repository</span>
-                        <a
-                          href={mySubmission.repositoryUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-brand-600 hover:underline flex items-center gap-1 truncate font-mono text-[11px]"
-                        >
-                          <FolderGit2 className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{mySubmission.repositoryUrl}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0" />
-                        </a>
-                      </div>
-                    )}
-                    {mySubmission.demoUrl && (
-                      <div>
-                        <span className="text-slate-400 text-[11px] block">Live Demo</span>
-                        <a
-                          href={mySubmission.demoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-brand-600 hover:underline flex items-center gap-1 truncate font-mono text-[11px]"
-                        >
-                          <Globe className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{mySubmission.demoUrl}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0" />
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-[10px] text-slate-400 pt-1">
-                    Submitted on {formatDateTime(mySubmission.submittedAt, event.timezone)}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-xs text-slate-500 py-6 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">
-                  <FolderGit2 className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-                  <p className="font-medium text-slate-700">No project submitted yet.</p>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    {event.eventType === 'hackathon' && !myTeam
-                      ? 'You must join or create a team before submitting your project.'
-                      : 'Provide your GitHub repository and live demo link before the deadline.'}
+            <CardContent className="space-y-4">
+              <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                {event.participantInstructions || event.description || 'Bring your laptop and student ID. Follow the event instructions and guidelines.'}
+              </p>
+              {event.participantInstructions && event.description && (
+                <div className="border-t border-slate-100 pt-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                    Event Overview
+                  </h4>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                    {event.description}
                   </p>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Phase 6B: Event Staff Participants Roster */}
+          {/* Schedule & Location Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Schedule & Timezone Sidebar */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Schedule & Timezone</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-xs text-slate-600">
+              <div className="flex items-start gap-2.5">
+                <Clock className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                <div>
+                  <div className="font-medium text-slate-800">Starts At</div>
+                  <div>{formatDateTime(event.startAt, event.timezone)}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 border-t border-slate-100 pt-3">
+                <Clock className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                <div>
+                  <div className="font-medium text-slate-800">Ends At</div>
+                  <div>{formatDateTime(event.endAt, event.timezone)}</div>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-2.5 border-t border-slate-100 pt-3">
+                <Globe className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                <div>
+                  <div className="font-medium text-slate-800">Primary Timezone</div>
+                  <div className="font-mono text-slate-700">{event.timezone}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+            {/* Venue & Location Sidebar */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Venue & Location</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-xs text-slate-600">
+              <div className="flex items-start gap-2.5">
+                {event.locationType === 'in_person' ? (
+                  <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                ) : (
+                  <Globe className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                )}
+                <div>
+                  <div className="font-medium text-slate-800 capitalize">
+                    {event.locationType ? event.locationType.replace('_', ' ') : 'In Person'}
+                  </div>
+                  <div className="text-slate-700">
+                    {event.location || (event.locationType === 'virtual' ? 'Virtual Meeting' : 'Venue TBD')}
+                  </div>
+                </div>
+              </div>
+
+              {event.virtualUrl && (
+                <div className="border-t border-slate-100 pt-3">
+                  <div className="font-medium text-slate-800 mb-1">Virtual Stream / Meeting</div>
+                  <a
+                    href={event.virtualUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-600 hover:underline break-all"
+                  >
+                    {event.virtualUrl}
+                  </a>
+                </div>
+              )}
+
+              {event.capacity && (
+                <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
+                  <Users className="h-4 w-4 text-slate-400 shrink-0" />
+                  <span>Maximum Capacity: <strong>{event.capacity}</strong> attendees</span>
+                </div>
+              )}
+
+              {event.eventType === 'hackathon' && (
+                <div className="flex items-center gap-2 border-t border-slate-100 pt-3 text-brand-700 font-medium">
+                  <Code2 className="h-4 w-4 shrink-0" />
+                  <span>Hackathon & Challenge Module</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 2: Registrations */}
+      {activeTab === 'registrations' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Phase 6B: Event Staff Participants Roster */}
           {canViewParticipants && (
             <Card>
               <CardHeader className="pb-3">
@@ -1886,510 +2002,9 @@ export function EventDetailPage({
               </CardContent>
             </Card>
           )}
-
-          {/* Phase 6D: Hackathon Results & Leaderboard (EVT-009, ADR-009) */}
-          {event.eventType === 'hackathon' && (
-            <Card className="border-brand-200 shadow-xs">
-              <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Trophy className="h-4 w-4 text-amber-500" />
-                    Hackathon Results & Leaderboard
-                  </CardTitle>
-                  <CardDescription>
-                    Straight sum of criteria scores with shared ranks for ties (ADR-009).
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  {eventResults?.isPublished ? (
-                    <Badge variant="success" className="flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3" />
-                      Published
-                    </Badge>
-                  ) : (
-                    <Badge variant="warning">Draft / Unpublished</Badge>
-                  )}
-                  {canManageJudging && (
-                    eventResults?.isPublished ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowUnpublishConfirm(true)}
-                        disabled={isUnpublishingResults}
-                        className="text-xs text-slate-600"
-                      >
-                        Unpublish Results
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => setShowPublishConfirm(true)}
-                        disabled={!eventResults?.isPublishable || isPublishingResults}
-                        title={
-                          eventResults?.isPublishable
-                            ? 'Publish official results'
-                            : 'All assigned judges must complete scoring before publication'
-                        }
-                        className="text-xs flex items-center gap-1"
-                      >
-                        <Award className="h-3.5 w-3.5" />
-                        Publish Results
-                      </Button>
-                    )
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                {eventResults?.isPublished || canManageJudging ? (
-                  !eventResults || eventResults.results.length === 0 ? (
-                    <div className="text-center py-6 text-slate-500 text-xs">
-                      No submissions or evaluated projects recorded yet.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-16">Rank</TableHead>
-                            <TableHead>Project / Submission</TableHead>
-                            <TableHead>Team</TableHead>
-                            <TableHead className="text-right">Total Score</TableHead>
-                            <TableHead className="text-right">Links</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {eventResults.results.map((res) => (
-                            <TableRow key={res.submissionId}>
-                              <TableCell className="font-bold">
-                                {res.rank === 1 ? (
-                                  <span className="inline-flex items-center gap-1 text-amber-600 font-extrabold text-sm">
-                                    <Trophy className="h-4 w-4" /> 1st
-                                  </span>
-                                ) : res.rank === 2 ? (
-                                  <span className="inline-flex items-center gap-1 text-slate-600 font-bold text-sm">
-                                    <Award className="h-4 w-4 text-slate-400" /> 2nd
-                                  </span>
-                                ) : res.rank === 3 ? (
-                                  <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-sm">
-                                    <Award className="h-4 w-4 text-amber-700" /> 3rd
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-500 text-xs">#{res.rank}</span>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <div className="font-medium text-slate-900">{res.title}</div>
-                                {res.description && (
-                                  <div className="text-xs text-slate-500 line-clamp-1">{res.description}</div>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-xs text-slate-700">
-                                {res.teamName || 'Solo'}
-                              </TableCell>
-                              <TableCell className="text-right font-mono font-semibold text-slate-900">
-                                {res.totalScore}
-                              </TableCell>
-                              <TableCell className="text-right text-xs">
-                                <div className="flex justify-end gap-2">
-                                  {res.repositoryUrl && (
-                                    <a
-                                      href={res.repositoryUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-brand-600 hover:underline inline-flex items-center gap-1"
-                                    >
-                                      Repo <ExternalLink className="h-3 w-3" />
-                                    </a>
-                                  )}
-                                  {res.demoUrl && (
-                                    <a
-                                      href={res.demoUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-brand-600 hover:underline inline-flex items-center gap-1"
-                                    >
-                                      Demo <ExternalLink className="h-3 w-3" />
-                                    </a>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )
-                ) : (
-                  <div className="text-center py-6 text-slate-500 text-xs">
-                    Results are currently being evaluated and will be announced once judging concludes.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Phase 6D: Judge Evaluation Portal (for Assigned Judges) */}
-          {event.eventType === 'hackathon' && judgeWork.length > 0 && (
-            <Card className="border-brand-200 bg-brand-50/10 shadow-xs">
-              <CardHeader className="pb-3 border-b border-slate-100">
-                <CardTitle className="text-base flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Gavel className="h-4 w-4 text-brand-600" />
-                    Judge Evaluation Work
-                  </span>
-                  <Badge variant="brand">{judgeWork.length} Assigned Project(s)</Badge>
-                </CardTitle>
-                <CardDescription>
-                  Your assigned submissions for judging. Submit numerical criterion scores and optional feedback.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="space-y-3">
-                  {judgeWork.map((work) => (
-                    <div
-                      key={work.submissionId}
-                      className="p-3 bg-white rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-900 text-sm">{work.title}</span>
-                          {work.isFullyEvaluated ? (
-                            <Badge variant="success" className="text-[10px]">Evaluated</Badge>
-                          ) : (
-                            <Badge variant="warning" className="text-[10px]">Pending Evaluation</Badge>
-                          )}
-                        </div>
-                        <div className="text-slate-500">Team: {work.teamName || 'Solo'}</div>
-                        <div className="flex items-center gap-3 pt-1">
-                          {work.repositoryUrl && (
-                            <a
-                              href={work.repositoryUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-brand-600 hover:underline flex items-center gap-1"
-                            >
-                              Code Repository <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                          {work.demoUrl && (
-                            <a
-                              href={work.demoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-brand-600 hover:underline flex items-center gap-1"
-                            >
-                              Live Demo <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-
-                      <Button
-                        variant={work.isFullyEvaluated ? 'outline' : 'primary'}
-                        size="sm"
-                        onClick={() => {
-                          setActiveSubForScoring(work);
-                          const initial: Record<string, { score: number; feedback: string }> = {};
-                          for (const crit of criteria) {
-                            const existing = work.scores.find((s) => s.criterionId === crit.id);
-                            initial[crit.id] = {
-                              score: existing ? existing.score : 0,
-                              feedback: existing?.feedback || '',
-                            };
-                          }
-                          setScoreFormValues(initial);
-                          setShowScoreModal(true);
-                        }}
-                        className="shrink-0 flex items-center gap-1.5"
-                      >
-                        <Star className="h-3.5 w-3.5" />
-                        {work.isFullyEvaluated ? 'Edit Score' : 'Score Submission'}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Phase 02B: Multi-Round Hackathon Management (Staff) */}
-          {event.eventType === 'hackathon' && canManageRounds && (
-            <Card className="border-slate-200" data-testid="competition-rounds-card">
-              <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Layers className="h-4 w-4 text-brand-600" />
-                    <span>Competition Rounds</span>
-                    <Badge variant="brand" className="text-[10px]">
-                      {rounds.length} {rounds.length === 1 ? 'Round' : 'Rounds'}
-                    </Badge>
-                  </CardTitle>
-                  <CardDescription>
-                    Configure competition stages, submission deadlines, and qualification advancement rules.
-                  </CardDescription>
-                </div>
-                <div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleOpenAddRound}
-                    data-testid="add-round-button"
-                    className="flex items-center gap-1.5 text-xs text-brand-700 border-brand-200 bg-brand-50/50 hover:bg-brand-50"
-                  >
-                    <PlusCircle className="h-3.5 w-3.5 text-brand-600" />
-                    <span>Add Round</span>
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                {isLoadingRounds ? (
-                  <div className="py-6 text-center text-xs text-slate-500">Loading competition rounds...</div>
-                ) : rounds.length === 0 ? (
-                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-lg text-center text-xs text-slate-500">
-                    No rounds configured. Click "Add Round" to configure the first competition stage.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {rounds.map((r) => (
-                      <div
-                        key={r.id}
-                        data-testid={`round-item-${r.roundNumber}`}
-                        className="p-3 bg-white rounded-lg border border-slate-200 hover:border-slate-300 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="neutral" className="text-[10px] font-semibold">
-                              Round {r.roundNumber}
-                            </Badge>
-                            <span className="font-semibold text-slate-900 text-sm">{r.name}</span>
-                            <Badge
-                              variant={
-                                r.status === 'completed'
-                                  ? 'neutral'
-                                  : r.status === 'open'
-                                  ? 'success'
-                                  : r.status === 'judging'
-                                  ? 'brand'
-                                  : 'warning'
-                              }
-                              className="text-[10px] capitalize"
-                            >
-                              {r.status}
-                            </Badge>
-                            {r.resultsPublishedAt && (
-                              <Badge variant="success" className="text-[10px]">
-                                Results Published
-                              </Badge>
-                            )}
-                          </div>
-
-                          {r.description && <p className="text-slate-600 text-xs">{r.description}</p>}
-
-                          <div className="flex flex-wrap items-center gap-3 pt-1 text-slate-500 text-[11px]">
-                            <span>
-                              <strong>Rule:</strong>{' '}
-                              {r.advancementRule === 'manual'
-                                ? 'Manual Selection'
-                                : r.advancementRule === 'score_threshold'
-                                ? `Score ≥ ${r.advancementThreshold}`
-                                : `Top ${r.advancementTopN} Teams`}
-                            </span>
-                            <span>•</span>
-                            <span>
-                              <strong>Submissions:</strong> {r.submissionCount ?? 0}
-                            </span>
-                            <span>•</span>
-                            <span>
-                              <strong>Window:</strong>{' '}
-                              {r.submissionOpensAt
-                                ? `${new Date(r.submissionOpensAt).toLocaleDateString()} – ${
-                                    r.submissionClosesAt ? new Date(r.submissionClosesAt).toLocaleDateString() : 'End of Event'
-                                  }`
-                                : 'Event Window'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenRoundResults(r)}
-                            data-testid={`round-results-btn-${r.roundNumber}`}
-                            className="text-xs h-7 px-2.5 flex items-center gap-1 text-slate-700"
-                          >
-                            <Trophy className="h-3 w-3 text-amber-500" />
-                            <span>Results</span>
-                          </Button>
-                          {canManageRounds && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleOpenAdvanceRound(r)}
-                              data-testid={`round-advance-btn-${r.roundNumber}`}
-                              className="text-xs h-7 px-2.5 flex items-center gap-1 text-brand-700 bg-brand-50/50 border-brand-200 hover:bg-brand-50"
-                            >
-                              <Award className="h-3 w-3 text-brand-600" />
-                              <span>Advance</span>
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenEditRound(r)}
-                            className="text-xs h-7 px-2.5"
-                          >
-                            Edit
-                          </Button>
-                          {rounds.length > 1 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setRoundToDelete(r)}
-                              className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Phase 6D: Scoring Criteria & Judge Assignments (Management) */}
-          {event.eventType === 'hackathon' && canManageJudging && (
-            <Card className="border-slate-200">
-              <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Gavel className="h-4 w-4 text-slate-700" />
-                    Scoring Criteria & Judge Assignments
-                  </CardTitle>
-                  <CardDescription>
-                    Configure evaluation criteria (1..100 max score) and assign judges to submissions.
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAddCriterionModal(true)}
-                    className="flex items-center gap-1 text-xs"
-                  >
-                    <PlusCircle className="h-3.5 w-3.5" />
-                    Add Criterion
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAssignJudgeModal(true)}
-                    className="flex items-center gap-1 text-xs"
-                  >
-                    <UserPlus className="h-3.5 w-3.5" />
-                    Assign Judge
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-6">
-                {/* Criteria Table */}
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                    Scoring Criteria ({criteria.length})
-                  </h4>
-                  {criteria.length === 0 ? (
-                    <div className="p-3 bg-slate-50 border border-slate-100 rounded text-center text-xs text-slate-500">
-                      No criteria configured yet. Add criteria to enable judge evaluations.
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Criterion Name</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="text-right">Max Score</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {criteria.map((crit) => (
-                          <TableRow key={crit.id}>
-                            <TableCell className="font-medium text-slate-900">{crit.name}</TableCell>
-                            <TableCell className="text-xs text-slate-500">{crit.description || '—'}</TableCell>
-                            <TableCell className="text-right font-mono font-medium">{crit.maxScore}</TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDeleteCriterion(crit.id)}
-                                className="h-7 px-2 text-xs"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
-
-                {/* Judge Assignments */}
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
-                    Judge Assignments ({judgeAssignments.length})
-                  </h4>
-                  {judgeAssignments.length === 0 ? (
-                    <div className="p-3 bg-slate-50 border border-slate-100 rounded text-center text-xs text-slate-500">
-                      No judges assigned yet. Assign judges to evaluate hackathon submissions.
-                    </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Judge Name / Email</TableHead>
-                          <TableHead>Scope</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {judgeAssignments.map((ja) => (
-                          <TableRow key={ja.id}>
-                            <TableCell>
-                              <div className="font-medium text-slate-900">{ja.judgeName || 'Judge'}</div>
-                              <div className="text-xs text-slate-500 font-mono">{ja.judgeEmail}</div>
-                            </TableCell>
-                            <TableCell className="text-xs text-slate-600">
-                              {ja.submissionTitle ? `Specific: "${ja.submissionTitle}"` : 'All Event Submissions'}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleRemoveJudge(ja.id)}
-                                className="h-7 px-2 text-xs"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* Right Sidebar: Registration & Details */}
-        <div className="space-y-6">
-          {/* Phase 6B: Registration & Participation Card */}
+          </div>
+          <div className="space-y-6">
+            {/* Phase 6B: Registration & Participation Card */}
           <Card className="border-brand-200 shadow-xs">
             <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100">
               <CardTitle className="text-base flex items-center justify-between">
@@ -2543,92 +2158,1005 @@ export function EventDetailPage({
               )}
             </CardContent>
           </Card>
+          </div>
+        </div>
+      )}
 
-          {/* Schedule & Timezone Sidebar */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Schedule & Timezone</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs text-slate-600">
-              <div className="flex items-start gap-2.5">
-                <Clock className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                <div>
-                  <div className="font-medium text-slate-800">Starts At</div>
-                  <div>{formatDateTime(event.startAt, event.timezone)}</div>
+      {/* Tab 3: Teams (Hackathons only) */}
+      {activeTab === 'teams' && event.eventType === 'hackathon' && (
+        <div className="space-y-6">
+          {/* Phase 6C: Hackathon Teams (Only for Hackathons) */}
+          {event.eventType === 'hackathon' && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Users className="h-4 w-4 text-brand-600" />
+                      <span>Hackathon Teams</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Form teams of {event.teamSizeMin || 1} to {event.teamSizeMax || 10} members.
+                    </CardDescription>
+                  </div>
+                  {myRegistration?.status === 'registered' && !myTeam && (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      className="text-xs flex items-center gap-1.5"
+                      onClick={() => setShowCreateTeamModal(true)}
+                    >
+                      <PlusCircle className="h-3.5 w-3.5" />
+                      Create Team
+                    </Button>
+                  )}
                 </div>
-              </div>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-4">
+                {/* Active User's Team Card */}
+                {myTeam ? (
+                  <div className="p-4 rounded-lg border border-brand-200 bg-brand-50/20 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-slate-900">{myTeam.name}</h4>
+                          <Badge variant="brand" className="text-[10px]">Your Team</Badge>
+                          {isTeamOwner && <Badge variant="success" className="text-[10px]">Team Owner</Badge>}
+                        </div>
+                        {myTeam.description && (
+                          <p className="text-xs text-slate-600 mt-1">{myTeam.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isTeamOwner && (myTeam.memberCount < (event.teamSizeMax || 10)) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs flex items-center gap-1.5"
+                            onClick={() => {
+                              setGeneratedToken(null);
+                              setShowInviteModal(true);
+                            }}
+                          >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Invite Member
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="text-xs flex items-center gap-1"
+                          onClick={() => setShowLeaveTeamConfirm(true)}
+                        >
+                          <LogOut className="h-3.5 w-3.5" />
+                          Leave Team
+                        </Button>
+                      </div>
+                    </div>
 
-              <div className="flex items-start gap-2.5 border-t border-slate-100 pt-3">
-                <Clock className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                <div>
-                  <div className="font-medium text-slate-800">Ends At</div>
-                  <div>{formatDateTime(event.endAt, event.timezone)}</div>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2.5 border-t border-slate-100 pt-3">
-                <Globe className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                <div>
-                  <div className="font-medium text-slate-800">Primary Timezone</div>
-                  <div className="font-mono text-slate-700">{event.timezone}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Venue & Location Sidebar */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Venue & Location</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs text-slate-600">
-              <div className="flex items-start gap-2.5">
-                {event.locationType === 'in_person' ? (
-                  <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                    {/* Team Members List */}
+                    <div className="pt-2 border-t border-brand-100">
+                      <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        Team Members ({myTeam.members?.length || myTeam.memberCount} / {event.teamSizeMax || 10})
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {myTeam.members?.map((member) => (
+                          <div
+                            key={member.id}
+                            className="flex items-center gap-2 p-2 rounded bg-white border border-slate-100 text-xs"
+                          >
+                            <Avatar name={member.user?.fullName || 'User'} size="sm" className="h-6 w-6" />
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium truncate">{member.user?.fullName}</div>
+                              <div className="text-[10px] text-slate-400 font-mono truncate">
+                                {member.user?.email}
+                              </div>
+                            </div>
+                            {member.isOwner && (
+                              <Badge variant="neutral" className="text-[9px]">Owner</Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 ) : (
-                  <Globe className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                  <div className="text-xs text-slate-500 py-3 px-4 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                    {myRegistration?.status === 'registered' ? (
+                      <p>You are not currently in a team. You can create a new team or ask an existing team owner to send you an invitation.</p>
+                    ) : (
+                      <p>Register for this hackathon to create or join a team.</p>
+                    )}
+                  </div>
                 )}
+
+                {/* All Teams Listing */}
                 <div>
-                  <div className="font-medium text-slate-800 capitalize">
-                    {event.locationType ? event.locationType.replace('_', ' ') : 'In Person'}
+                  <div className="text-xs font-semibold text-slate-700 mb-2">
+                    All Registered Teams ({teams.length})
                   </div>
-                  <div className="text-slate-700">
-                    {event.location || (event.locationType === 'virtual' ? 'Virtual Meeting' : 'Venue TBD')}
-                  </div>
+                  {teams.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic">No teams registered yet.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {teams.map((t) => (
+                        <div
+                          key={t.id}
+                          className="p-3 rounded border border-slate-200 bg-white hover:border-slate-300 transition-colors text-xs space-y-1"
+                        >
+                          <div className="flex items-center justify-between font-medium text-slate-900">
+                            <span>{t.name}</span>
+                            <Badge variant="neutral" className="text-[10px]">
+                              {t.memberCount} members
+                            </Badge>
+                          </div>
+                          {t.description && (
+                            <p className="text-slate-500 text-[11px] line-clamp-1">{t.description}</p>
+                          )}
+                          <div className="text-[10px] text-slate-400">
+                            Created by {t.owner?.fullName || 'Owner'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
-              {event.virtualUrl && (
-                <div className="border-t border-slate-100 pt-3">
-                  <div className="font-medium text-slate-800 mb-1">Virtual Stream / Meeting</div>
-                  <a
-                    href={event.virtualUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-brand-600 hover:underline break-all"
+      {/* Tab 4: Submissions (Hackathons only) */}
+      {activeTab === 'submissions' && event.eventType === 'hackathon' && (
+        <div className="space-y-6">
+          {/* Phase 6C: Project Submissions */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FolderGit2 className="h-4 w-4 text-brand-600" />
+                    <span>Project Submission</span>
+                  </CardTitle>
+                  <CardDescription>
+                    URL-based project submission (GitHub repository & live demo URL).
+                  </CardDescription>
+                </div>
+                {myRegistration?.status === 'registered' && (
+                  <Button
+                    size="sm"
+                    variant={mySubmission ? 'outline' : 'primary'}
+                    className="text-xs flex items-center gap-1.5"
+                    onClick={() => setShowSubmissionModal(true)}
                   >
-                    {event.virtualUrl}
-                  </a>
+                    <Send className="h-3.5 w-3.5" />
+                    {mySubmission ? 'Edit Submission' : 'Submit Project'}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {rounds.length > 0 && (
+                <div className="flex items-center gap-2 pb-3 mb-3 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium text-xs">Stage:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {rounds.map((r) => {
+                      const isSelected = selectedRoundId === r.id || (!selectedRoundId && r.roundNumber === 1);
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => setSelectedRoundId(r.id)}
+                          data-testid={`submission-round-tab-${r.roundNumber}`}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                            isSelected
+                              ? 'bg-brand-600 text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          Round {r.roundNumber}: {r.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
-
-              {event.capacity && (
-                <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
-                  <Users className="h-4 w-4 text-slate-400 shrink-0" />
-                  <span>Maximum Capacity: <strong>{event.capacity}</strong> attendees</span>
+              {mySubmission ? (
+                <div className="p-4 rounded-lg border border-slate-200 bg-slate-50/50 space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-slate-900">{mySubmission.title}</h4>
+                    <Badge variant="success" className="text-[10px] capitalize">
+                      {mySubmission.status}
+                    </Badge>
+                  </div>
+                  {mySubmission.description && (
+                    <p className="text-slate-600 text-xs whitespace-pre-wrap">{mySubmission.description}</p>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60">
+                    {mySubmission.repositoryUrl && (
+                      <div>
+                        <span className="text-slate-400 text-[11px] block">Repository</span>
+                        <a
+                          href={mySubmission.repositoryUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-600 hover:underline flex items-center gap-1 truncate font-mono text-[11px]"
+                        >
+                          <FolderGit2 className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{mySubmission.repositoryUrl}</span>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      </div>
+                    )}
+                    {mySubmission.demoUrl && (
+                      <div>
+                        <span className="text-slate-400 text-[11px] block">Live Demo</span>
+                        <a
+                          href={mySubmission.demoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-600 hover:underline flex items-center gap-1 truncate font-mono text-[11px]"
+                        >
+                          <Globe className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{mySubmission.demoUrl}</span>
+                          <ExternalLink className="h-3 w-3 shrink-0" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-slate-400 pt-1">
+                    Submitted on {formatDateTime(mySubmission.submittedAt, event.timezone)}
+                  </div>
                 </div>
-              )}
-
-              {event.eventType === 'hackathon' && (
-                <div className="flex items-center gap-2 border-t border-slate-100 pt-3 text-brand-700 font-medium">
-                  <Code2 className="h-4 w-4 shrink-0" />
-                  <span>Hackathon & Challenge Module</span>
+              ) : (
+                <div className="text-xs text-slate-500 py-6 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                  <FolderGit2 className="h-8 w-8 mx-auto text-slate-300 mb-2" />
+                  <p className="font-medium text-slate-700">No project submitted yet.</p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {event.eventType === 'hackathon' && !myTeam
+                      ? 'You must join or create a team before submitting your project.'
+                      : 'Provide your GitHub repository and live demo link before the deadline.'}
+                  </p>
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
-      </div>
+      )}
+
+      {/* Tab 5: Judging (Hackathons only) */}
+      {activeTab === 'judging' && event.eventType === 'hackathon' && (
+        <div className="space-y-6">
+          {/* Judging Sub-navigation Pills */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+            {canManageRounds && (
+              <button
+                type="button"
+                onClick={() => handleJudgingSubTabChange('rounds')}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  effectiveJudgingSubTab === 'rounds'
+                    ? 'bg-brand-50 text-brand-700 border border-brand-200 shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent'
+                }`}
+                data-testid="judging-subtab-rounds"
+              >
+                <Layers className="h-3.5 w-3.5 text-brand-600" />
+                <span>Competition Rounds</span>
+                <span className="rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[10px] text-slate-700 font-semibold">
+                  {rounds.length}
+                </span>
+              </button>
+            )}
+
+            {canManageJudging && (
+              <button
+                type="button"
+                onClick={() => handleJudgingSubTabChange('criteria')}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  effectiveJudgingSubTab === 'criteria'
+                    ? 'bg-brand-50 text-brand-700 border border-brand-200 shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent'
+                }`}
+                data-testid="judging-subtab-criteria"
+              >
+                <Gavel className="h-3.5 w-3.5 text-brand-600" />
+                <span>Scoring Criteria &amp; Judges</span>
+                <span className="rounded-full bg-slate-200/70 px-1.5 py-0.5 text-[10px] text-slate-700 font-semibold">
+                  {criteria.length} Criteria · {judgeAssignments.length} Assigned
+                </span>
+              </button>
+            )}
+
+            {judgeWork.length > 0 && (
+              <button
+                type="button"
+                onClick={() => handleJudgingSubTabChange('work')}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  effectiveJudgingSubTab === 'work'
+                    ? 'bg-brand-50 text-brand-700 border border-brand-200 shadow-xs'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-transparent'
+                }`}
+                data-testid="judging-subtab-work"
+              >
+                <Star className="h-3.5 w-3.5 text-brand-600" />
+                <span>Judge Evaluation Work</span>
+                <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] text-brand-700 font-semibold">
+                  {judgeWork.length} Project(s)
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Phase 6D: Judge Evaluation Portal (for Assigned Judges) */}
+          {event.eventType === 'hackathon' && judgeWork.length > 0 && effectiveJudgingSubTab === 'work' && (
+            <Card className="border-brand-200 bg-brand-50/10 shadow-xs">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Gavel className="h-4 w-4 text-brand-600" />
+                    Judge Evaluation Work
+                  </span>
+                  <Badge variant="brand">{judgeWork.length} Assigned Project(s)</Badge>
+                </CardTitle>
+                <CardDescription>
+                  Your assigned submissions for judging. Submit numerical criterion scores and optional feedback.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-3">
+                  {judgeWork.map((work) => (
+                    <div
+                      key={work.submissionId}
+                      className="p-3 bg-white rounded-lg border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-900 text-sm">{work.title}</span>
+                          {work.isFullyEvaluated ? (
+                            <Badge variant="success" className="text-[10px]">Evaluated</Badge>
+                          ) : (
+                            <Badge variant="warning" className="text-[10px]">Pending Evaluation</Badge>
+                          )}
+                        </div>
+                        <div className="text-slate-500">Team: {work.teamName || 'Solo'}</div>
+                        <div className="flex items-center gap-3 pt-1">
+                          {work.repositoryUrl && (
+                            <a
+                              href={work.repositoryUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-600 hover:underline flex items-center gap-1"
+                            >
+                              Code Repository <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                          {work.demoUrl && (
+                            <a
+                              href={work.demoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-600 hover:underline flex items-center gap-1"
+                            >
+                              Live Demo <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
+                      <Button
+                        variant={work.isFullyEvaluated ? 'outline' : 'primary'}
+                        size="sm"
+                        onClick={() => {
+                          setActiveSubForScoring(work);
+                          const initial: Record<string, { score: number; feedback: string }> = {};
+                          for (const crit of criteria) {
+                            const existing = work.scores.find((s) => s.criterionId === crit.id);
+                            initial[crit.id] = {
+                              score: existing ? existing.score : 0,
+                              feedback: existing?.feedback || '',
+                            };
+                          }
+                          setScoreFormValues(initial);
+                          setShowScoreModal(true);
+                        }}
+                        className="shrink-0 flex items-center gap-1.5"
+                      >
+                        <Star className="h-3.5 w-3.5" />
+                        {work.isFullyEvaluated ? 'Edit Score' : 'Score Submission'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {/* Phase 02B: Multi-Round Hackathon Management (Staff) */}
+          {event.eventType === 'hackathon' && canManageRounds && effectiveJudgingSubTab === 'rounds' && (
+            <Card className="border-slate-200" data-testid="competition-rounds-card">
+              <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-brand-600" />
+                    <span>Competition Rounds</span>
+                    <Badge variant="brand" className="text-[10px]">
+                      {rounds.length} {rounds.length === 1 ? 'Round' : 'Rounds'}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    Configure competition stages, submission deadlines, and qualification advancement rules.
+                  </CardDescription>
+                </div>
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenAddRound}
+                    data-testid="add-round-button"
+                    className="flex items-center gap-1.5 text-xs text-brand-700 border-brand-200 bg-brand-50/50 hover:bg-brand-50"
+                  >
+                    <PlusCircle className="h-3.5 w-3.5 text-brand-600" />
+                    <span>Add Round</span>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                {isLoadingRounds ? (
+                  <div className="py-6 text-center text-xs text-slate-500">Loading competition rounds...</div>
+                ) : rounds.length === 0 ? (
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-lg text-center text-xs text-slate-500">
+                    No rounds configured. Click "Add Round" to configure the first competition stage.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {rounds.map((r) => (
+                      <div
+                        key={r.id}
+                        data-testid={`round-item-${r.roundNumber}`}
+                        className="p-3 bg-white rounded-lg border border-slate-200 hover:border-slate-300 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="neutral" className="text-[10px] font-semibold">
+                              Round {r.roundNumber}
+                            </Badge>
+                            <span className="font-semibold text-slate-900 text-sm">{r.name}</span>
+                            <Badge
+                              variant={
+                                r.status === 'completed'
+                                  ? 'neutral'
+                                  : r.status === 'open'
+                                  ? 'success'
+                                  : r.status === 'judging'
+                                  ? 'brand'
+                                  : 'warning'
+                              }
+                              className="text-[10px] capitalize"
+                            >
+                              {r.status}
+                            </Badge>
+                            {r.resultsPublishedAt && (
+                              <Badge variant="success" className="text-[10px]">
+                                Results Published
+                              </Badge>
+                            )}
+                          </div>
+
+                          {r.description && <p className="text-slate-600 text-xs">{r.description}</p>}
+
+                          <div className="flex flex-wrap items-center gap-3 pt-1 text-slate-500 text-[11px]">
+                            <span>
+                              <strong>Rule:</strong>{' '}
+                              {r.advancementRule === 'manual'
+                                ? 'Manual Selection'
+                                : r.advancementRule === 'score_threshold'
+                                ? `Score ≥ ${r.advancementThreshold}`
+                                : `Top ${r.advancementTopN} Teams`}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              <strong>Submissions:</strong> {r.submissionCount ?? 0}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              <strong>Window:</strong>{' '}
+                              {r.submissionOpensAt
+                                ? `${new Date(r.submissionOpensAt).toLocaleDateString()} – ${
+                                    r.submissionClosesAt ? new Date(r.submissionClosesAt).toLocaleDateString() : 'End of Event'
+                                  }`
+                                : 'Event Window'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenRoundResults(r)}
+                            data-testid={`round-results-btn-${r.roundNumber}`}
+                            className="text-xs h-7 px-2.5 flex items-center gap-1 text-slate-700"
+                          >
+                            <Trophy className="h-3 w-3 text-amber-500" />
+                            <span>Results</span>
+                          </Button>
+                          {canManageRounds && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenAdvanceRound(r)}
+                              data-testid={`round-advance-btn-${r.roundNumber}`}
+                              className="text-xs h-7 px-2.5 flex items-center gap-1 text-brand-700 bg-brand-50/50 border-brand-200 hover:bg-brand-50"
+                            >
+                              <Award className="h-3 w-3 text-brand-600" />
+                              <span>Advance</span>
+                            </Button>
+                          )}
+                          {r.id && (
+                            <Link
+                              to={`/app/organisations/${effectiveOrgId}/events/${eventId}/rounds/${r.id}/evaluation`}
+                              className="inline-flex h-7 items-center gap-1 rounded-md border border-brand-200 bg-brand-50/50 px-2.5 text-xs font-medium text-brand-700 hover:bg-brand-50"
+                              data-testid={`round-evaluation-btn-${r.roundNumber}`}
+                            >
+                              <Gavel className="h-3 w-3 text-brand-600" />
+                              Evaluation
+                            </Link>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenEditRound(r)}
+                            className="text-xs h-7 px-2.5"
+                          >
+                            Edit
+                          </Button>
+                          {rounds.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setRoundToDelete(r)}
+                              className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-7 px-2"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+          {/* Phase 6D: Scoring Criteria & Judge Assignments (Management) */}
+          {event.eventType === 'hackathon' && canManageJudging && effectiveJudgingSubTab === 'criteria' && (
+            <Card className="border-slate-200">
+              <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Gavel className="h-4 w-4 text-slate-700" />
+                    Scoring Criteria &amp; Judge Assignments
+                  </CardTitle>
+                  <CardDescription>
+                    Configure evaluation criteria (1..100 max score) and assign judges to submissions.
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  {criteriaSubTab === 'criteria' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAddCriterionModal(true)}
+                      className="flex items-center gap-1 text-xs"
+                      data-testid="add-criterion-button"
+                    >
+                      <PlusCircle className="h-3.5 w-3.5" />
+                      Add Criterion
+                    </Button>
+                  )}
+                  {criteriaSubTab === 'judges' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAssignJudgeModal(true)}
+                      className="flex items-center gap-1 text-xs"
+                      data-testid="assign-judge-button"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Assign Judge
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                {/* Secondary navigation for Criteria vs Judges */}
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => handleCriteriaSubTabChange('criteria')}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      criteriaSubTab === 'criteria'
+                        ? 'bg-brand-50 text-brand-700 font-semibold border border-brand-200 shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                    }`}
+                    data-testid="criteria-subtab-criteria"
+                  >
+                    <span>Scoring Criteria</span>
+                    <span className="rounded-full bg-slate-200/80 px-1.5 py-0.2 text-[10px] text-slate-700 font-semibold">
+                      {criteria.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCriteriaSubTabChange('judges')}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      criteriaSubTab === 'judges'
+                        ? 'bg-brand-50 text-brand-700 font-semibold border border-brand-200 shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                    }`}
+                    data-testid="criteria-subtab-judges"
+                  >
+                    <span>Judge Assignments</span>
+                    <span className="rounded-full bg-slate-200/80 px-1.5 py-0.2 text-[10px] text-slate-700 font-semibold">
+                      {judgeAssignments.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Sub-view 1: Criteria Table */}
+                {criteriaSubTab === 'criteria' && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                      Scoring Criteria ({criteria.length})
+                    </h4>
+                    {criteria.length === 0 ? (
+                      <div className="p-3 bg-slate-50 border border-slate-100 rounded text-center text-xs text-slate-500">
+                        No criteria configured yet. Add criteria to enable judge evaluations.
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Criterion Name</TableHead>
+                            <TableHead>Description</TableHead>
+                            <TableHead className="text-right">Max Score</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {criteria.map((crit) => (
+                            <TableRow key={crit.id}>
+                              <TableCell className="font-medium text-slate-900">{crit.name}</TableCell>
+                              <TableCell className="text-xs text-slate-500">{crit.description || '—'}</TableCell>
+                              <TableCell className="text-right font-mono font-medium">{crit.maxScore}</TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleDeleteCriterion(crit.id)}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+                )}
+
+                {/* Sub-view 2: Judge Assignments Table */}
+                {criteriaSubTab === 'judges' && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                      Judge Assignments ({judgeAssignments.length})
+                    </h4>
+                    {judgeAssignments.length === 0 ? (
+                      <div className="p-3 bg-slate-50 border border-slate-100 rounded text-center text-xs text-slate-500">
+                        No judges assigned yet. Assign judges to evaluate hackathon submissions.
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Judge Name / Email</TableHead>
+                            <TableHead>Scope</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {judgeAssignments.map((ja) => (
+                            <TableRow key={ja.id}>
+                              <TableCell>
+                                <div className="font-medium text-slate-900">{ja.judgeName || 'Judge'}</div>
+                                <div className="text-xs text-slate-500 font-mono">{ja.judgeEmail}</div>
+                              </TableCell>
+                              <TableCell className="text-xs text-slate-600">
+                                {ja.submissionTitle ? `Specific: "${ja.submissionTitle}"` : 'All Event Submissions'}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => handleRemoveJudge(ja.id)}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Tab 6: Results (Hackathons only) */}
+      {activeTab === 'results' && event.eventType === 'hackathon' && (
+        <div className="space-y-6">
+          {/* Phase 6D: Hackathon Results & Leaderboard (EVT-009, ADR-009) */}
+          {event.eventType === 'hackathon' && (
+            <Card className="border-brand-200 shadow-xs">
+              <CardHeader className="pb-3 bg-slate-50/50 border-b border-slate-100 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Trophy className="h-4 w-4 text-amber-500" />
+                    Hackathon Results & Leaderboard
+                  </CardTitle>
+                  <CardDescription>
+                    Straight sum of criteria scores with shared ranks for ties (ADR-009).
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {eventResults?.isPublished ? (
+                    <Badge variant="success" className="flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" />
+                      Published
+                    </Badge>
+                  ) : (
+                    <Badge variant="warning">Draft / Unpublished</Badge>
+                  )}
+                  {canManageJudging && (
+                    eventResults?.isPublished ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowUnpublishConfirm(true)}
+                        disabled={isUnpublishingResults}
+                        className="text-xs text-slate-600"
+                      >
+                        Unpublish Results
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setShowPublishConfirm(true)}
+                        disabled={!eventResults?.isPublishable || isPublishingResults}
+                        title={
+                          eventResults?.isPublishable
+                            ? 'Publish official results'
+                            : 'All assigned judges must complete scoring before publication'
+                        }
+                        className="text-xs flex items-center gap-1"
+                      >
+                        <Award className="h-3.5 w-3.5" />
+                        Publish Results
+                      </Button>
+                    )
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                {eventResults?.isPublished || canManageJudging ? (
+                  !eventResults || eventResults.results.length === 0 ? (
+                    <div className="text-center py-6 text-slate-500 text-xs">
+                      No submissions or evaluated projects recorded yet.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-16">Rank</TableHead>
+                            <TableHead>Project / Submission</TableHead>
+                            <TableHead>Team</TableHead>
+                            <TableHead className="text-right">Total Score</TableHead>
+                            <TableHead className="text-right">Links</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {eventResults.results.map((res) => (
+                            <TableRow key={res.submissionId}>
+                              <TableCell className="font-bold">
+                                {res.rank === 1 ? (
+                                  <span className="inline-flex items-center gap-1 text-amber-600 font-extrabold text-sm">
+                                    <Trophy className="h-4 w-4" /> 1st
+                                  </span>
+                                ) : res.rank === 2 ? (
+                                  <span className="inline-flex items-center gap-1 text-slate-600 font-bold text-sm">
+                                    <Award className="h-4 w-4 text-slate-400" /> 2nd
+                                  </span>
+                                ) : res.rank === 3 ? (
+                                  <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-sm">
+                                    <Award className="h-4 w-4 text-amber-700" /> 3rd
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 text-xs">#{res.rank}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="font-medium text-slate-900">{res.title}</div>
+                                {res.description && (
+                                  <div className="text-xs text-slate-500 line-clamp-1">{res.description}</div>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-xs text-slate-700">
+                                {res.teamName || 'Solo'}
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-semibold text-slate-900">
+                                {res.totalScore}
+                              </TableCell>
+                              <TableCell className="text-right text-xs">
+                                <div className="flex justify-end gap-2">
+                                  {res.repositoryUrl && (
+                                    <a
+                                      href={res.repositoryUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-brand-600 hover:underline inline-flex items-center gap-1"
+                                    >
+                                      Repo <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  )}
+                                  {res.demoUrl && (
+                                    <a
+                                      href={res.demoUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-brand-600 hover:underline inline-flex items-center gap-1"
+                                    >
+                                      Demo <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )
+                ) : (
+                  <div className="text-center py-6 text-slate-500 text-xs">
+                    Results are currently being evaluated and will be announced once judging concludes.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Tab 7: Settings */}
+      {activeTab === 'settings' && (
+        <div className="space-y-6">
+          {/* Lifecycle Transitions Panel (Staff Only) */}
+      {canManageStatus && (
+        <Card className="border-brand-100 bg-brand-50/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>Event Status & Actions</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-normal text-slate-500">Current Status:</span>
+                <Badge variant={EVENT_STATUS_VARIANTS[event.status] || 'neutral'}>
+                  {EVENT_STATUS_LABELS[event.status] || event.status}
+                </Badge>
+              </div>
+            </CardTitle>
+            <CardDescription>
+              Manage the current stage of this event. Concluded or cancelled events cannot be modified.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="flex flex-wrap items-center gap-2">
+              {allowedTransitions.length === 0 ? (
+                <span className="text-xs text-slate-500 italic">
+                  This event is complete or archived and no further status changes are available.
+                </span>
+              ) : (
+                allowedTransitions.map((targetStatus) => {
+                  let icon = <Play className="h-3.5 w-3.5 mr-1" />;
+                  let variant: 'primary' | 'outline' | 'destructive' = 'outline';
+                  let actionLabel = `Move to ${EVENT_STATUS_LABELS[targetStatus]}`;
+
+                  if (targetStatus === 'published') {
+                    variant = 'primary';
+                    icon = <Share2 className="h-3.5 w-3.5 mr-1" />;
+                    actionLabel = 'Publish Event';
+                  } else if (targetStatus === 'in_progress') {
+                    variant = 'primary';
+                    icon = <Play className="h-3.5 w-3.5 mr-1" />;
+                    actionLabel = 'Start Event';
+                  } else if (targetStatus === 'completed') {
+                    variant = 'outline';
+                    icon = <CheckCircle className="h-3.5 w-3.5 mr-1 text-emerald-600" />;
+                    actionLabel = 'Mark as Completed';
+                  } else if (targetStatus === 'cancelled') {
+                    variant = 'destructive';
+                    icon = <XCircle className="h-3.5 w-3.5 mr-1" />;
+                    actionLabel = 'Cancel Event';
+                  } else if (targetStatus === 'archived') {
+                    variant = 'outline';
+                    icon = <Archive className="h-3.5 w-3.5 mr-1" />;
+                    actionLabel = 'Archive Event';
+                  } else if (targetStatus === 'registration_closed') {
+                    icon = <Lock className="h-3.5 w-3.5 mr-1 text-amber-600" />;
+                    actionLabel = 'Close Registration';
+                  } else if (targetStatus === 'draft') {
+                    variant = 'outline';
+                    actionLabel = 'Revert to Draft';
+                  }
+
+                  return (
+                    <Button
+                      key={targetStatus}
+                      variant={variant}
+                      size="sm"
+                      disabled={isUpdatingStatus}
+                      onClick={() => handleStatusTransition(targetStatus)}
+                      className="flex items-center text-xs"
+                    >
+                      {icon}
+                      {actionLabel}
+                    </Button>
+                  );
+                })
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      
+
+          {/* Event Configuration & Summary */}
+          <Card className="border-slate-200">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-base">Event Configuration</CardTitle>
+                <CardDescription>Event title, type, timezone, and capacity settings.</CardDescription>
+              </div>
+              {canEditEvent && (
+                <Button size="sm" variant="outline" onClick={() => setIsEditOpen(true)}>
+                  <Edit3 className="h-3.5 w-3.5 mr-1" />
+                  Edit Event
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3 text-xs text-slate-600">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div><span className="text-slate-400">Title:</span> <p className="font-semibold text-slate-900">{event.title}</p></div>
+                <div><span className="text-slate-400">Slug:</span> <p className="font-mono text-slate-700">{event.slug}</p></div>
+                <div><span className="text-slate-400">Event Type:</span> <p className="font-semibold text-slate-900 capitalize">{event.eventType.replace('_', ' ')}</p></div>
+                <div><span className="text-slate-400">Visibility:</span> <p className="font-semibold text-slate-900 capitalize">{event.visibility}</p></div>
+                <div><span className="text-slate-400">Timezone:</span> <p className="font-mono text-slate-700">{event.timezone}</p></div>
+                <div><span className="text-slate-400">Capacity:</span> <p className="font-semibold text-slate-900">{event.capacity || 'Unlimited'}</p></div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
 
       {/* Dialog: Create Team */}
       <Dialog

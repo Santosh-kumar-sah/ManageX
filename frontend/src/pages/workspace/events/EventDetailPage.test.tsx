@@ -416,3 +416,193 @@ describe('EventDetailPage — Phase 02B Multi-Round Hackathon Management', () =>
     expect(html).toContain('Results');
   });
 });
+
+describe('EventDetailPage — Tabbed Navigation & Event Status Stepper UX', () => {
+  const mockUser = {
+    id: 'user-owner',
+    email: 'sarah@kiet.org',
+    fullName: 'Sarah Chen',
+    isPlatformAdmin: false,
+    status: 'active',
+  };
+
+  const mockOrg = {
+    id: 'org-kiet',
+    name: 'Kiet Group',
+    slug: 'kiet-group',
+    status: 'active',
+    memberCount: 5,
+    role: { slug: 'organisation_owner', name: 'Organisation Owner' },
+    createdAt: '2026-01-01',
+  };
+
+  const mockHackathonEvent = {
+    id: 'evt-hackathon-tabs',
+    organisationId: 'org-kiet',
+    title: 'Kiet Hack Challenge',
+    slug: 'kiet-hack-challenge',
+    eventType: 'hackathon',
+    status: 'published',
+    visibility: 'public',
+    startAt: '2026-10-21T09:00:00Z',
+    endAt: '2026-10-22T18:00:00Z',
+    timezone: 'Asia/Kolkata',
+    locationType: 'in_person',
+    location: 'KIET Auditorium',
+    capacity: 100,
+    teamSizeMin: 1,
+    teamSizeMax: 4,
+    description: 'This is national level hackathon',
+    participantInstructions: 'Bring your laptop and student ID. Teams must submit a repository link and a demo link.',
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: mockUser,
+      isLoading: false,
+      isAuthenticated: true,
+      refreshUser: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    vi.spyOn(OrgContextModule, 'useOrg').mockReturnValue({
+      organisations: [mockOrg],
+      activeOrg: mockOrg,
+      activeDetails: {
+        organisation: mockOrg,
+        membership: {
+          id: 'mem-1',
+          role: { slug: 'organisation_owner', name: 'Organisation Owner' },
+          permissions: ['event.view', 'event.edit', 'event.status.manage', 'event.participant.manage'],
+        },
+      },
+      isLoading: false,
+      switchOrg: vi.fn(),
+      refreshOrganisations: vi.fn(),
+      createOrganisation: vi.fn(),
+    });
+  });
+
+  it('1. Renders the 5-stage lifecycle stepper and header subtitle', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-kiet/events/evt-hackathon-tabs']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId"
+            element={<EventDetailPage initialEvent={mockHackathonEvent as any} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(html).toContain('Event status');
+    expect(html).toContain('Draft');
+    expect(html).toContain('Published');
+    expect(html).toContain('Registration Closed');
+    expect(html).toContain('In Progress');
+    expect(html).toContain('Completed');
+    expect(html).toContain('KIET Auditorium');
+  });
+
+  it('2. Renders all 7 horizontal navigation tabs for a hackathon', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-kiet/events/evt-hackathon-tabs']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId"
+            element={<EventDetailPage initialEvent={mockHackathonEvent as any} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(html).toContain('data-testid="event-tab-overview"');
+    expect(html).toContain('data-testid="event-tab-registrations"');
+    expect(html).toContain('data-testid="event-tab-teams"');
+    expect(html).toContain('data-testid="event-tab-submissions"');
+    expect(html).toContain('data-testid="event-tab-judging"');
+    expect(html).toContain('data-testid="event-tab-results"');
+    expect(html).toContain('data-testid="event-tab-settings"');
+  });
+
+  it('3. Renders the 3 overview metric cards and participant instructions on default overview tab', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-kiet/events/evt-hackathon-tabs']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId"
+            element={<EventDetailPage initialEvent={mockHackathonEvent as any} initialTab="overview" />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(html).toContain('Registration window');
+    expect(html).toContain('Capacity');
+    expect(html).toContain('Hackathon');
+    expect(html).toContain('Participant instructions');
+    expect(html).toContain('Bring your laptop and student ID');
+  });
+
+  it('4. Navigates cleanly to Registrations tab when requested', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-kiet/events/evt-hackathon-tabs?tab=registrations']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId"
+            element={<EventDetailPage initialEvent={mockHackathonEvent as any} initialTab="registrations" />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(html).toContain('Participants Roster');
+    expect(html).toContain('Search participant by name or email');
+  });
+
+  it('5. Navigates cleanly between Judging sub-tabs (rounds vs criteria)', () => {
+    const roundsHtml = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-kiet/events/evt-hackathon-tabs?tab=judging&subtab=rounds']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId"
+            element={
+              <EventDetailPage
+                initialEvent={mockHackathonEvent as any}
+                initialTab="judging"
+                initialJudgingSubTab="rounds"
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(roundsHtml).toContain('data-testid="judging-subtab-rounds"');
+    expect(roundsHtml).toContain('data-testid="judging-subtab-criteria"');
+    expect(roundsHtml).toContain('Competition Rounds');
+
+    const criteriaHtml = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/app/organisations/org-kiet/events/evt-hackathon-tabs?tab=judging&subtab=criteria']}>
+        <Routes>
+          <Route
+            path="/app/organisations/:orgId/events/:eventId"
+            element={
+              <EventDetailPage
+                initialEvent={mockHackathonEvent as any}
+                initialTab="judging"
+                initialJudgingSubTab="criteria"
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(criteriaHtml).toContain('Scoring Criteria &amp; Judge Assignments');
+    expect(criteriaHtml).not.toContain('competition-rounds-card');
+  });
+});

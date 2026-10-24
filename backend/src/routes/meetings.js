@@ -119,6 +119,12 @@ const sendInvitesSchema = z
   .optional();
 
 // -----------------------------------------------------------------------------
+// Module Entitlement & Membership Guard (Fail-Closed Defense-in-Depth)
+// -----------------------------------------------------------------------------
+meetingsRouter.use(requireOrgMembership);
+meetingsRouter.use(requireModuleEntitlement('meetings'));
+
+// -----------------------------------------------------------------------------
 // 1. Meeting CRUD & Lifecycle Routes (MTG-001, MTG-002)
 // -----------------------------------------------------------------------------
 

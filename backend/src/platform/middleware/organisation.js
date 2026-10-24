@@ -181,18 +181,65 @@ export function requireOrgPermission(permissionKey) {
     }
 
     // Platform Super Admin bypass or user possess permission (or alias)
-    const hasPermission = req.user?.isPlatformAdmin ||
-      req.membership.permissions.has(permissionKey) ||
-      (PERMISSION_ALIASES[permissionKey] && req.membership.permissions.has(PERMISSION_ALIASES[permissionKey]));
+    const keys = Array.isArray(permissionKey) ? permissionKey : [permissionKey];
+    const hasPermission =
+      req.user?.isPlatformAdmin ||
+      keys.some(
+        (k) =>
+          req.membership.permissions.has(k) ||
+          (PERMISSION_ALIASES[k] && req.membership.permissions.has(PERMISSION_ALIASES[k]))
+      );
 
     if (hasPermission) {
       return next();
     }
 
     next(new AuthorizationError(
-      `Permission denied. Required permission: '${permissionKey}'`,
+      `Permission denied. Required permission: '${keys.join("' or '")}'`,
       'FORBIDDEN'
     ));
+  };
+}
+
+/**
+ * Strict organisation permission guard for operations where platform-level
+ * identity must not bypass tenant-scoped authorization.
+ */
+export function requireStrictOrgPermission(permissionKey) {
+  return function strictPermissionGuard(req, res, next) {
+    if (!req.membership) {
+      return next(new AuthorizationError('Organisation membership context required.', 'MEMBERSHIP_REQUIRED'));
+    }
+
+    const keys = Array.isArray(permissionKey) ? permissionKey : [permissionKey];
+    const hasPermission = keys.some(
+      (key) =>
+        req.membership.permissions.has(key) ||
+        (PERMISSION_ALIASES[key] && req.membership.permissions.has(PERMISSION_ALIASES[key]))
+    );
+
+    if (hasPermission) {
+      return next();
+    }
+
+    return next(new AuthorizationError(
+      `Permission denied. Required permission: '${keys.join("' or '")}'`,
+      'FORBIDDEN'
+    ));
+  };
+}
+
+/**
+ * Applies a strict permission check to organisation members while preserving
+ * assignment-scoped access for external judges and participants.
+ */
+export function requireStrictOrgPermissionIfMember(permissionKey) {
+  return function strictMemberPermissionGuard(req, res, next) {
+    if (!req.membership) {
+      return next();
+    }
+
+    return requireStrictOrgPermission(permissionKey)(req, res, next);
   };
 }
 
@@ -328,4 +375,3 @@ export function requireOrgRole(allowedRoleSlugs) {
     ));
   };
 }
-

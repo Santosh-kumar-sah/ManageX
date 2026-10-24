@@ -720,4 +720,102 @@ describe('PublicEventDetailPage — Public Details & External Registration', () 
     expect(html).toContain('Alpha Hackers');
     expect(html).toContain('92.0 pts');
   });
+
+  it('13. Phase 4D: Displays evaluation schedule section when participant is registered with a team for a hackathon', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: {
+        id: 'usr-1',
+        fullName: 'Alex Dev',
+        email: 'alex@example.com',
+        isPlatformAdmin: false,
+        status: 'active',
+      },
+      isLoading: false,
+      isAuthenticated: true,
+      refreshUser: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    const mockEvent = {
+      id: 'evt-hack-1',
+      organisationId: 'org-1',
+      title: 'AI Championship',
+      slug: 'ai-championship',
+      eventType: 'hackathon' as const,
+      status: 'in_progress' as const,
+      visibility: 'public' as const,
+      startAt: '2026-11-01T09:00:00Z',
+      endAt: '2026-11-03T18:00:00Z',
+      timezone: 'UTC',
+      locationType: 'virtual' as const,
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-01T00:00:00Z',
+    };
+
+    const mockReg = {
+      id: 'reg-1',
+      organisationId: 'org-1',
+      eventId: 'evt-hack-1',
+      userId: 'usr-1',
+      status: 'registered' as const,
+      registeredAt: '2026-10-02T10:00:00Z',
+      createdAt: '2026-10-02T10:00:00Z',
+      updatedAt: '2026-10-02T10:00:00Z',
+    };
+
+    const mockTeam = {
+      id: 'team-1',
+      organisationId: 'org-1',
+      eventId: 'evt-hack-1',
+      name: 'Cyber Innovators',
+      slug: 'cyber-innovators',
+      createdById: 'usr-1',
+      createdAt: '2026-10-02T10:00:00Z',
+      updatedAt: '2026-10-02T10:00:00Z',
+      members: [
+        {
+          id: 'tm-1',
+          userId: 'usr-1',
+          fullName: 'Alex Dev',
+          isOwner: true,
+          joinedAt: '2026-10-02T10:00:00Z',
+        },
+      ],
+      memberCount: 1,
+    };
+
+    const mockRound = {
+      id: 'rnd-1',
+      organisationId: 'org-1',
+      eventId: 'evt-hack-1',
+      roundNumber: 1,
+      name: 'Pitch Showcase',
+      advancementRule: 'manual' as const,
+      status: 'judging' as const,
+      createdAt: '2026-10-02T10:00:00Z',
+      updatedAt: '2026-10-02T10:00:00Z',
+    };
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/events/evt-hack-1']}>
+        <Routes>
+          <Route
+            path="/events/:eventId"
+            element={
+              <PublicEventDetailPage
+                initialEvent={mockEvent}
+                initialRegistration={mockReg}
+                initialMyTeam={mockTeam}
+                initialRounds={[mockRound]}
+                initialLoading={false}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(html).toContain('participant-evaluation-section');
+    expect(html).toContain('Evaluation Schedule');
+  });
 });

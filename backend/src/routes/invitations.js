@@ -13,6 +13,7 @@ import {
   getInvitationByToken,
   acceptInvitation,
 } from '../platform/organisations/organisationService.js';
+import { acceptEvaluationJudgeInvitation } from '../platform/events/evaluationService.js';
 import { sendSuccess } from '../platform/common/responses.js';
 
 export const invitationsRouter = Router();
@@ -43,6 +44,21 @@ invitationsRouter.post('/:token/accept', requireAuth, requireVerifiedUser, async
 
     return sendSuccess(res, 200, {
       message: 'Invitation accepted successfully. You are now a member of this organisation.',
+      ...result,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+invitationsRouter.post('/evaluation/:token/accept', requireAuth, requireVerifiedUser, async (req, res, next) => {
+  try {
+    const result = await acceptEvaluationJudgeInvitation(req.params.token, req.user, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    return sendSuccess(res, 200, {
+      message: 'Evaluation judge invitation accepted.',
       ...result,
     });
   } catch (err) {

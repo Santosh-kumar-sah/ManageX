@@ -323,6 +323,77 @@ export async function getEventTeamById(organisationId, eventId, teamId) {
 }
 
 /**
+ * Retrieves the current user's team in a hackathon event (EVT-006).
+ */
+export async function getMyEventTeam(organisationId, eventId, userId) {
+  return withTenantTransaction({ organisationId, userId }, async (client) => {
+    const memberRes = await client.query(
+      `SELECT team_id FROM event_team_members WHERE event_id = $1 AND user_id = $2 AND organisation_id = $3`,
+      [eventId, userId, organisationId]
+    );
+
+    if (memberRes.rows.length === 0) {
+      return null;
+    }
+
+    const teamId = memberRes.rows[0].team_id;
+
+    const teamRes = await client.query(
+      `
+      SELECT 
+        t.*,
+        u.email AS owner_email,
+        u.full_name AS owner_full_name,
+        COUNT(m.id)::int AS member_count
+      FROM event_teams t
+      JOIN users u ON u.id = t.created_by_id
+      LEFT JOIN event_team_members m ON m.team_id = t.id
+      WHERE t.id = $1 AND t.event_id = $2 AND t.organisation_id = $3
+      GROUP BY t.id, u.email, u.full_name
+    `,
+      [teamId, eventId, organisationId]
+    );
+
+    if (teamRes.rows.length === 0) {
+      return null;
+    }
+
+    const teamRow = teamRes.rows[0];
+
+    const membersRes = await client.query(
+      `
+      SELECT 
+        m.id,
+        m.user_id,
+        m.is_owner,
+        m.joined_at,
+        u.email,
+        u.full_name
+      FROM event_team_members m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.team_id = $1
+      ORDER BY m.is_owner DESC, m.joined_at ASC
+    `,
+      [teamId]
+    );
+
+    const members = membersRes.rows.map((m) => ({
+      id: m.id,
+      userId: m.user_id,
+      isOwner: m.is_owner,
+      joinedAt: m.joined_at.toISOString(),
+      user: {
+        id: m.user_id,
+        email: m.email,
+        fullName: m.full_name,
+      },
+    }));
+
+    return formatTeamRow(teamRow, members);
+  });
+}
+
+/**
  * Invites a registered participant to join a hackathon team (EVT-006, ADR-007).
  * Invitations expire after 7 days and are single-use.
  */
@@ -662,6 +733,403 @@ export async function acceptTeamInvitation(
     return {
       message: 'Successfully joined team!',
       teamId: invitation.team_id,
+      memberId: member.id,
+    };
+  });
+}
+
+/**
+ * Lists invitations sent for a specific team (EVT-006, ADR-007).
+ * Caller must be team owner or have event.team.manage permission.
+ * Never leaks token hashes or raw tokens.
+ */
+export async function listTeamInvitations(organisationId, eventId, teamId, actorUserId) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    // 1. Verify team exists
+    const teamRes = await client.query(
+      `SELECT * FROM event_teams WHERE id = $1 AND event_id = $2 AND organisation_id = $3`,
+      [teamId, eventId, organisationId]
+    );
+
+    if (teamRes.rows.length === 0) {
+      throw new NotFoundError('Team not found.', 'TEAM_NOT_FOUND');
+    }
+
+    // 2. Check caller is owner
+    const callerMemberRes = await client.query(
+      `SELECT is_owner FROM event_team_members WHERE team_id = $1 AND user_id = $2`,
+      [teamId, actorUserId]
+    );
+
+    const isTeamOwner = callerMemberRes.rows.length > 0 && callerMemberRes.rows[0].is_owner;
+    if (!isTeamOwner) {
+      throw new AuthorizationError(
+        'Only the team owner can view team invitations.',
+        'TEAM_OWNER_REQUIRED'
+      );
+    }
+
+    // 3. Query invitations, redacting token_hash
+    const invitesRes = await client.query(
+      `
+      SELECT 
+        id,
+        team_id,
+        invited_email,
+        status,
+        expires_at,
+        created_at,
+        accepted_at,
+        revoked_at
+      FROM event_team_invitations
+      WHERE team_id = $1 AND event_id = $2 AND organisation_id = $3
+      ORDER BY created_at DESC
+    `,
+      [teamId, eventId, organisationId]
+    );
+
+    const now = new Date();
+    const invitations = invitesRes.rows.map((row) => {
+      let effectiveStatus = row.status;
+      if (row.status === 'pending' && new Date(row.expires_at) < now) {
+        effectiveStatus = 'expired';
+      }
+      return {
+        id: row.id,
+        teamId: row.team_id,
+        invitedEmail: row.invited_email,
+        status: effectiveStatus,
+        createdAt: row.created_at ? row.created_at.toISOString() : null,
+        expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
+        acceptedAt: row.accepted_at ? row.accepted_at.toISOString() : null,
+        revokedAt: row.revoked_at ? row.revoked_at.toISOString() : null,
+      };
+    });
+
+    return invitations;
+  });
+}
+
+/**
+ * Revokes a pending team invitation (EVT-006, ADR-007).
+ */
+export async function revokeTeamInvitation(
+  organisationId,
+  eventId,
+  teamId,
+  invitationId,
+  actorUserId,
+  { ipAddress, userAgent } = {}
+) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    // 1. Check caller is team owner
+    const callerMemberRes = await client.query(
+      `SELECT is_owner FROM event_team_members WHERE team_id = $1 AND user_id = $2`,
+      [teamId, actorUserId]
+    );
+
+    const isTeamOwner = callerMemberRes.rows.length > 0 && callerMemberRes.rows[0].is_owner;
+    if (!isTeamOwner) {
+      throw new AuthorizationError(
+        'Only the team owner can revoke team invitations.',
+        'TEAM_OWNER_REQUIRED'
+      );
+    }
+
+    // 2. Lock invitation row
+    const inviteRes = await client.query(
+      `
+      SELECT * FROM event_team_invitations
+      WHERE id = $1 AND team_id = $2 AND event_id = $3 AND organisation_id = $4
+      FOR UPDATE
+    `,
+      [invitationId, teamId, eventId, organisationId]
+    );
+
+    if (inviteRes.rows.length === 0) {
+      throw new NotFoundError('Invitation not found.', 'INVITATION_NOT_FOUND');
+    }
+
+    const invitation = inviteRes.rows[0];
+    if (invitation.status !== 'pending') {
+      throw new ConflictError(
+        `Cannot revoke invitation because it is already ${invitation.status}.`,
+        'INVITATION_NOT_PENDING'
+      );
+    }
+
+    await client.query(
+      `UPDATE event_team_invitations SET status = 'revoked', revoked_at = NOW() WHERE id = $1`,
+      [invitationId]
+    );
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'event.team.invitation_revoked',
+      entityType: 'event_team_invitation',
+      entityId: invitationId,
+      metadata: { eventId, teamId, invitedEmail: invitation.invited_email },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return { success: true, invitationId };
+  });
+}
+
+/**
+ * Declines / rejects a team invitation token (EVT-006, ADR-007).
+ */
+export async function rejectTeamInvitation(
+  organisationId,
+  eventId,
+  token,
+  userId,
+  { ipAddress, userAgent } = {}
+) {
+  if (!token) {
+    throw new ValidationError('Invitation token is required.');
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+
+  return withTenantTransaction({ organisationId, userId }, async (client) => {
+    const userRes = await client.query(`SELECT email FROM users WHERE id = $1`, [userId]);
+    if (userRes.rows.length === 0) {
+      throw new NotFoundError('User not found.');
+    }
+    const userEmail = userRes.rows[0].email.toLowerCase();
+
+    const inviteRes = await client.query(
+      `
+      SELECT * FROM event_team_invitations
+      WHERE token_hash = $1 AND event_id = $2 AND organisation_id = $3
+      FOR UPDATE
+    `,
+      [tokenHash, eventId, organisationId]
+    );
+
+    if (inviteRes.rows.length === 0) {
+      throw new NotFoundError('Invitation token not found or invalid.', 'INVITATION_NOT_FOUND');
+    }
+
+    const invitation = inviteRes.rows[0];
+
+    if (invitation.status !== 'pending') {
+      throw new ConflictError(
+        `This invitation has already been ${invitation.status}.`,
+        'INVITATION_ALREADY_USED'
+      );
+    }
+
+    if (new Date() > new Date(invitation.expires_at)) {
+      await client.query(
+        `UPDATE event_team_invitations SET status = 'expired' WHERE id = $1`,
+        [invitation.id]
+      );
+      throw new ConflictError('This invitation has expired.', 'INVITATION_EXPIRED');
+    }
+
+    if (invitation.invited_email.toLowerCase() !== userEmail) {
+      throw new AuthorizationError(
+        'This invitation was sent to a different email address.',
+        'EMAIL_MISMATCH'
+      );
+    }
+
+    await client.query(
+      `UPDATE event_team_invitations SET status = 'rejected' WHERE id = $1`,
+      [invitation.id]
+    );
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: userId,
+      action: 'event.team.invitation_rejected',
+      entityType: 'event_team_invitation',
+      entityId: invitation.id,
+      metadata: { eventId, teamId: invitation.team_id },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return { message: 'Invitation declined successfully.', invitationId: invitation.id };
+  });
+}
+
+/**
+ * Retrieves pending invitations received by the current user for an event (EVT-006).
+ */
+export async function getMyTeamInvitations(organisationId, eventId, userId) {
+  return withTenantTransaction({ organisationId, userId }, async (client) => {
+    const userRes = await client.query(`SELECT email FROM users WHERE id = $1`, [userId]);
+    if (userRes.rows.length === 0) {
+      return [];
+    }
+    const userEmail = userRes.rows[0].email.toLowerCase();
+
+    const invitesRes = await client.query(
+      `
+      SELECT 
+        i.id,
+        i.team_id,
+        i.expires_at,
+        i.created_at,
+        t.name AS team_name,
+        t.slug AS team_slug,
+        u.full_name AS invited_by_name
+      FROM event_team_invitations i
+      JOIN event_teams t ON t.id = i.team_id
+      JOIN users u ON u.id = i.invited_by_id
+      WHERE i.event_id = $1 
+        AND i.organisation_id = $2 
+        AND LOWER(i.invited_email) = $3
+        AND i.status = 'pending'
+        AND i.expires_at > NOW()
+      ORDER BY i.created_at DESC
+    `,
+      [eventId, organisationId, userEmail]
+    );
+
+    return invitesRes.rows.map((row) => ({
+      id: row.id,
+      teamId: row.team_id,
+      teamName: row.team_name,
+      teamSlug: row.team_slug,
+      invitedByName: row.invited_by_name,
+      createdAt: row.created_at ? row.created_at.toISOString() : null,
+      expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
+    }));
+  });
+}
+
+/**
+ * Direct join for a hackathon team by an active registered participant (EVT-006).
+ */
+export async function joinEventTeam(
+  organisationId,
+  eventId,
+  teamId,
+  userId,
+  { ipAddress, userAgent } = {}
+) {
+  return withTenantTransaction({ organisationId, userId }, async (client) => {
+    // 1. Verify Event exists and is of type 'hackathon'
+    const eventRes = await client.query(
+      `SELECT * FROM events WHERE id = $1 AND organisation_id = $2`,
+      [eventId, organisationId]
+    );
+
+    if (eventRes.rows.length === 0) {
+      throw new NotFoundError('Event not found.', 'EVENT_NOT_FOUND');
+    }
+
+    const event = eventRes.rows[0];
+    if (event.event_type !== 'hackathon') {
+      throw new ValidationError(
+        'Teams are only available for hackathon events.',
+        'TEAMS_NOT_SUPPORTED'
+      );
+    }
+
+    if (['completed', 'cancelled', 'archived'].includes(event.status)) {
+      throw new ConflictError(
+        `Cannot join team because event is ${event.status}.`,
+        'EVENT_LOCKED'
+      );
+    }
+
+    // 2. Caller must be an active registered participant for this event (EVT-006)
+    const regRes = await client.query(
+      `SELECT * FROM event_registrations WHERE event_id = $1 AND user_id = $2 AND status = 'registered'`,
+      [eventId, userId]
+    );
+
+    if (regRes.rows.length === 0) {
+      throw new AuthorizationError(
+        'You must be a registered participant of this event to join a team.',
+        'REGISTRATION_REQUIRED'
+      );
+    }
+
+    // 3. User cannot already belong to an active team in this event (EVT-006)
+    const existingMemberRes = await client.query(
+      `SELECT * FROM event_team_members WHERE event_id = $1 AND user_id = $2`,
+      [eventId, userId]
+    );
+
+    if (existingMemberRes.rows.length > 0) {
+      throw new ConflictError(
+        'You are already a member of a team for this event. You must leave your current team before joining another one.',
+        'ALREADY_IN_TEAM'
+      );
+    }
+
+    // 4. Lock team row and check team exists in event/org
+    const teamRes = await client.query(
+      `SELECT * FROM event_teams WHERE id = $1 AND event_id = $2 AND organisation_id = $3 FOR UPDATE`,
+      [teamId, eventId, organisationId]
+    );
+
+    if (teamRes.rows.length === 0) {
+      throw new NotFoundError('Team not found.', 'TEAM_NOT_FOUND');
+    }
+
+    const team = teamRes.rows[0];
+
+    // 5. Team size limit check
+    const teamSizeMax = event.team_size_max || 10;
+    const countRes = await client.query(
+      `SELECT COUNT(*)::int AS count FROM event_team_members WHERE team_id = $1`,
+      [teamId]
+    );
+
+    if (countRes.rows[0].count >= teamSizeMax) {
+      throw new ConflictError(
+        `This team has reached its maximum size of ${teamSizeMax} members.`,
+        'TEAM_MAX_SIZE_REACHED'
+      );
+    }
+
+    // 6. Insert new member
+    const memberInsertRes = await client.query(
+      `
+      INSERT INTO event_team_members (
+        organisation_id,
+        event_id,
+        team_id,
+        user_id,
+        is_owner
+      )
+      VALUES ($1, $2, $3, $4, false)
+      RETURNING *
+    `,
+      [organisationId, eventId, teamId, userId]
+    );
+
+    const member = memberInsertRes.rows[0];
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: userId,
+      action: 'event.team.member_joined',
+      entityType: 'event_team_member',
+      entityId: member.id,
+      metadata: {
+        eventId,
+        teamId,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return {
+      message: 'Successfully joined team!',
+      teamId,
       memberId: member.id,
     };
   });

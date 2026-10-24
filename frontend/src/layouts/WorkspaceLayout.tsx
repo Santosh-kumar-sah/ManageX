@@ -83,6 +83,11 @@ export function WorkspaceLayout() {
       icon: Trophy,
     },
     {
+      label: 'Judge Workspace',
+      href: '/app/judge/evaluations',
+      icon: Shield,
+    },
+    {
       label: 'Browse Public Events',
       href: '/events',
       icon: Calendar,

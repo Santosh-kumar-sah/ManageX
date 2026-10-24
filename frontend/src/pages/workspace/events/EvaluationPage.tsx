@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   CalendarClock,
@@ -111,9 +111,34 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
 }
 
-export function EvaluationPage({ initialLoading = true }: { initialLoading?: boolean } = {}) {
+export type EvaluationTab = 'config' | 'panels' | 'schedule' | 'invitations';
+
+export function EvaluationPage({
+  initialLoading = true,
+  initialTab,
+}: {
+  initialLoading?: boolean;
+  initialTab?: EvaluationTab;
+} = {}) {
   const { orgId, eventId, roundId } = useParams<{ orgId: string; eventId: string; roundId: string }>();
   const { activeDetails } = useOrg();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paramTab = searchParams.get('tab') as EvaluationTab | null;
+  const resolvedTab: EvaluationTab =
+    initialTab ||
+    (paramTab && ['config', 'panels', 'schedule', 'invitations'].includes(paramTab)
+      ? paramTab
+      : 'config');
+  const [activeTab, setActiveTab] = useState<EvaluationTab>(resolvedTab);
+
+  const handleTabClick = (tab: EvaluationTab) => {
+    setActiveTab(tab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', tab);
+      return next;
+    });
+  };
   const [configuration, setConfiguration] = useState<EvaluationConfigurationResponse | null>(null);
   const [panels, setPanels] = useState<EvaluationPanel[]>([]);
   const [sessions, setSessions] = useState<EvaluationSession[]>([]);
@@ -436,6 +461,37 @@ export function EvaluationPage({ initialLoading = true }: { initialLoading?: boo
     );
   }
 
+  const tabs = [
+    {
+      id: 'config' as const,
+      label: 'Round evaluation configuration',
+      shortLabel: 'Overview & Config',
+      icon: Settings2,
+      badge: configuration?.configured ? (configuration.evaluation?.status || 'configured') : 'Not configured',
+    },
+    {
+      id: 'panels' as const,
+      label: 'Evaluation panels',
+      shortLabel: 'Panels & Judges',
+      icon: Users,
+      count: panels.length,
+    },
+    {
+      id: 'schedule' as const,
+      label: 'Session schedule',
+      shortLabel: 'Session Schedule',
+      icon: CalendarClock,
+      count: sessions.length,
+    },
+    {
+      id: 'invitations' as const,
+      label: 'Invitations and completion',
+      shortLabel: 'Invitations & Lifecycle',
+      icon: Gavel,
+      count: invitations.length,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -464,82 +520,191 @@ export function EvaluationPage({ initialLoading = true }: { initialLoading?: boo
           <Skeleton className="h-24 w-full" />
         </Card>
       ) : (
-        <>
-          <Card>
-            <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
-              <div>
-                <CardTitle className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-brand-600" /> Round evaluation configuration</CardTitle>
-                <CardDescription className="mt-2">Evaluation is optional per round and does not publish results or advance the round.</CardDescription>
-              </div>
-              {canManage && (
-                <Button size="sm" onClick={() => setShowConfigDialog(true)}>
-                  {configuration?.configured ? 'Edit configuration' : 'Configure evaluation'}
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent className="pt-5">
-              {!configuration?.configured || !configuration.evaluation ? (
-                <EmptyState title="Evaluation is not configured" description="Create a round evaluation to manage panels and appointments." />
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
-                  <div><span className="text-xs text-slate-500">Mode</span><p className="font-semibold text-slate-900">{configuration.evaluation.evaluationMode.replace('_', ' ')}</p></div>
-                  <div><span className="text-xs text-slate-500">Status</span><p><Badge variant={configuration.evaluation.status === 'published' ? 'success' : 'brand'}>{configuration.evaluation.status}</Badge></p></div>
-                  <div><span className="text-xs text-slate-500">Session</span><p className="font-semibold text-slate-900">{configuration.evaluation.sessionDurationMinutes}m + {configuration.evaluation.bufferMinutes}m buffer</p></div>
-                  <div><span className="text-xs text-slate-500">Coverage</span><p className="font-semibold text-slate-900">{configuration.evaluation.evaluationsPerTeam} evaluation(s) per team</p></div>
-                  <div><span className="text-xs text-slate-500">Panels</span><p className="font-semibold text-slate-900">{configuration.evaluation.panelsCount}</p></div>
-                  <div><span className="text-xs text-slate-500">Sessions</span><p className="font-semibold text-slate-900">{configuration.evaluation.sessionsCount}</p></div>
-                  <div className="sm:col-span-2"><span className="text-xs text-slate-500">Schedule window</span><p className="font-semibold text-slate-900">{formatDate(configuration.evaluation.scheduleStartsAt)} – {formatDate(configuration.evaluation.scheduleEndsAt)}</p></div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <div className="space-y-6">
+          <div className="border-b border-slate-200">
+            <nav className="flex space-x-2 sm:space-x-4 overflow-x-auto pb-px" aria-label="Evaluation sections">
+              {tabs.map((tab) => {
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => handleTabClick(tab.id)}
+                    className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                      isActive
+                        ? 'border-brand-600 text-brand-600 font-semibold'
+                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <tab.icon className={`h-4 w-4 ${isActive ? 'text-brand-600' : 'text-slate-400'}`} />
+                    <span>{tab.label}</span>
+                    {tab.count !== undefined && (
+                      <span
+                        className={`ml-1 px-1.5 py-0.5 text-xs rounded-full ${
+                          isActive
+                            ? 'bg-brand-50 text-brand-700 font-semibold'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {tab.count}
+                      </span>
+                    )}
+                    {tab.badge && (
+                      <span
+                        className={`ml-1 px-1.5 py-0.5 text-xs rounded capitalize ${
+                          tab.badge === 'published'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : tab.badge === 'completed'
+                            ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                        }`}
+                      >
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
 
-          <Card>
-            <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
-              <div><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4 text-brand-600" /> Evaluation panels</CardTitle><CardDescription className="mt-2">Panel assignments synchronize only evaluation-generated legacy assignments.</CardDescription></div>
-              {canManageJudges && <Button size="sm" onClick={() => openPanel()}><Plus className="h-4 w-4" /> Add panel</Button>}
-            </CardHeader>
-            <CardContent className="pt-5">
-              {panels.length === 0 ? <EmptyState title="No panels configured" description="Create a panel before generating an evaluation schedule." /> : (
-                <div className="space-y-4">
-                  {panels.map((panel) => (
-                    <div key={panel.id} className="rounded-lg border border-slate-200 p-4">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div><div className="flex items-center gap-2"><Badge variant="neutral">Panel {panel.panelNumber}</Badge><h3 className="font-semibold text-slate-900">{panel.name}</h3></div><p className="mt-1 text-xs text-slate-500">{panel.meetingUrl || 'No panel meeting link configured'}</p></div>
-                        {canManageJudges && <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => openPanel(panel)}>Edit</Button><Button size="sm" variant="destructive" onClick={() => setPanelToDelete(panel)}><Trash2 className="h-3.5 w-3.5" /> Delete</Button></div>}
-                      </div>
-                      <div className="mt-4 space-y-2">
-                        {panel.judges.map((judge) => <div key={judge.judgeUserId} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm"><span>{judge.judgeName}{judge.judgeEmail ? ` · ${judge.judgeEmail}` : ''}</span>{canManageJudges && <Button size="sm" variant="ghost" onClick={() => removeJudge(panel, judge.judgeUserId)}>Remove</Button>}</div>)}
-                        {canManageJudges && <div className="flex gap-2"><Select value={judgeForm[panel.id] || ''} onChange={(event) => setJudgeForm((current) => ({ ...current, [panel.id]: event.target.value }))}><option value="">Select active user to assign</option>{members.map((member) => <option key={member.userId} value={member.userId}>{member.fullName} · {member.email}</option>)}</Select><Button size="sm" onClick={() => assignJudge(panel)} disabled={!judgeForm[panel.id] || isMutating}>Assign</Button></div>}
-                      </div>
+          {activeTab === 'config' && (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
+                  <div>
+                    <CardTitle className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-brand-600" /> Round evaluation configuration</CardTitle>
+                    <CardDescription className="mt-2">Evaluation is optional per round and does not publish results or advance the round.</CardDescription>
+                  </div>
+                  {canManage && (
+                    <Button size="sm" onClick={() => setShowConfigDialog(true)}>
+                      {configuration?.configured ? 'Edit configuration' : 'Configure evaluation'}
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="pt-5">
+                  {!configuration?.configured || !configuration.evaluation ? (
+                    <EmptyState title="Evaluation is not configured" description="Create a round evaluation to manage panels and appointments." />
+                  ) : (
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+                      <div><span className="text-xs text-slate-500">Mode</span><p className="font-semibold text-slate-900">{configuration.evaluation.evaluationMode.replace('_', ' ')}</p></div>
+                      <div><span className="text-xs text-slate-500">Status</span><p><Badge variant={configuration.evaluation.status === 'published' ? 'success' : 'brand'}>{configuration.evaluation.status}</Badge></p></div>
+                      <div><span className="text-xs text-slate-500">Session</span><p className="font-semibold text-slate-900">{configuration.evaluation.sessionDurationMinutes}m + {configuration.evaluation.bufferMinutes}m buffer</p></div>
+                      <div><span className="text-xs text-slate-500">Coverage</span><p className="font-semibold text-slate-900">{configuration.evaluation.evaluationsPerTeam} evaluation(s) per team</p></div>
+                      <div><span className="text-xs text-slate-500">Panels</span><p className="font-semibold text-slate-900">{configuration.evaluation.panelsCount}</p></div>
+                      <div><span className="text-xs text-slate-500">Sessions</span><p className="font-semibold text-slate-900">{configuration.evaluation.sessionsCount}</p></div>
+                      <div className="sm:col-span-2"><span className="text-xs text-slate-500">Schedule window</span><p className="font-semibold text-slate-900">{formatDate(configuration.evaluation.scheduleStartsAt)} – {formatDate(configuration.evaluation.scheduleEndsAt)}</p></div>
                     </div>
-                  ))}
+                  )}
+                </CardContent>
+              </Card>
+
+              {configuration?.configured && (
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Panels &amp; Judges</span>
+                        <Users className="h-4 w-4 text-brand-600" />
+                      </div>
+                      <div className="mt-2 text-2xl font-bold text-slate-900">{panels.length}</div>
+                      <p className="mt-1 text-xs text-slate-500">Evaluation panels configured</p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100">
+                      <Button size="sm" variant="ghost" className="w-full justify-between text-brand-600 hover:text-brand-700 p-0 h-auto" onClick={() => handleTabClick('panels')}>
+                        <span>Manage panels</span> &rarr;
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Session Schedule</span>
+                        <CalendarClock className="h-4 w-4 text-brand-600" />
+                      </div>
+                      <div className="mt-2 text-2xl font-bold text-slate-900">{sessions.length}</div>
+                      <p className="mt-1 text-xs text-slate-500">Total sessions scheduled</p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100">
+                      <Button size="sm" variant="ghost" className="w-full justify-between text-brand-600 hover:text-brand-700 p-0 h-auto" onClick={() => handleTabClick('schedule')}>
+                        <span>View schedule</span> &rarr;
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Invitations &amp; Status</span>
+                        <Gavel className="h-4 w-4 text-brand-600" />
+                      </div>
+                      <div className="mt-2 text-2xl font-bold text-slate-900">{invitations.length}</div>
+                      <p className="mt-1 text-xs text-slate-500">Active judge invitations</p>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100">
+                      <Button size="sm" variant="ghost" className="w-full justify-between text-brand-600 hover:text-brand-700 p-0 h-auto" onClick={() => handleTabClick('invitations')}>
+                        <span>Manage invitations</span> &rarr;
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          )}
 
-          <Card>
-            <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
-              <div><CardTitle className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-brand-600" /> Session schedule</CardTitle><CardDescription className="mt-2">Schedule publication is separate from result publication.</CardDescription></div>
-              <div className="flex flex-wrap gap-2">{canManageSchedule && <Button size="sm" onClick={() => setShowSessionDialog(true)} disabled={!configuration?.configured}><Plus className="h-4 w-4" /> Add session</Button>}{canManageSchedule && <Button size="sm" variant="outline" onClick={() => scheduleOverwrite ? setConfirmOverwrite(true) : generateSchedule()} disabled={!configuration?.configured || !scheduleStart || isMutating}>Generate schedule</Button>}</div>
-            </CardHeader>
-            <CardContent className="pt-5 space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row"><FormField label="Schedule start" htmlFor="schedule-start" helperText="Uses the configured duration, buffer, panels, and team coverage."><Input id="schedule-start" type="datetime-local" value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} /></FormField><FormField label="Status filter" htmlFor="session-status"><Select id="session-status" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}><option value="">All statuses</option>{sessionStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</Select></FormField><FormField label="Panel filter" htmlFor="session-panel"><Select id="session-panel" value={filterPanel} onChange={(event) => setFilterPanel(event.target.value)}><option value="">All panels</option>{panels.map((panel) => <option key={panel.id} value={panel.id}>Panel {panel.panelNumber}: {panel.name}</option>)}</Select></FormField><label className="flex items-center gap-2 self-end pb-2 text-xs text-slate-600"><input type="checkbox" checked={scheduleOverwrite} onChange={(event) => setScheduleOverwrite(event.target.checked)} /> Replace scheduled sessions</label></div>
-              {filteredSessions.length === 0 ? <EmptyState title="No evaluation sessions" description="Create a session manually or generate a schedule after panels and teams are ready." /> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Team</TableHead><TableHead>Panel</TableHead><TableHead>Time</TableHead><TableHead>Status</TableHead><TableHead>Meeting</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{filteredSessions.map((session) => <TableRow key={session.id}><TableCell className="font-medium">{session.teamName}</TableCell><TableCell>{session.panelName}</TableCell><TableCell className="whitespace-nowrap">{formatDate(session.startsAt)}<br /><span className="text-xs text-slate-500">to {formatDate(session.endsAt)}</span></TableCell><TableCell><Badge variant={session.status === 'completed' ? 'success' : session.status === 'cancelled' ? 'danger' : 'brand'}>{session.status}</Badge></TableCell><TableCell>{session.meetingUrl ? <a href={session.meetingUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Open link</a> : 'Not set'}</TableCell><TableCell><div className="flex flex-wrap gap-1">{canManageSchedule && !['completed', 'cancelled'].includes(session.status) && <><Select aria-label={`Update status for ${session.teamName}`} value={session.status} onChange={(event) => updateSessionStatus(session, event.target.value as EvaluationSessionStatus)}><option value={session.status}>{session.status}</option>{sessionStatuses.filter((status) => status !== session.status).map((status) => <option key={status} value={status}>{status}</option>)}</Select><Button size="sm" variant="outline" onClick={() => openReschedule(session)}>Reschedule</Button><Button size="sm" variant="destructive" onClick={() => setSessionToCancel(session)}>Cancel</Button></>}</div></TableCell></TableRow>)}</TableBody></Table></div>}
-            </CardContent>
-          </Card>
+          {activeTab === 'panels' && (
+            <Card>
+              <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
+                <div><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4 text-brand-600" /> Evaluation panels</CardTitle><CardDescription className="mt-2">Panel assignments synchronize only evaluation-generated legacy assignments.</CardDescription></div>
+                {canManageJudges && <Button size="sm" onClick={() => openPanel()}><Plus className="h-4 w-4" /> Add panel</Button>}
+              </CardHeader>
+              <CardContent className="pt-5">
+                {panels.length === 0 ? <EmptyState title="No panels configured" description="Create a panel before generating an evaluation schedule." /> : (
+                  <div className="space-y-4">
+                    {panels.map((panel) => (
+                      <div key={panel.id} className="rounded-lg border border-slate-200 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div><div className="flex items-center gap-2"><Badge variant="neutral">Panel {panel.panelNumber}</Badge><h3 className="font-semibold text-slate-900">{panel.name}</h3></div><p className="mt-1 text-xs text-slate-500">{panel.meetingUrl || 'No panel meeting link configured'}</p></div>
+                          {canManageJudges && <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => openPanel(panel)}>Edit</Button><Button size="sm" variant="destructive" onClick={() => setPanelToDelete(panel)}><Trash2 className="h-3.5 w-3.5" /> Delete</Button></div>}
+                        </div>
+                        <div className="mt-4 space-y-2">
+                          {panel.judges.map((judge) => <div key={judge.judgeUserId} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm"><span>{judge.judgeName}{judge.judgeEmail ? ` · ${judge.judgeEmail}` : ''}</span>{canManageJudges && <Button size="sm" variant="ghost" onClick={() => removeJudge(panel, judge.judgeUserId)}>Remove</Button>}</div>)}
+                          {canManageJudges && <div className="flex gap-2"><Select value={judgeForm[panel.id] || ''} onChange={(event) => setJudgeForm((current) => ({ ...current, [panel.id]: event.target.value }))}><option value="">Select active user to assign</option>{members.map((member) => <option key={member.userId} value={member.userId}>{member.fullName} · {member.email}</option>)}</Select><Button size="sm" onClick={() => assignJudge(panel)} disabled={!judgeForm[panel.id] || isMutating}>Assign</Button></div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Gavel className="h-4 w-4 text-brand-600" /> Invitations and completion</CardTitle><CardDescription className="mt-2">Judges need a verified account with the invited email. Acceptance does not create organisation membership.</CardDescription></CardHeader>
-            <CardContent className="space-y-5">
-              {canManageJudges && <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)}><Mail className="h-4 w-4" /> Invite judge</Button>}
-              {invitations.length > 0 && <div className="space-y-2">{invitations.map((invitation) => <div key={invitation.id} className="flex flex-col gap-2 rounded-md border border-slate-200 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"><span>{invitation.invitedEmail} · expires {formatDate(invitation.expiresAt)}</span>{canManageJudges && <Button size="sm" variant="ghost" onClick={() => revokeInvitation(invitation)}>Revoke</Button>}</div>)}</div>}
-              <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-slate-900">Complete evaluation</p><p className="text-xs text-slate-500">All sessions must be terminal, criteria and required compatible submissions must exist, and required scores must be complete.</p></div>{canManage && <Button onClick={() => setConfirmComplete(true)} disabled={configuration?.evaluation?.status === 'completed' || isMutating}><CheckCircle2 className="h-4 w-4" /> Mark complete</Button>}</div>
-              {canPublish && <div className="flex gap-2 border-t border-slate-100 pt-4"><Button size="sm" onClick={() => setConfirmPublish('publish')} disabled={configuration?.evaluation?.status === 'published'}>Publish schedule</Button><Button size="sm" variant="outline" onClick={() => setConfirmPublish('unpublish')} disabled={configuration?.evaluation?.status !== 'published'}>Unpublish schedule</Button></div>}
-            </CardContent>
-          </Card>
-        </>
+          {activeTab === 'schedule' && (
+            <Card>
+              <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
+                <div><CardTitle className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-brand-600" /> Session schedule</CardTitle><CardDescription className="mt-2">Schedule publication is separate from result publication.</CardDescription></div>
+                <div className="flex flex-wrap gap-2">{canManageSchedule && <Button size="sm" onClick={() => setShowSessionDialog(true)} disabled={!configuration?.configured}><Plus className="h-4 w-4" /> Add session</Button>}{canManageSchedule && <Button size="sm" variant="outline" onClick={() => scheduleOverwrite ? setConfirmOverwrite(true) : generateSchedule()} disabled={!configuration?.configured || !scheduleStart || isMutating}>Generate schedule</Button>}</div>
+              </CardHeader>
+              <CardContent className="pt-5 space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row"><FormField label="Schedule start" htmlFor="schedule-start" helperText="Uses the configured duration, buffer, panels, and team coverage."><Input id="schedule-start" type="datetime-local" value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} /></FormField><FormField label="Status filter" htmlFor="session-status"><Select id="session-status" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}><option value="">All statuses</option>{sessionStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</Select></FormField><FormField label="Panel filter" htmlFor="session-panel"><Select id="session-panel" value={filterPanel} onChange={(event) => setFilterPanel(event.target.value)}><option value="">All panels</option>{panels.map((panel) => <option key={panel.id} value={panel.id}>Panel {panel.panelNumber}: {panel.name}</option>)}</Select></FormField><label className="flex items-center gap-2 self-end pb-2 text-xs text-slate-600"><input type="checkbox" checked={scheduleOverwrite} onChange={(event) => setScheduleOverwrite(event.target.checked)} /> Replace scheduled sessions</label></div>
+                {filteredSessions.length === 0 ? <EmptyState title="No evaluation sessions" description="Create a session manually or generate a schedule after panels and teams are ready." /> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Team</TableHead><TableHead>Panel</TableHead><TableHead>Time</TableHead><TableHead>Status</TableHead><TableHead>Meeting</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{filteredSessions.map((session) => <TableRow key={session.id}><TableCell className="font-medium">{session.teamName}</TableCell><TableCell>{session.panelName}</TableCell><TableCell className="whitespace-nowrap">{formatDate(session.startsAt)}<br /><span className="text-xs text-slate-500">to {formatDate(session.endsAt)}</span></TableCell><TableCell><Badge variant={session.status === 'completed' ? 'success' : session.status === 'cancelled' ? 'danger' : 'brand'}>{session.status}</Badge></TableCell><TableCell>{session.meetingUrl ? <a href={session.meetingUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Open link</a> : 'Not set'}</TableCell><TableCell><div className="flex flex-wrap gap-1">{canManageSchedule && !['completed', 'cancelled'].includes(session.status) && <><Select aria-label={`Update status for ${session.teamName}`} value={session.status} onChange={(event) => updateSessionStatus(session, event.target.value as EvaluationSessionStatus)}><option value={session.status}>{session.status}</option>{sessionStatuses.filter((status) => status !== session.status).map((status) => <option key={status} value={status}>{status}</option>)}</Select><Button size="sm" variant="outline" onClick={() => openReschedule(session)}>Reschedule</Button><Button size="sm" variant="destructive" onClick={() => setSessionToCancel(session)}>Cancel</Button></>}</div></TableCell></TableRow>)}</TableBody></Table></div>}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === 'invitations' && (
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Gavel className="h-4 w-4 text-brand-600" /> Invitations and completion</CardTitle><CardDescription className="mt-2">Judges need a verified account with the invited email. Acceptance does not create organisation membership.</CardDescription></CardHeader>
+              <CardContent className="space-y-5">
+                {canManageJudges && <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)}><Mail className="h-4 w-4" /> Invite judge</Button>}
+                {invitations.length > 0 && <div className="space-y-2">{invitations.map((invitation) => <div key={invitation.id} className="flex flex-col gap-2 rounded-md border border-slate-200 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"><span>{invitation.invitedEmail} · expires {formatDate(invitation.expiresAt)}</span>{canManageJudges && <Button size="sm" variant="ghost" onClick={() => revokeInvitation(invitation)}>Revoke</Button>}</div>)}</div>}
+                <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-slate-900">Complete evaluation</p><p className="text-xs text-slate-500">All sessions must be terminal, criteria and required compatible submissions must exist, and required scores must be complete.</p></div>{canManage && <Button onClick={() => setConfirmComplete(true)} disabled={configuration?.evaluation?.status === 'completed' || isMutating}><CheckCircle2 className="h-4 w-4" /> Mark complete</Button>}</div>
+                {canPublish && <div className="flex gap-2 border-t border-slate-100 pt-4"><Button size="sm" onClick={() => setConfirmPublish('publish')} disabled={configuration?.evaluation?.status === 'published'}>Publish schedule</Button><Button size="sm" variant="outline" onClick={() => setConfirmPublish('unpublish')} disabled={configuration?.evaluation?.status !== 'published'}>Unpublish schedule</Button></div>}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       <Dialog isOpen={showConfigDialog} onClose={() => setShowConfigDialog(false)} title={configuration?.configured ? 'Edit evaluation configuration' : 'Configure evaluation'}>

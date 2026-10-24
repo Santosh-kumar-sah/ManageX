@@ -57,6 +57,46 @@ function formatEventRow(row) {
   };
 }
 
+/**
+ * Public response allowlist serialization (EVT-003, ADR-020).
+ * Excludes internal creator metadata and private participant instructions.
+ */
+function formatPublicEventRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    organisationId: row.organisation_id,
+    title: row.title,
+    slug: row.slug,
+    description: row.description,
+    eventType: row.event_type,
+    status: row.status,
+    visibility: row.visibility,
+    startAt: row.start_at ? row.start_at.toISOString() : null,
+    endAt: row.end_at ? row.end_at.toISOString() : null,
+    timezone: row.timezone,
+    locationType: row.location_type,
+    location: row.location,
+    virtualUrl: row.virtual_url,
+    registrationOpensAt: row.registration_opens_at ? row.registration_opens_at.toISOString() : null,
+    registrationClosesAt: row.registration_closes_at ? row.registration_closes_at.toISOString() : null,
+    capacity: row.capacity,
+    teamSizeMin: row.team_size_min,
+    teamSizeMax: row.team_size_max,
+    submissionOpensAt: row.submission_opens_at ? row.submission_opens_at.toISOString() : null,
+    submissionClosesAt: row.submission_closes_at ? row.submission_closes_at.toISOString() : null,
+    createdAt: row.created_at ? row.created_at.toISOString() : null,
+    updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
+    organisation: row.org_name
+      ? {
+          id: row.organisation_id,
+          name: row.org_name,
+          slug: row.org_slug,
+        }
+      : undefined,
+  };
+}
+
 function generateSlug(title) {
   return title
     .toLowerCase()
@@ -567,7 +607,7 @@ export async function listPublicEvents({ page = 1, limit = 20, search } = {}) {
     params.push(boundedLimit, offset);
 
     const listRes = await client.query(listSql, params);
-    const events = listRes.rows.map(formatEventRow);
+    const events = listRes.rows.map(formatPublicEventRow);
 
     return {
       events,
@@ -623,7 +663,7 @@ export async function getPublicEventById(eventId) {
       throw new NotFoundError('Event not found or is not publicly accessible.');
     }
 
-    return formatEventRow(res.rows[0]);
+    return formatPublicEventRow(res.rows[0]);
   });
 }
 
@@ -641,6 +681,8 @@ function formatRegistrationRow(row) {
     customAnswers: row.custom_answers || {},
     createdAt: row.created_at ? row.created_at.toISOString() : null,
     updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
+    participantInstructions:
+      row.participant_instructions !== undefined ? row.participant_instructions : undefined,
     user: row.user_email
       ? {
           id: row.user_id,
@@ -658,7 +700,7 @@ function formatRegistrationRow(row) {
  */
 export function getEffectiveRegistrationWindow(event) {
   const opensAt = event.registration_opens_at || event.published_at || event.created_at;
-  const closesAt = event.registration_closes_at || event.start_at;
+  const closesAt = event.registration_closes_at || event.end_at || event.start_at;
   return {
     effectiveOpensAt: new Date(opensAt),
     effectiveClosesAt: new Date(closesAt),
@@ -781,6 +823,7 @@ export async function registerForEvent(
         client,
       });
 
+      reactivated.participant_instructions = event.participant_instructions;
       return formatRegistrationRow(reactivated);
     }
 
@@ -834,6 +877,7 @@ export async function registerForEvent(
       client,
     });
 
+    created.participant_instructions = event.participant_instructions;
     return formatRegistrationRow(created);
   });
 }
@@ -933,9 +977,11 @@ export async function getRegistrationStatus(organisationId, eventId, userId) {
       SELECT 
         r.*,
         u.email AS user_email,
-        u.full_name AS user_full_name
+        u.full_name AS user_full_name,
+        CASE WHEN r.status = 'registered' THEN e.participant_instructions ELSE NULL END AS participant_instructions
       FROM event_registrations r
       JOIN users u ON u.id = r.user_id
+      JOIN events e ON e.id = r.event_id AND e.organisation_id = r.organisation_id
       WHERE r.event_id = $1 AND r.user_id = $2 AND r.organisation_id = $3
     `,
       [eventId, userId, organisationId]
@@ -1041,4 +1087,261 @@ export async function listEventParticipants(
     };
   });
 }
+
+/**
+ * Retrieves the comprehensive student/participant dashboard data for an authenticated user.
+ * Strictly adheres to EVT-004, EVT-006, EVT-007, EVT-010, and tenant isolation invariants.
+ */
+export async function getParticipantDashboard(userId) {
+  if (!userId) {
+    throw new ValidationError('User ID is required');
+  }
+
+  return withSystemTransaction(async (client) => {
+    // 1. Fetch user's registrations along with event details
+    const regRes = await client.query(
+      `
+      SELECT 
+        r.id AS registration_id,
+        r.status AS registration_status,
+        r.registered_at,
+        r.withdrawn_at,
+        r.reactivated_at,
+        r.custom_answers,
+        e.id AS event_id,
+        e.organisation_id,
+        e.title,
+        e.slug,
+        e.description,
+        e.event_type,
+        e.status AS event_status,
+        e.visibility,
+        e.start_at,
+        e.end_at,
+        e.timezone,
+        e.location_type,
+        e.location,
+        e.virtual_url,
+        e.registration_opens_at,
+        e.registration_closes_at,
+        e.submission_opens_at,
+        e.submission_closes_at,
+        e.results_published_at,
+        CASE WHEN r.status = 'registered' THEN e.participant_instructions ELSE NULL END AS participant_instructions,
+        o.name AS org_name,
+        o.slug AS org_slug
+      FROM event_registrations r
+      JOIN events e ON e.id = r.event_id
+      JOIN organisations o ON o.id = e.organisation_id
+      WHERE r.user_id = $1
+      ORDER BY e.start_at ASC
+    `,
+      [userId]
+    );
+
+    const items = [];
+
+    for (const row of regRes.rows) {
+      const eventId = row.event_id;
+
+      // 2. Hackathon Team (if applicable)
+      let team = null;
+      if (row.event_type === 'hackathon') {
+        const teamRes = await client.query(
+          `
+          SELECT 
+            t.id,
+            t.name,
+            t.slug,
+            t.description,
+            t.created_by_id,
+            tm.is_owner,
+            tm.joined_at
+          FROM event_team_members tm
+          JOIN event_teams t ON t.id = tm.team_id
+          WHERE tm.event_id = $1 AND tm.user_id = $2
+          LIMIT 1
+        `,
+          [eventId, userId]
+        );
+
+        if (teamRes.rows.length > 0) {
+          const tRow = teamRes.rows[0];
+          const membersRes = await client.query(
+            `
+            SELECT 
+              tm.user_id,
+              tm.is_owner,
+              tm.joined_at,
+              u.full_name,
+              u.email
+            FROM event_team_members tm
+            JOIN users u ON u.id = tm.user_id
+            WHERE tm.team_id = $1
+            ORDER BY tm.is_owner DESC, tm.joined_at ASC
+          `,
+            [tRow.id]
+          );
+
+          team = {
+            id: tRow.id,
+            name: tRow.name,
+            slug: tRow.slug,
+            description: tRow.description,
+            isOwner: tRow.is_owner,
+            members: membersRes.rows.map((m) => ({
+              userId: m.user_id,
+              fullName: m.full_name,
+              email: m.email,
+              isOwner: m.is_owner,
+              joinedAt: m.joined_at ? m.joined_at.toISOString() : null,
+            })),
+          };
+        }
+      }
+
+      // 3. Rounds list
+      const roundsRes = await client.query(
+        `
+        SELECT id, round_number, name, description, submission_opens_at, submission_closes_at, advancement_rule, status
+        FROM event_rounds
+        WHERE event_id = $1
+        ORDER BY round_number ASC
+      `,
+        [eventId]
+      );
+
+      const rounds = roundsRes.rows.map((r) => ({
+        id: r.id,
+        roundNumber: r.round_number,
+        name: r.name,
+        description: r.description,
+        submissionOpensAt: r.submission_opens_at ? r.submission_opens_at.toISOString() : null,
+        submissionClosesAt: r.submission_closes_at ? r.submission_closes_at.toISOString() : null,
+        advancementRule: r.advancement_rule,
+        status: r.status,
+      }));
+
+      // 4. Submissions by this user or team
+      const teamId = team ? team.id : null;
+      const subParams = [eventId, userId];
+      let subQuery = `
+        SELECT 
+          s.id,
+          s.round_id,
+          s.team_id,
+          s.submitter_user_id,
+          s.title,
+          s.description,
+          s.repository_url,
+          s.demo_url,
+          s.status,
+          s.submitted_at,
+          s.updated_at,
+          er.round_number,
+          er.name AS round_name
+        FROM event_submissions s
+        LEFT JOIN event_rounds er ON er.id = s.round_id
+        WHERE s.event_id = $1
+          AND (s.submitter_user_id = $2 ${teamId ? 'OR s.team_id = $3' : ''})
+        ORDER BY s.submitted_at DESC
+      `;
+      if (teamId) subParams.push(teamId);
+
+      const subsRes = await client.query(subQuery, subParams);
+      const submissions = subsRes.rows.map((s) => ({
+        id: s.id,
+        roundId: s.round_id,
+        roundNumber: s.round_number,
+        roundName: s.round_name,
+        teamId: s.team_id,
+        submitterUserId: s.submitter_user_id,
+        title: s.title,
+        description: s.description,
+        repositoryUrl: s.repository_url,
+        demoUrl: s.demo_url,
+        status: s.status,
+        submittedAt: s.submitted_at ? s.submitted_at.toISOString() : null,
+        updatedAt: s.updated_at ? s.updated_at.toISOString() : null,
+      }));
+
+      // 5. Advancements
+      const advParams = [eventId, userId];
+      let advQuery = `
+        SELECT 
+          a.id,
+          a.round_id,
+          a.status,
+          a.qualification_rank,
+          a.is_manual,
+          a.created_at,
+          er.round_number,
+          er.name AS round_name
+        FROM event_round_advancements a
+        JOIN event_rounds er ON er.id = a.round_id
+        WHERE a.event_id = $1
+          AND (a.participant_user_id = $2 ${teamId ? 'OR a.team_id = $3' : ''})
+        ORDER BY er.round_number ASC
+      `;
+      if (teamId) advParams.push(teamId);
+
+      const advRes = await client.query(advQuery, advParams);
+      const advancements = advRes.rows.map((a) => ({
+        id: a.id,
+        roundId: a.round_id,
+        roundNumber: a.round_number,
+        roundName: a.round_name,
+        status: a.status,
+        qualificationRank: a.qualification_rank,
+        isManual: a.is_manual,
+        createdAt: a.created_at ? a.created_at.toISOString() : null,
+      }));
+
+      items.push({
+        registration: {
+          id: row.registration_id,
+          status: row.registration_status,
+          registeredAt: row.registered_at ? row.registered_at.toISOString() : null,
+          withdrawnAt: row.withdrawn_at ? row.withdrawn_at.toISOString() : null,
+          reactivatedAt: row.reactivated_at ? row.reactivated_at.toISOString() : null,
+          customAnswers: row.custom_answers || {},
+          participantInstructions: row.participant_instructions || null,
+        },
+        event: {
+          id: row.event_id,
+          organisationId: row.organisation_id,
+          title: row.title,
+          slug: row.slug,
+          description: row.description,
+          eventType: row.event_type,
+          status: row.event_status,
+          visibility: row.visibility,
+          startAt: row.start_at ? row.start_at.toISOString() : null,
+          endAt: row.end_at ? row.end_at.toISOString() : null,
+          timezone: row.timezone,
+          locationType: row.location_type,
+          location: row.location,
+          virtualUrl: row.virtual_url,
+          registrationOpensAt: row.registration_opens_at ? row.registration_opens_at.toISOString() : null,
+          registrationClosesAt: row.registration_closes_at ? row.registration_closes_at.toISOString() : null,
+          submissionOpensAt: row.submission_opens_at ? row.submission_opens_at.toISOString() : null,
+          submissionClosesAt: row.submission_closes_at ? row.submission_closes_at.toISOString() : null,
+          resultsPublishedAt: row.results_published_at ? row.results_published_at.toISOString() : null,
+          organisation: {
+            name: row.org_name,
+            slug: row.org_slug,
+          },
+        },
+        team,
+        rounds,
+        submissions,
+        advancements,
+        resultsPublished: Boolean(row.results_published_at),
+      });
+    }
+
+    return { registrations: items };
+  });
+}
+
 

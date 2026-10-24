@@ -4,6 +4,39 @@ This document tracks progress across implementation phases, completed requiremen
 
 ---
 
+## Evaluation & Judging Page UX: Section Navigation & Modular Views
+
+- Replaced vertical monolithic layout on the Evaluation & Judging organiser page (`/app/organisations/:orgId/events/:eventId/rounds/:roundId/evaluation`, `EvaluationPage.tsx`) with a tabbed navigation architecture matching the ManageX Clean Enterprise light design system.
+- Partitioned evaluation operations into 4 focused tabs:
+  - **Round evaluation configuration** (`tab=config`): Displays evaluation mode, session duration & buffer, coverage metrics, panel/session statistics, schedule window, configuration edit trigger, and 3 quick-navigation metric cards with direct jumps to panels, schedule, and invitations.
+  - **Evaluation panels** (`tab=panels`): Panel management, panel meeting links, active organization member judge assignments, member removal, and panel creation/deletion.
+  - **Session schedule** (`tab=schedule`): Schedule generation controls, starts-at input, session status filters, panel filters, session replacement toggle, schedule table with status updates, rescheduling, and cancellation.
+  - **Invitations and completion** (`tab=invitations`): External judge invitation management, invitation expiration & revocation, schedule publication/unpublication actions, and terminal session verification / complete evaluation trigger.
+- Added URL query parameter synchronization via `?tab=config|panels|schedule|invitations` to support bookmarking and browser history navigation.
+- Preserved all dialogs, action handlers, server-side permission checks (`event.evaluation.*`), and API endpoints without regressions.
+- Added comprehensive unit tests in `EvaluationPage.test.tsx` (8/8 tests passed; 111/111 full frontend test suite passed).
+- Built production frontend bundle successfully with zero TypeScript compilation warnings or errors.
+
+---
+
+## Event Detail UX: Tabbed Navigation & Event Status Stepper
+
+- Replaced vertical monolithic layout on `EventDetailPage.tsx` with a focused, tabbed navigation architecture matching ManageX Clean Enterprise light design.
+- Implemented 5-stage horizontal lifecycle stepper banner (`Draft` → `Published` → `Registration Closed` → `In Progress` → `Completed`) with allowed transitions and quick action triggers.
+- Partitioned event features into dedicated tabs:
+  - **Overview**: 3 high-level metric cards (`Registration window`, `Capacity` with real-time progress bar, `Hackathon / Event details`), participant instructions, schedule & timezone, venue & location.
+  - **Registrations**: Participant roster with search and status filtering, capacity badges, withdrawal actions, and attendee participation status.
+  - **Teams** (hackathons): Team formation, current team members list, team invitations, and registered teams list.
+  - **Submissions** (hackathons): Round stages selector, project repository & demo links, edit submission actions.
+  - **Judging** (hackathons): Multi-feature sub-navigation pills (`Competition Rounds`, `Scoring Criteria & Judges`, `Judge Evaluation Work`) so each judging tool is viewed and managed individually without vertical stacking. Inside **Scoring Criteria & Judges**, secondary sub-navigation cleanly isolates **Scoring Criteria** from **Judge Assignments**.
+  - **Results** (hackathons): Leaderboard rankings with tie handling (ADR-009) and results publication controls.
+  - **Settings**: Administrative lifecycle state transitions, event configuration summary, edit event modal trigger, and danger zone.
+- Added URL synchronization via query parameter `?tab=<tab_id>&subtab=<subtab_id>&criteriatab=<criteria|judges>`.
+- Preserved all 15 existing modal dialogs, business logic, authorization rules, and endpoints without regressions.
+- Added 5 focused tests to `EventDetailPage.test.tsx` (110/110 frontend tests passed).
+
+---
+
 ## Evaluation Hardening — Phase 1
 
 Phase 1 implementation is complete in the working tree for backend authorization and immediate defects:
@@ -30,6 +63,90 @@ Phase 2 backend scheduling hardening is implemented in the existing evaluation s
 - Stabilizes session listing order for deterministic schedule projections.
 
 Focused verification passed against `managex_test`: 27 tests passed, 0 failed, including unit projection, scheduling, conflict detection, rescheduling, cancellation auditability, meeting-link privacy, judge synchronization, scoring compatibility, and tenant isolation.
+
+## Judge Scheduling & Evaluation — Phase 3
+
+Phase 3 backend work is implemented in the existing evaluation services:
+
+- Added scoped judge invitations with hashed single-use tokens, expiry, resend invalidation, verified-email acceptance, audit events, and no organisation-membership side effect.
+- Added session-to-submission linkage and event/round/team validation while preserving existing scoring and assignment synchronization.
+- Added explicit evaluation completion validation without automatic publication or round advancement.
+- Added generated-schedule submission association and schedule-window capacity rejection before session insertion.
+- Applied migration `20261017000033_evaluation_phase3.sql` only to `managex_test`; it has not been applied to `managex`.
+
+Phase 3 focused verification is complete against `managex_test`:
+
+- Judge invitation, expiry, resend, verified-email, assignment activation, revocation, audit-redaction, protected HTTP score denial, invitation-route authentication, completion success/idempotency and preconditions, and schedule-capacity tests passed: **37/37**.
+- Evaluation foundation regression tests passed: **15/15**.
+- A forward-only submission foreign-key correction was applied only to `managex_test` through migrations `20261017000034` and `20261017000035`; the final constraint detaches only `submission_id` on submission deletion while preserving the session tenant key.
+- A deterministic new schedule-concurrency test was not added because the current test infrastructure has no reliable barrier/synchronization hook; existing advisory-lock and conflict regression coverage remains in place.
+
+## Participant Evaluation Schedule — Phase 4D
+
+Phase 4D participant evaluation schedule experience is implemented and verified:
+
+- Created reusable `ParticipantEvaluationSchedule` component adhering to the Clean Enterprise design system (`frontend/src/components/events/ParticipantEvaluationSchedule.tsx`).
+- Integrated published evaluation appointment cards into `StudentDashboardPage` under round deliverables for registered hackathon participants with teams.
+- Integrated evaluation schedule section into `PublicEventDetailPage` for registered hackathon participants with teams, fetching public rounds (`/events/:eventId/rounds`).
+- Strictly adheres to the 10-minute meeting release policy: hides join action and displays informative unlock time notice prior to release window; activates "Join Evaluation Meeting" button when released or session is live (`in_progress`).
+- Enforces strict RBAC and data minimization boundaries: judge identities, emails, scoring sheets, and internal notes are never rendered or exposed to participants.
+- Added comprehensive unit tests in `ParticipantEvaluationSchedule.test.tsx` (8 tests), `StudentDashboardPage.test.tsx` (5 tests), and `PublicEventDetailPage.test.tsx` (13 tests) verifying appointment metadata, slot numbering, release window enforcement, cancelled session notices, and absence of information leakage.
+- Verified all 15 frontend test files (97 tests passed), TypeScript compilation (`tsc --noEmit`), and production bundle build (`npm run build`).
+
+## End-to-End Evaluation Workflow Verification — Phase 4E
+
+Phase 4E verified the full evaluation and judging lifecycle across backend services, routing boundaries, and frontend portal interfaces:
+
+- **End-to-End Lifecycle Verification:** Verified the complete pipeline: Organiser Setup → Round & Criteria Configuration → Judge Assignment / Token Invitation → Slot Scheduling & Concurrency Locks → Schedule Publication → External & Internal Scoring → Participant Schedule Projection with 10-Minute Unlock → Completion & Idempotency → Results Publication / Unpublication → Multi-Round Advancement (Top-N, Threshold, Manual).
+- **Route & Boundary Remediations:**
+  - Mounted missing round submission endpoints (`POST/GET /organisations/:orgId/events/:eventId/rounds/:roundId/submissions`, `/my-submission`).
+  - Mounted round advancement and round results publication endpoints (`POST .../advance`, `GET .../advancements`, `POST .../publish-results`, `POST .../unpublish-results`).
+  - Mounted public round results (`GET /api/v1/events/:eventId/rounds/:roundId/results`).
+  - Mounted participant dashboard (`GET /api/v1/events/participant/dashboard`) in `publicEventsRouter` and current participant team endpoint (`GET /api/v1/organisations/:orgId/events/:eventId/my-team`) in `eventsRouter`.
+  - Added optional `roundId` to `createCriterionSchema` and `assignJudgeSchema` to prevent criterion collisions and enable round-scoped judging assignments.
+- **Test Isolation & Zero-Destruction Safety:** Refactored integration test fixtures in `advancement.integration.test.js` and `hardening.integration.test.js` to eliminate destructive `DELETE` cleanup against pre-existing records, enforcing run-unique prefixes and asserting target database `managex_test` at migration `20261017000035`.
+- **Backend Verification Suites (managex_test):**
+  - `evaluation_foundation.integration.test.js`: **15/15 passed**
+  - `evaluation_services.integration.test.js`: **44/44 passed**
+  - `evaluation_service.unit.test.js`: **1/1 passed**
+  - `judging_results.integration.test.js`: **20/20 passed**
+  - `advancement.integration.test.js`: **15/15 passed**
+  - `hardening.integration.test.js`: **12/12 passed**
+  - `events_boundaries.integration.test.js`: **24/24 passed** (6 suites)
+  - `participant_dashboard.integration.test.js`: **4/4 passed**
+- **Frontend Verification:**
+  - Vitest test suites: **15/15 passed (97/97 tests)**
+  - TypeScript type check (`tsc`): **0 errors**
+  - Production build (`vite build`): **Succeeded in 16.16s**
+
+## Judge Workspace Scoring UI — Phase 4F
+
+Phase 4F implemented the interactive judge scoring experience inside the existing `JudgeWorkspacePage`:
+
+- **Interactive Scoring Dialog (`JudgeScoringDialog.tsx`):**
+  - Integrated into `JudgeWorkspacePage.tsx` with dedicated "Score submission" / "Review scores" actions per assigned session.
+  - Fetches permitted evaluation work using existing session-scoped backend API (`GET .../evaluation/sessions/:sessionId/work`).
+  - Displays permitted team name, submission title, description, repository link, and live demo link.
+  - Dynamically renders all round/event scoring criteria with individual max score limits derived from backend responses.
+  - Provides numeric score input (0 to `maxScore`) and private notes / feedback textarea per criterion.
+  - Calculates real-time total running score versus maximum possible points.
+  - Prepopulates previously submitted scores and notes if already evaluated by this judge.
+  - Validates missing, non-numeric, negative, or out-of-range scores prior to network dispatch.
+  - Displays loading skeleton, submitting spinner, validation error badges, API error alerts, and success confirmations.
+  - Prevents accidental duplicate submissions while requests are in flight.
+  - Preserves entered score and feedback state upon recoverable API or network failures so judges never lose typed work.
+  - Dispatches scores via existing session-scoped API (`POST .../evaluation/sessions/:sessionId/scores`).
+  - Refreshes session workspace listings post-submission without page reloads or data duplication.
+- **Security & Authorization Invariants:**
+  - Strictly relies on server-authoritative evaluation session checks (403 `EVALUATION_SESSION_FORBIDDEN` handled gracefully).
+  - Only projects the caller judge's own scores and feedback; zero exposure of other evaluators' scores, identities, or private notes.
+  - External judges receive zero organisation-level permissions or membership side effects.
+  - Submitting scores does not prematurely complete rounds, publish results, or advance participants.
+- **Verification & Testing:**
+  - Focused suite in `JudgeWorkspacePage.test.tsx`: **11/11 tests passed**.
+  - Full frontend suite: **15/15 test files passed, 105/105 tests passed**.
+  - TypeScript compilation (`tsc --noEmit`): **0 errors**.
+  - Vite production bundle build (`npm run build`): **Succeeded in 27.05s**.
 
 ## Current Status: Phase 9 Accepted | Phase 10 Preflight Complete
 

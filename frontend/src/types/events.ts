@@ -316,4 +316,150 @@ export interface RoundResultsData {
   }>;
 }
 
+export type EvaluationMode = 'submission_based' | 'live_showcase' | 'hybrid';
+export type EvaluationStatus = 'draft' | 'published' | 'completed';
+export type EvaluationSessionStatus =
+  | 'scheduled'
+  | 'in_progress'
+  | 'completed'
+  | 'no_show'
+  | 'cancelled'
+  | 'rescheduled';
+
+export interface RoundEvaluation {
+  id: string;
+  organisationId: string;
+  eventId: string;
+  roundId: string;
+  evaluationMode: EvaluationMode;
+  status: EvaluationStatus;
+  sessionDurationMinutes: number;
+  bufferMinutes: number;
+  judgesPerPanel: number;
+  evaluationsPerTeam: number;
+  scheduleStartsAt: string | null;
+  scheduleEndsAt: string | null;
+  defaultMeetingUrl: string | null;
+  panelsCount: number;
+  sessionsCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EvaluationPanelJudge {
+  judgeUserId: string;
+  judgeName: string;
+  judgeEmail: string | null;
+  assignedAt: string;
+}
+
+export interface EvaluationPanel {
+  id: string;
+  roundEvaluationId: string;
+  panelNumber: number;
+  name: string;
+  meetingUrl: string | null;
+  orderIndex: number;
+  judges: EvaluationPanelJudge[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EvaluationSession {
+  id: string;
+  organisationId: string;
+  eventId: string;
+  roundEvaluationId: string;
+  panelId: string;
+  panelNumber: number;
+  panelName: string;
+  teamId: string;
+  teamName: string;
+  slotIndex: number;
+  startsAt: string;
+  endsAt: string;
+  status: EvaluationSessionStatus;
+  meetingUrl: string | null;
+  meetingLinkAvailableAt: string | null;
+  evaluationOrder: number;
+  judges?: EvaluationPanelJudge[];
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  submissionId?: string | null;
+}
+
+export interface EvaluationConfigurationResponse {
+  configured: boolean;
+  roundId: string;
+  roundNumber: number;
+  roundName: string;
+  evaluation: RoundEvaluation | null;
+}
+
+export interface EvaluationSessionWorkSubmission {
+  id: string;
+  title: string;
+  description: string | null;
+  repositoryUrl: string | null;
+  demoUrl: string | null;
+}
+
+export interface EvaluationSessionWorkCriterion {
+  id: string;
+  name: string;
+  description: string | null;
+  maxScore: number;
+  orderIndex: number;
+}
+
+export interface EvaluationSessionWorkExistingScore {
+  criterionId: string;
+  score: number;
+  feedback: string | null;
+  updatedAt: string;
+}
+
+export interface EvaluationSessionWork {
+  session: {
+    id: string;
+    eventId: string;
+    roundId: string;
+    panelId: string;
+    panelNumber: number;
+    panelName: string;
+    teamId: string;
+    teamName: string;
+    startsAt: string;
+    endsAt: string;
+    status: EvaluationSessionStatus;
+    meetingUrl: string | null;
+    submission: EvaluationSessionWorkSubmission;
+  };
+  criteria: EvaluationSessionWorkCriterion[];
+  scores: EvaluationSessionWorkExistingScore[];
+}
+
+export interface SubmitSessionScoreItem {
+  criterionId: string;
+  score: number;
+  feedback?: string | null;
+}
+
+export interface SubmitSessionScoresPayload {
+  scores: SubmitSessionScoreItem[];
+}
+
+export interface SubmitSessionScoresResponse {
+  success: boolean;
+  sessionId: string;
+  submissionId: string;
+  scores: Array<{
+    id: string;
+    criterionId: string;
+    score: number;
+    feedback: string | null;
+  }>;
+}
+
 

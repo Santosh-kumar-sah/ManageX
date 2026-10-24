@@ -16,6 +16,7 @@ import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
 import { ForgotPasswordPage, ResetPasswordPage } from '@/pages/auth/PasswordRecoveryPages';
 import { AcceptInvitationPage } from '@/pages/auth/AcceptInvitationPage';
+import { AcceptEvaluationInvitationPage } from '@/pages/auth/AcceptEvaluationInvitationPage';
 
 import { WorkspaceOverviewPage } from '@/pages/workspace/WorkspaceOverviewPage';
 import { OrganisationsPage } from '@/pages/workspace/OrganisationsPage';
@@ -25,6 +26,8 @@ import { OrgModulesPage } from '@/pages/workspace/OrgModulesPage';
 import { OrgAuditLogsPage } from '@/pages/workspace/OrgAuditLogsPage';
 import { EventsPage } from '@/pages/workspace/events/EventsPage';
 import { EventDetailPage } from '@/pages/workspace/events/EventDetailPage';
+import { EvaluationPage } from '@/pages/workspace/events/EvaluationPage';
+import { JudgeWorkspacePage } from '@/pages/workspace/events/JudgeWorkspacePage';
 import { MeetingsPage } from '@/pages/workspace/meetings/MeetingsPage';
 import { MeetingDetailPage } from '@/pages/workspace/meetings/MeetingDetailPage';
 import { ProjectsPage } from '@/pages/workspace/projects/ProjectsPage';
@@ -59,6 +62,8 @@ export function App() {
         <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
         <Route path="/invitations/:token/accept" element={<AcceptInvitationPage />} />
+        <Route path="/invitations/evaluation/:token" element={<AcceptEvaluationInvitationPage />} />
+        <Route path="/invitations/evaluation/:token/accept" element={<AcceptEvaluationInvitationPage />} />
       </Route>
 
       {/* Authenticated Workspace Routes */}
@@ -66,9 +71,12 @@ export function App() {
         <Route path="/app" element={<WorkspaceLayout />}>
           <Route index element={<WorkspaceOverviewPage />} />
           <Route path="organisations" element={<OrganisationsPage />} />
+          <Route path="judge/evaluations" element={<JudgeWorkspacePage />} />
+          <Route path="judge/evaluations/:orgId/:eventId/:roundId" element={<JudgeWorkspacePage />} />
           <Route element={<RequireOrgAccess />}>
             <Route path="organisations/:orgId/events" element={<EventsPage />} />
             <Route path="organisations/:orgId/events/:eventId" element={<EventDetailPage />} />
+            <Route path="organisations/:orgId/events/:eventId/rounds/:roundId/evaluation" element={<EvaluationPage />} />
             <Route path="organisations/:orgId/meetings" element={<MeetingsPage />} />
             <Route path="organisations/:orgId/meetings/:meetingId" element={<MeetingDetailPage />} />
             <Route path="organisations/:orgId/projects" element={<ProjectsPage />} />

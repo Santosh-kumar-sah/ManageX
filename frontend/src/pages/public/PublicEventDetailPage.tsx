@@ -27,6 +27,7 @@ import {
   Trophy,
   Mail,
   Key,
+  Presentation,
 } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import { useAuth } from '@/api/AuthContext';
@@ -38,7 +39,9 @@ import {
   MyPendingInvitation,
   SubmissionItem,
   EventResultItem,
+  EventRound,
 } from '@/types/events';
+import { ParticipantEvaluationSchedule } from '@/components/events/ParticipantEvaluationSchedule';
 import { Dialog, ConfirmDialog } from '@/components/ui/Dialog';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
@@ -52,6 +55,7 @@ export function PublicEventDetailPage({
   initialSubmission = null,
   initialResults = [],
   initialPendingInvites = [],
+  initialRounds = [],
   initialLoading = true,
 }: {
   initialEvent?: EventItem | null;
@@ -61,6 +65,7 @@ export function PublicEventDetailPage({
   initialSubmission?: SubmissionItem | null;
   initialResults?: EventResultItem[];
   initialPendingInvites?: MyPendingInvitation[];
+  initialRounds?: EventRound[];
   initialLoading?: boolean;
 } = {}) {
   const { eventId } = useParams<{ eventId: string }>();
@@ -109,6 +114,10 @@ export function PublicEventDetailPage({
   // Results State (EVT-009)
   const [publicResults, setPublicResults] = useState<EventResultItem[]>(initialResults);
   const [isLoadingResults, setIsLoadingResults] = useState(false);
+
+  // Rounds State (EVT-010 / Phase 4D)
+  const [eventRounds, setEventRounds] = useState<EventRound[]>(initialRounds);
+  const [isLoadingRounds, setIsLoadingRounds] = useState(false);
 
   const [isLoading, setIsLoading] = useState(initialEvent ? false : initialLoading);
   const [isStatusLoading, setIsStatusLoading] = useState(false);
@@ -262,6 +271,20 @@ export function PublicEventDetailPage({
     }
   }, []);
 
+  const fetchEventRounds = useCallback(async (evtId: string) => {
+    try {
+      setIsLoadingRounds(true);
+      const res = await apiClient<{ rounds: EventRound[] }>(`/events/${evtId}/rounds`);
+      if (res.data?.rounds) {
+        setEventRounds(res.data.rounds);
+      }
+    } catch {
+      // silently handle
+    } finally {
+      setIsLoadingRounds(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchEventDetails();
   }, [fetchEventDetails]);
@@ -273,6 +296,7 @@ export function PublicEventDetailPage({
         fetchTeams(event.organisationId, event.id);
         fetchMyTeam(event.organisationId, event.id);
         fetchMyPendingInvites(event.organisationId, event.id);
+        fetchEventRounds(event.id);
       }
       fetchMySubmission(event.organisationId, event.id);
       if (event.resultsPublishedAt) {
@@ -288,6 +312,7 @@ export function PublicEventDetailPage({
     fetchTeams,
     fetchMyTeam,
     fetchMyPendingInvites,
+    fetchEventRounds,
     fetchMySubmission,
     fetchPublicResults,
   ]);
@@ -1350,6 +1375,47 @@ export function PublicEventDetailPage({
                   ) : (
                     <p className="text-amber-700 font-medium">Submissions are currently closed.</p>
                   )}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {/* Participant Evaluation Appointments (EVT-009 / Phase 4D) */}
+          {isHackathon && isRegistered && myTeam && (isLoadingRounds || eventRounds.length > 0) && (
+            <Card className="p-6 space-y-4" data-testid="participant-evaluation-section">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-brand-50 text-brand-600 rounded-lg">
+                    <Presentation className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">Evaluation Schedule</h2>
+                    <p className="text-xs text-slate-500">
+                      Live presentation appointments and judging panels scheduled for your team.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {isLoadingRounds ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-24 w-full" />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {eventRounds.map((round) => (
+                    <ParticipantEvaluationSchedule
+                      key={round.id}
+                      eventId={event.id}
+                      roundId={round.id}
+                      roundName={round.name}
+                      roundNumber={round.roundNumber}
+                      teamId={myTeam.id}
+                      teamName={myTeam.name}
+                      timezone={event.timezone}
+                      showEmptyState={true}
+                    />
+                  ))}
                 </div>
               )}
             </Card>

@@ -247,4 +247,49 @@ describe('StudentDashboardPage — Participant Hub & My Registrations', () => {
     // Withdrawn card displays Re-register button
     expect(html).toContain('Re-register for Event');
   });
+
+  it('5. Renders round evaluation schedule integration when hackathon team and round are present', () => {
+    vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
+      user: mockUser,
+      isLoading: false,
+      isAuthenticated: true,
+      refreshUser: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    const entryWithRound = {
+      ...mockActiveEntry,
+      rounds: [
+        {
+          id: 'rnd-10',
+          roundNumber: 1,
+          name: 'Architecture Review',
+          description: 'Live presentation of system architecture',
+          submissionOpensAt: null,
+          submissionClosesAt: null,
+          advancementRule: 'manual',
+          status: 'judging',
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <MemoryRouter initialEntries={['/events/dashboard']}>
+        <Routes>
+          <Route
+            path="/events/dashboard"
+            element={
+              <StudentDashboardPage
+                initialRegistrations={[entryWithRound]}
+                initialLoading={false}
+              />
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(html).toContain('Architecture Review');
+    expect(html).toContain('participant-schedule-loading');
+  });
 });

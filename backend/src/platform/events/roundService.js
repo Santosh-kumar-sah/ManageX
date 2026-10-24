@@ -442,7 +442,31 @@ export async function deleteEventRound(
       );
     }
 
-    // 5. Delete round
+    // 5. Safety check: Check for scoring criteria (Phase 02D)
+    const critRes = await client.query(
+      `SELECT COUNT(*)::int AS count FROM event_scoring_criteria WHERE round_id = $1`,
+      [roundId]
+    );
+    if (critRes.rows[0].count > 0) {
+      throw new ConflictError(
+        'Cannot delete round: scoring criteria have been configured for this round.',
+        'ROUND_HAS_CRITERIA'
+      );
+    }
+
+    // 6. Safety check: Check for judge assignments (Phase 02D)
+    const assignRes = await client.query(
+      `SELECT COUNT(*)::int AS count FROM event_judge_assignments WHERE round_id = $1`,
+      [roundId]
+    );
+    if (assignRes.rows[0].count > 0) {
+      throw new ConflictError(
+        'Cannot delete round: judges have been assigned specifically to this round.',
+        'ROUND_HAS_JUDGE_ASSIGNMENTS'
+      );
+    }
+
+    // 7. Delete round
     await client.query(`DELETE FROM event_rounds WHERE id = $1`, [roundId]);
 
     await recordAuditEvent({

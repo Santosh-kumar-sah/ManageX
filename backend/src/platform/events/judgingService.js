@@ -26,7 +26,7 @@ import { recordAuditEvent } from '../audit/auditService.js';
 export async function createScoringCriterion(
   organisationId,
   eventId,
-  { name, description, orderIndex = 0, maxScore = 100 },
+  { name, description, orderIndex = 0, maxScore = 100, roundId = null },
   actorUserId,
   { ipAddress, userAgent } = {}
 ) {
@@ -52,11 +52,24 @@ export async function createScoringCriterion(
       throw new NotFoundError('Event not found.', 'EVENT_NOT_FOUND');
     }
 
+    // If roundId is specified, verify round exists in event
+    if (roundId) {
+      const roundRes = await client.query(
+        `SELECT id FROM event_rounds WHERE id = $1 AND event_id = $2 AND organisation_id = $3`,
+        [roundId, eventId, organisationId]
+      );
+      if (roundRes.rows.length === 0) {
+        throw new NotFoundError('Competition round not found.', 'ROUND_NOT_FOUND');
+      }
+    }
+
     // 2. Criteria changes after scoring starts must be blocked (EVT-008)
-    const scoreCountRes = await client.query(
-      `SELECT COUNT(*)::int AS count FROM event_scores WHERE event_id = $1`,
-      [eventId]
-    );
+    const scoreCountSql = roundId
+      ? `SELECT COUNT(*)::int AS count FROM event_scores WHERE round_id = $1`
+      : `SELECT COUNT(*)::int AS count FROM event_scores WHERE event_id = $1`;
+    const scoreCountParams = roundId ? [roundId] : [eventId];
+
+    const scoreCountRes = await client.query(scoreCountSql, scoreCountParams);
 
     if (scoreCountRes.rows[0].count > 0) {
       throw new ConflictError(
@@ -70,12 +83,13 @@ export async function createScoringCriterion(
       INSERT INTO event_scoring_criteria (
         organisation_id,
         event_id,
+        round_id,
         name,
         description,
         order_index,
         max_score
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `;
 
@@ -83,6 +97,7 @@ export async function createScoringCriterion(
       const res = await client.query(insertSql, [
         organisationId,
         eventId,
+        roundId || null,
         name.trim(),
         description ? description.trim() : null,
         parsedOrder,
@@ -97,7 +112,7 @@ export async function createScoringCriterion(
         action: 'event.criterion.created',
         entityType: 'event_scoring_criterion',
         entityId: criterion.id,
-        metadata: { eventId, criterionName: criterion.name, maxScore: criterion.max_score },
+        metadata: { eventId, roundId: criterion.round_id, criterionName: criterion.name, maxScore: criterion.max_score },
         ipAddress,
         userAgent,
         client,
@@ -107,6 +122,7 @@ export async function createScoringCriterion(
         id: criterion.id,
         organisationId: criterion.organisation_id,
         eventId: criterion.event_id,
+        roundId: criterion.round_id,
         name: criterion.name,
         description: criterion.description,
         orderIndex: criterion.order_index,
@@ -116,7 +132,7 @@ export async function createScoringCriterion(
     } catch (err) {
       if (err.code === '23505') {
         throw new ConflictError(
-          `A criterion with the name "${name.trim()}" already exists for this event.`,
+          `A criterion with the name "${name.trim()}" already exists for this round/event.`,
           'CRITERION_NAME_EXISTS'
         );
       }
@@ -125,19 +141,34 @@ export async function createScoringCriterion(
   });
 }
 
-export async function listScoringCriteria(organisationId, eventId) {
+export async function listScoringCriteria(organisationId, eventId, { roundId = null } = {}) {
   return withTenantTransaction({ organisationId }, async (client) => {
-    const res = await client.query(
-      `SELECT * FROM event_scoring_criteria 
-       WHERE event_id = $1 AND organisation_id = $2
-       ORDER BY order_index ASC, created_at ASC`,
-      [eventId, organisationId]
-    );
+    let sql;
+    let params;
+
+    if (roundId) {
+      sql = `
+        SELECT * FROM event_scoring_criteria 
+        WHERE event_id = $1 AND organisation_id = $2 AND (round_id = $3 OR round_id IS NULL)
+        ORDER BY order_index ASC, created_at ASC
+      `;
+      params = [eventId, organisationId, roundId];
+    } else {
+      sql = `
+        SELECT * FROM event_scoring_criteria 
+        WHERE event_id = $1 AND organisation_id = $2
+        ORDER BY order_index ASC, created_at ASC
+      `;
+      params = [eventId, organisationId];
+    }
+
+    const res = await client.query(sql, params);
 
     return res.rows.map((row) => ({
       id: row.id,
       organisationId: row.organisation_id,
       eventId: row.event_id,
+      roundId: row.round_id || null,
       name: row.name,
       description: row.description,
       orderIndex: row.order_index,
@@ -201,7 +232,7 @@ export async function deleteScoringCriterion(
 export async function assignJudge(
   organisationId,
   eventId,
-  { judgeUserId, submissionId = null },
+  { judgeUserId, submissionId = null, roundId = null },
   actorUserId,
   { ipAddress, userAgent } = {}
 ) {
@@ -235,34 +266,50 @@ export async function assignJudge(
       throw new ConflictError('Cannot assign inactive user as judge.', 'USER_NOT_ACTIVE');
     }
 
-    // 3. Verify submission if submission-specific assignment
+    // 3. Verify round if round-scoped assignment (Phase 02D)
+    if (roundId) {
+      const roundRes = await client.query(
+        `SELECT id FROM event_rounds WHERE id = $1 AND event_id = $2 AND organisation_id = $3`,
+        [roundId, eventId, organisationId]
+      );
+      if (roundRes.rows.length === 0) {
+        throw new NotFoundError('Competition round not found in this event.', 'ROUND_NOT_FOUND');
+      }
+    }
+
+    // 4. Verify submission if submission-specific assignment
     if (submissionId) {
       const subRes = await client.query(
-        `SELECT id FROM event_submissions WHERE id = $1 AND event_id = $2 AND organisation_id = $3`,
+        `SELECT id, round_id FROM event_submissions WHERE id = $1 AND event_id = $2 AND organisation_id = $3`,
         [submissionId, eventId, organisationId]
       );
       if (subRes.rows.length === 0) {
         throw new NotFoundError('Submission not found in this event.', 'SUBMISSION_NOT_FOUND');
       }
+      if (roundId && subRes.rows[0].round_id && subRes.rows[0].round_id !== roundId) {
+        throw new ValidationError('Submission does not belong to the specified round.', 'SUBMISSION_ROUND_MISMATCH');
+      }
     }
 
-    // 4. Insert assignment
+    // 5. Insert assignment
     const insertSql = `
       INSERT INTO event_judge_assignments (
         organisation_id,
         event_id,
+        round_id,
         judge_user_id,
         submission_id,
         assigned_by_id
       )
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (event_id, judge_user_id, submission_id) DO NOTHING
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (event_id, round_id, judge_user_id, submission_id) DO NOTHING
       RETURNING *
     `;
 
     const res = await client.query(insertSql, [
       organisationId,
       eventId,
+      roundId || null,
       judgeUserId,
       submissionId || null,
       actorUserId,
@@ -280,7 +327,7 @@ export async function assignJudge(
       action: 'event.judge.assigned',
       entityType: 'event_judge_assignment',
       entityId: assignment.id,
-      metadata: { eventId, judgeUserId, submissionId },
+      metadata: { eventId, roundId: assignment.round_id, judgeUserId, submissionId },
       ipAddress,
       userAgent,
       client,
@@ -290,6 +337,7 @@ export async function assignJudge(
       id: assignment.id,
       organisationId: assignment.organisation_id,
       eventId: assignment.event_id,
+      roundId: assignment.round_id,
       judgeUserId: assignment.judge_user_id,
       judgeEmail: judgeUser.email,
       judgeName: judgeUser.full_name,
@@ -479,6 +527,245 @@ export async function listJudgeWork(organisationId, eventId, judgeUserId) {
   });
 }
 
+async function getAuthorizedEvaluationSession(
+  client,
+  organisationId,
+  eventId,
+  roundId,
+  sessionId,
+  judgeUserId
+) {
+  const result = await client.query(
+    `
+      SELECT
+        es.*,
+        re.round_id,
+        ep.order_index AS panel_number,
+        ep.name AS panel_name,
+        t.name AS team_name,
+        s.id AS linked_submission_id,
+        s.title AS submission_title,
+        s.description AS submission_description,
+        s.repository_url,
+        s.demo_url,
+        s.event_id AS submission_event_id,
+        s.team_id AS submission_team_id,
+        s.round_id AS submission_round_id
+      FROM evaluation_sessions es
+      JOIN round_evaluations re ON re.id = es.round_evaluation_id
+      JOIN evaluation_panels ep ON ep.id = es.panel_id
+      JOIN event_teams t ON t.id = es.team_id
+      LEFT JOIN event_submissions s ON s.id = es.submission_id
+      JOIN evaluation_panel_judges epj
+        ON epj.panel_id = es.panel_id
+       AND epj.round_evaluation_id = es.round_evaluation_id
+       AND epj.judge_user_id = $5
+      WHERE es.id = $1
+        AND es.organisation_id = $2
+        AND es.event_id = $3
+        AND re.round_id = $4
+    `,
+    [sessionId, organisationId, eventId, roundId, judgeUserId]
+  );
+
+  if (result.rows.length === 0) {
+    throw new AuthorizationError('You are not assigned to this evaluation session.', 'EVALUATION_SESSION_FORBIDDEN');
+  }
+
+  const session = result.rows[0];
+  if (['cancelled', 'no_show'].includes(session.status)) {
+    throw new ConflictError('Scores cannot be submitted for this session.', 'EVALUATION_SESSION_INACTIVE');
+  }
+  if (
+    !session.linked_submission_id ||
+    session.submission_event_id !== session.event_id ||
+    session.submission_round_id !== session.round_id ||
+    session.submission_team_id !== session.team_id
+  ) {
+    throw new ConflictError('This evaluation session does not have a compatible submission.', 'SESSION_SUBMISSION_INVALID');
+  }
+
+  return session;
+}
+
+export async function getEvaluationSessionWork(
+  organisationId,
+  eventId,
+  roundId,
+  sessionId,
+  judgeUserId
+) {
+  return withTenantTransaction({ organisationId, userId: judgeUserId }, async (client) => {
+    const session = await getAuthorizedEvaluationSession(
+      client,
+      organisationId,
+      eventId,
+      roundId,
+      sessionId,
+      judgeUserId
+    );
+    const criteriaRes = await client.query(
+      `SELECT id, name, description, max_score, order_index
+       FROM event_scoring_criteria
+       WHERE event_id = $1 AND organisation_id = $2
+         AND (round_id = $3 OR round_id IS NULL)
+       ORDER BY order_index ASC`,
+      [eventId, organisationId, roundId]
+    );
+    const scoresRes = await client.query(
+      `SELECT criterion_id, score, feedback, updated_at
+       FROM event_scores
+       WHERE event_id = $1 AND submission_id = $2 AND judge_user_id = $3`,
+      [eventId, session.linked_submission_id, judgeUserId]
+    );
+
+    return {
+      session: {
+        id: session.id,
+        eventId: session.event_id,
+        roundId: session.round_id,
+        panelId: session.panel_id,
+        panelNumber: session.panel_number,
+        panelName: session.panel_name,
+        teamId: session.team_id,
+        teamName: session.team_name,
+        startsAt: new Date(session.starts_at).toISOString(),
+        endsAt: new Date(session.ends_at).toISOString(),
+        status: session.status,
+        meetingUrl: session.meeting_url || null,
+        submission: {
+          id: session.linked_submission_id,
+          title: session.submission_title,
+          description: session.submission_description,
+          repositoryUrl: session.repository_url,
+          demoUrl: session.demo_url,
+        },
+      },
+      criteria: criteriaRes.rows.map((criterion) => ({
+        id: criterion.id,
+        name: criterion.name,
+        description: criterion.description,
+        maxScore: criterion.max_score,
+        orderIndex: criterion.order_index,
+      })),
+      scores: scoresRes.rows.map((score) => ({
+        criterionId: score.criterion_id,
+        score: Number(score.score),
+        feedback: score.feedback,
+        updatedAt: score.updated_at.toISOString(),
+      })),
+    };
+  });
+}
+
+export async function submitEvaluationSessionScores(
+  organisationId,
+  eventId,
+  roundId,
+  sessionId,
+  judgeUserId,
+  { scores },
+  { ipAddress, userAgent } = {}
+) {
+  if (!Array.isArray(scores) || scores.length === 0) {
+    throw new ValidationError('At least one criterion score is required.');
+  }
+
+  return withTenantTransaction({ organisationId, userId: judgeUserId }, async (client) => {
+    const session = await getAuthorizedEvaluationSession(
+      client,
+      organisationId,
+      eventId,
+      roundId,
+      sessionId,
+      judgeUserId
+    );
+    const eventRes = await client.query(
+      `SELECT status FROM events WHERE id = $1 AND organisation_id = $2`,
+      [eventId, organisationId]
+    );
+    if (eventRes.rows.length === 0) throw new NotFoundError('Event not found.', 'EVENT_NOT_FOUND');
+    if (!['in_progress', 'completed'].includes(eventRes.rows[0].status)) {
+      throw new ConflictError('Scoring is not active for this event.', 'JUDGING_NOT_ACTIVE');
+    }
+
+    const roundRes = await client.query(
+      `SELECT status FROM event_rounds WHERE id = $1 AND event_id = $2 AND organisation_id = $3`,
+      [roundId, eventId, organisationId]
+    );
+    if (roundRes.rows.length > 0 && roundRes.rows[0].status === 'completed') {
+      throw new ConflictError(
+        'Cannot submit or modify scores for a round that has already concluded and advanced.',
+        'ROUND_ADVANCEMENT_LOCKED'
+      );
+    }
+
+    const criteriaRes = await client.query(
+      `SELECT id, name, max_score
+       FROM event_scoring_criteria
+       WHERE event_id = $1 AND organisation_id = $2
+         AND (round_id = $3 OR round_id IS NULL)`,
+      [eventId, organisationId, roundId]
+    );
+    const criteriaMap = new Map(criteriaRes.rows.map((criterion) => [criterion.id, criterion]));
+    const savedScores = [];
+
+    for (const item of scores) {
+      const criterion = criteriaMap.get(item.criterionId);
+      if (!criterion) throw new ValidationError(`Invalid criterion ID: ${item.criterionId}`);
+      const numericScore = Number(item.score);
+      if (!Number.isFinite(numericScore) || numericScore < 0 || numericScore > criterion.max_score) {
+        throw new ValidationError(
+          `Score for "${criterion.name}" must be between 0 and ${criterion.max_score}.`
+        );
+      }
+
+      const scoreRes = await client.query(
+        `INSERT INTO event_scores (
+           organisation_id, event_id, round_id, submission_id, criterion_id,
+           judge_user_id, score, feedback, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+         ON CONFLICT (event_id, submission_id, criterion_id, judge_user_id)
+         DO UPDATE SET round_id = EXCLUDED.round_id,
+                       score = EXCLUDED.score,
+                       feedback = EXCLUDED.feedback,
+                       updated_at = NOW()
+         RETURNING id, criterion_id, score, feedback`,
+        [
+          organisationId,
+          eventId,
+          roundId,
+          session.linked_submission_id,
+          item.criterionId,
+          judgeUserId,
+          numericScore,
+          item.feedback ? item.feedback.trim() : null,
+        ]
+      );
+      savedScores.push({
+        id: scoreRes.rows[0].id,
+        criterionId: scoreRes.rows[0].criterion_id,
+        score: Number(scoreRes.rows[0].score),
+        feedback: scoreRes.rows[0].feedback,
+      });
+    }
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: judgeUserId,
+      action: 'event.evaluation_session.scores.submitted',
+      entityType: 'evaluation_session',
+      entityId: sessionId,
+      metadata: { eventId, roundId, sessionId, submissionId: session.linked_submission_id, scoreCount: savedScores.length },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return { success: true, sessionId, submissionId: session.linked_submission_id, scores: savedScores };
+  });
+}
+
 /**
  * Submits or updates scores from an assigned judge (EVT-008).
  */
@@ -513,25 +800,9 @@ export async function submitJudgeScores(
       );
     }
 
-    // 2. Verify judge is assigned to this submission/event
-    const assignCheck = await client.query(
-      `
-      SELECT id FROM event_judge_assignments
-      WHERE event_id = $1 AND judge_user_id = $2 AND (submission_id IS NULL OR submission_id = $3)
-    `,
-      [eventId, judgeUserId, submissionId]
-    );
-
-    if (assignCheck.rows.length === 0) {
-      throw new AuthorizationError(
-        'You are not assigned as a judge for this submission.',
-        'JUDGE_NOT_ASSIGNED'
-      );
-    }
-
-    // 3. Verify submission exists
+    // 2. Verify submission exists first to obtain round_id
     const subRes = await client.query(
-      `SELECT id FROM event_submissions WHERE id = $1 AND event_id = $2`,
+      `SELECT id, round_id FROM event_submissions WHERE id = $1 AND event_id = $2`,
       [submissionId, eventId]
     );
 
@@ -539,10 +810,46 @@ export async function submitJudgeScores(
       throw new NotFoundError('Submission not found in this event.', 'SUBMISSION_NOT_FOUND');
     }
 
-    // 4. Fetch valid event criteria
+    const submissionRoundId = subRes.rows[0].round_id;
+
+    // 3. Verify round is not completed/advanced (Phase 02D: Prevent score edits after advancement)
+    if (submissionRoundId) {
+      const roundCheck = await client.query(
+        `SELECT status FROM event_rounds WHERE id = $1 AND event_id = $2`,
+        [submissionRoundId, eventId]
+      );
+      if (roundCheck.rows.length > 0 && roundCheck.rows[0].status === 'completed') {
+        throw new ConflictError(
+          'Cannot submit or modify scores for a round that has already concluded and advanced.',
+          'ROUND_ADVANCEMENT_LOCKED'
+        );
+      }
+    }
+
+    // 4. Verify judge is assigned to this submission/event and round (Phase 02D)
+    const assignCheck = await client.query(
+      `
+      SELECT id FROM event_judge_assignments
+      WHERE event_id = $1 
+        AND judge_user_id = $2 
+        AND (round_id IS NULL OR round_id = $3)
+        AND (submission_id IS NULL OR submission_id = $4)
+    `,
+      [eventId, judgeUserId, submissionRoundId, submissionId]
+    );
+
+    if (assignCheck.rows.length === 0) {
+      throw new AuthorizationError(
+        'You are not assigned as a judge for this round/submission.',
+        'JUDGE_NOT_ASSIGNED'
+      );
+    }
+
+    // 5. Fetch valid event criteria (scoped to round if submission has round_id)
     const criteriaRes = await client.query(
-      `SELECT * FROM event_scoring_criteria WHERE event_id = $1`,
-      [eventId]
+      `SELECT * FROM event_scoring_criteria 
+       WHERE event_id = $1 AND ($2::uuid IS NULL OR round_id = $2::uuid OR round_id IS NULL)`,
+      [eventId, submissionRoundId]
     );
     const criteriaMap = new Map(criteriaRes.rows.map((c) => [c.id, c]));
 
@@ -567,6 +874,7 @@ export async function submitJudgeScores(
         INSERT INTO event_scores (
           organisation_id,
           event_id,
+          round_id,
           submission_id,
           criterion_id,
           judge_user_id,
@@ -574,9 +882,10 @@ export async function submitJudgeScores(
           feedback,
           updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
         ON CONFLICT (event_id, submission_id, criterion_id, judge_user_id)
         DO UPDATE SET
+          round_id = EXCLUDED.round_id,
           score = EXCLUDED.score,
           feedback = EXCLUDED.feedback,
           updated_at = NOW()
@@ -586,6 +895,7 @@ export async function submitJudgeScores(
       const scoreRes = await client.query(upsertSql, [
         organisationId,
         eventId,
+        submissionRoundId,
         submissionId,
         criterionId,
         judgeUserId,
@@ -649,6 +959,10 @@ export async function getEventResults(
     }
 
     const event = eventRes.rows[0];
+    if (isPublic && (event.visibility !== 'public' || event.status === 'draft')) {
+      throw new NotFoundError('Event not found.', 'EVENT_NOT_FOUND');
+    }
+
     const isPublished = Boolean(event.results_published_at);
 
     // Visibility guard: unpublished scores are forbidden to participants/public (EVT-009)
@@ -914,5 +1228,264 @@ export async function unpublishEventResults(
     });
 
     return { success: true };
+  });
+}
+
+// -----------------------------------------------------------------------------
+// 5. Round Results & Round Publication (EVT-010, Phase 02C)
+// -----------------------------------------------------------------------------
+
+/**
+ * Calculates results for a specific competition round: straight sum of criterion scores.
+ * Unpublished scores are strictly hidden unless caller has management/publication permissions.
+ */
+export async function getRoundResults(
+  organisationId,
+  eventId,
+  roundId,
+  currentUserId = null,
+  { canManageResults = false, isPublic = false } = {}
+) {
+  const transactionRunner = isPublic
+    ? withSystemTransaction
+    : (cb) => withTenantTransaction({ organisationId, userId: currentUserId }, cb);
+
+  return transactionRunner(async (client) => {
+    // 1. Fetch Event and Round
+    const eventRes = await client.query(
+      `SELECT * FROM events WHERE id = $1 AND (organisation_id = $2 OR $3 = true)`,
+      [eventId, organisationId || '00000000-0000-0000-0000-000000000000', isPublic]
+    );
+
+    if (eventRes.rows.length === 0) {
+      throw new NotFoundError('Event not found.', 'EVENT_NOT_FOUND');
+    }
+
+    const event = eventRes.rows[0];
+    if (isPublic && (event.visibility !== 'public' || event.status === 'draft')) {
+      throw new NotFoundError('Event not found.', 'EVENT_NOT_FOUND');
+    }
+
+    const roundRes = await client.query(
+      `SELECT * FROM event_rounds WHERE id = $1 AND event_id = $2`,
+      [roundId, eventId]
+    );
+
+    if (roundRes.rows.length === 0) {
+      throw new NotFoundError('Competition round not found.', 'ROUND_NOT_FOUND');
+    }
+
+    const round = roundRes.rows[0];
+    const isPublished = Boolean(round.results_published_at);
+
+    // Visibility guard: unpublished scores are forbidden to participants/public (EVT-009, EVT-010)
+    if (!isPublished && !canManageResults) {
+      throw new AuthorizationError(
+        'Results for this competition round have not been published yet.',
+        'RESULTS_NOT_PUBLISHED'
+      );
+    }
+
+    // 2. Fetch criteria for this round (round-specific or global)
+    const criteriaRes = await client.query(
+      `SELECT * FROM event_scoring_criteria 
+       WHERE event_id = $1 AND (round_id = $2 OR round_id IS NULL) 
+       ORDER BY order_index ASC`,
+      [eventId, roundId]
+    );
+
+    const criteria = criteriaRes.rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      maxScore: c.max_score,
+    }));
+
+    // 3. Fetch submissions in this round
+    const subRes = await client.query(
+      `
+      SELECT 
+        s.id, s.title, s.description, s.repository_url, s.demo_url,
+        t.id AS team_id, t.name AS team_name,
+        u.id AS submitter_user_id, u.full_name AS submitter_name
+      FROM event_submissions s
+      LEFT JOIN event_teams t ON t.id = s.team_id
+      LEFT JOIN users u ON u.id = s.submitter_user_id
+      WHERE s.round_id = $1 AND s.event_id = $2
+    `,
+      [roundId, eventId]
+    );
+
+    // 4. Fetch scores for this round
+    const scoresRes = await client.query(
+      `SELECT * FROM event_scores WHERE round_id = $1`,
+      [roundId]
+    );
+
+    // 5. Fetch advancements for this round (to show qualification status)
+    const advRes = await client.query(
+      `SELECT * FROM event_round_advancements WHERE round_id = $1`,
+      [roundId]
+    );
+    const advMap = new Map();
+    for (const a of advRes.rows) {
+      const key = a.team_id || a.participant_user_id;
+      if (key) advMap.set(key, a);
+    }
+
+    const resultsList = subRes.rows.map((sub) => {
+      const subScores = scoresRes.rows.filter((sc) => sc.submission_id === sub.id);
+      const totalScore = subScores.reduce((acc, sc) => acc + Number(sc.score), 0);
+      const adv = advMap.get(sub.team_id || sub.submitter_user_id);
+
+      return {
+        submissionId: sub.id,
+        title: sub.title,
+        description: sub.description,
+        repositoryUrl: sub.repository_url,
+        demoUrl: sub.demo_url,
+        teamId: sub.team_id,
+        teamName: sub.team_name,
+        submitterUserId: sub.submitter_user_id,
+        submitterName: sub.submitter_name,
+        totalScore,
+        scoreCount: subScores.length,
+        qualificationStatus: adv ? adv.status : null,
+      };
+    });
+
+    // Sort by totalScore DESC
+    resultsList.sort((a, b) => b.totalScore - a.totalScore);
+
+    // Assign shared competition ranks (ADR-009)
+    let currentRank = 1;
+    for (let i = 0; i < resultsList.length; i++) {
+      if (i > 0 && resultsList[i].totalScore === resultsList[i - 1].totalScore) {
+        resultsList[i].rank = resultsList[i - 1].rank;
+      } else {
+        resultsList[i].rank = currentRank;
+      }
+      currentRank++;
+    }
+
+    return {
+      eventId,
+      roundId,
+      roundNumber: round.round_number,
+      roundName: round.name,
+      isPublished,
+      publishedAt: round.results_published_at ? round.results_published_at.toISOString() : null,
+      criteria,
+      results: resultsList,
+    };
+  });
+}
+
+/**
+ * Publishes final calculated results for a competition round.
+ */
+export async function publishRoundResults(
+  organisationId,
+  eventId,
+  roundId,
+  actorUserId,
+  { ipAddress, userAgent } = {}
+) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    const roundRes = await client.query(
+      `SELECT * FROM event_rounds WHERE id = $1 AND event_id = $2 AND organisation_id = $3 FOR UPDATE`,
+      [roundId, eventId, organisationId]
+    );
+
+    if (roundRes.rows.length === 0) {
+      throw new NotFoundError('Competition round not found.', 'ROUND_NOT_FOUND');
+    }
+
+    const round = roundRes.rows[0];
+
+    const updatedRes = await client.query(
+      `
+      UPDATE event_rounds
+      SET
+        results_published_at = NOW(),
+        results_published_by_id = $1,
+        status = 'completed',
+        updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `,
+      [actorUserId, roundId]
+    );
+
+    const updatedRound = updatedRes.rows[0];
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'event.round.results_published',
+      entityType: 'event_round',
+      entityId: roundId,
+      metadata: { eventId, roundId, roundNumber: round.round_number },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return {
+      success: true,
+      roundId,
+      resultsPublishedAt: updatedRound.results_published_at.toISOString(),
+    };
+  });
+}
+
+/**
+ * Unpublishes competition round results.
+ */
+export async function unpublishRoundResults(
+  organisationId,
+  eventId,
+  roundId,
+  actorUserId,
+  { ipAddress, userAgent } = {}
+) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    const roundRes = await client.query(
+      `SELECT * FROM event_rounds WHERE id = $1 AND event_id = $2 AND organisation_id = $3 FOR UPDATE`,
+      [roundId, eventId, organisationId]
+    );
+
+    if (roundRes.rows.length === 0) {
+      throw new NotFoundError('Competition round not found.', 'ROUND_NOT_FOUND');
+    }
+
+    await client.query(
+      `
+      UPDATE event_rounds
+      SET
+        results_published_at = NULL,
+        results_published_by_id = NULL,
+        updated_at = NOW()
+      WHERE id = $1
+    `,
+      [roundId]
+    );
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'event.round.results_unpublished',
+      entityType: 'event_round',
+      entityId: roundId,
+      metadata: { eventId, roundId },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return {
+      success: true,
+      roundId,
+      resultsPublishedAt: null,
+    };
   });
 }

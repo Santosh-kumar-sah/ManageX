@@ -135,7 +135,7 @@ ALTER TABLE tasks ADD CONSTRAINT fk_tasks_project_tenant
 ### B. Platform Administration & Support Boundary
 - Platform Super Admin and Platform Support Agent routes live under `/platform/*`.
 - **Platform Support Agent:** Can view operational health and basic organisation metadata (name, slug, creation date, status).
-- **Strict Prohibition:** Support agents **cannot** browse private tenant event submissions, meeting notes, project tasks, or comments.
+- **Strict Prohibition:** Support agents **cannot** browse private tenant event submissions, meeting notes, project tasks, comments, evaluation configurations, or meeting links.
 - **No Impersonation:** No "login-as-user" or unlogged tenant browsing mechanism exists in ManageX.
 
 ### C. Owner Invariants & Transfer Protocol
@@ -145,6 +145,11 @@ ALTER TABLE tasks ADD CONSTRAINT fk_tasks_project_tenant
   1. Transferring ownership requires explicit step-up reauthentication (password check executed within the previous 10 minutes).
   2. The target user must be an active member of the organisation.
   3. The transfer is executed inside a single database transaction with row-level locks on the organisation and membership records.
+
+### D. Evaluation & Judge Scheduling Boundary (Phase 2A / 2A.1)
+- **External Judge Access:** Judges receive assigned access to specific panels and evaluations without organisation membership. RLS restricts non-member judges strictly to `SELECT` on assigned panels, sessions, and judge assignment rows; all mutation operations (`INSERT`, `UPDATE`, `DELETE`) fail closed.
+- **Platform Support Least-Privilege:** Platform administrators and support agents have **no** mutation or raw `SELECT` bypass on `round_evaluations`, `evaluation_panels`, `evaluation_panel_judges`, or `evaluation_sessions`. Private judge assignments and meeting URLs (`default_meeting_url`, `meeting_url`) are protected from platform support exposure at the database RLS layer.
+- **Participant Schedule Isolation:** Participants can read only their own team's published session via `evaluation_sessions`. They cannot access another team's session, private meeting link, or draft schedule information.
 
 ---
 

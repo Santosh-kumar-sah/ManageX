@@ -14,7 +14,25 @@ This directory contains versioned SQL migrations and safe non-production referen
 ```bash
 # Run migrations using configured DATABASE_URL or MIGRATION_DATABASE_URL
 npm run migrate
+
+# Seed local demo accounts and sample workspace data
+npm run seed
 ```
+
+The local Docker PostgreSQL setup uses the connection string in `backend/.env`
+(by default, PostgreSQL is published on `localhost:5433`). The supported demo
+accounts are created by `npm run seed`; the command prints their credentials
+after a successful run. Run the backend from the repository root with
+`npm run dev:backend`, then run the frontend with `npm run dev:frontend`.
+
+The legacy reference-only user seeder can also be run with:
+
+```bash
+node database/seed-demo-users.js
+```
+
+It loads the root `.env` file and resolves `bcryptjs` from the backend
+workspace.
 
 ## Safety Invariants
 - Migrations are fully transactional (`BEGIN ... COMMIT`).
