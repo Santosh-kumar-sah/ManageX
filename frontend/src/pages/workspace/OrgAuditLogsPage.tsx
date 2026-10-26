@@ -70,7 +70,7 @@ export function formatAuditAction(action: string): string {
   };
   if (map[action]) return map[action];
   return action
-    .split(/[\._]/)
+    .split(/[._]/)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 }

@@ -8,6 +8,8 @@ import {
   MeetingItem,
   MeetingLocationType,
   MeetingVisibility,
+  COMMON_TIMEZONE_OPTIONS,
+  normalizeTimeZone,
 } from '@/types/meetings';
 
 interface ScheduleMeetingDialogProps {
@@ -16,21 +18,6 @@ interface ScheduleMeetingDialogProps {
   orgId: string;
   onMeetingScheduled: (meeting: MeetingItem) => void;
 }
-
-const COMMON_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Asia/Kolkata',
-  'Asia/Singapore',
-  'Asia/Tokyo',
-  'Australia/Sydney',
-];
 
 export function ScheduleMeetingDialog({
   isOpen,
@@ -41,7 +28,7 @@ export function ScheduleMeetingDialog({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [timezone, setTimezone] = useState(
-    Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    normalizeTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata')
   );
   const [locationType, setLocationType] = useState<MeetingLocationType>('virtual');
   const [location, setLocation] = useState('');
@@ -73,7 +60,7 @@ export function ScheduleMeetingDialog({
   const resetForm = () => {
     setTitle('');
     setDescription('');
-    setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+    setTimezone(normalizeTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata'));
     setLocationType('virtual');
     setLocation('');
     setVirtualUrl('');
@@ -234,12 +221,12 @@ export function ScheduleMeetingDialog({
               onChange={(e) => setTimezone(e.target.value)}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
             >
-              {COMMON_TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
+              {COMMON_TIMEZONE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
               ))}
-              {!COMMON_TIMEZONES.includes(timezone) && (
+              {!COMMON_TIMEZONE_OPTIONS.some((opt) => opt.value === timezone) && (
                 <option value={timezone}>{timezone}</option>
               )}
             </select>
