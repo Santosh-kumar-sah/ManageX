@@ -301,8 +301,8 @@ describe('JudgeWorkspacePage & Scoring UI — Phase 4F Focused Suite', () => {
   // 7. Failed submission preserves entered values and allows safe retry
   it('7. Recoverable submission failure preserves typed values in state for safe retry', () => {
     // Verify that state preservation logic keeps entered maps intact on catch
-    let scoresState = { 'crit-1': '55', 'crit-2': '38' };
-    let feedbackState = { 'crit-1': 'Good note' };
+    const scoresState = { 'crit-1': '55', 'crit-2': '38' };
+    const feedbackState = { 'crit-1': 'Good note' };
     let errorMessage: string | null = null;
 
     try {

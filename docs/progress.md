@@ -4,6 +4,429 @@ This document tracks progress across implementation phases, completed requiremen
 
 ---
 
+## Phase E (Meetings Improvement Plan): Analytics Date Semantics, Metric Labels & Final Regression
+
+- **Correct Analytics Date Semantics (`meetingService.js`, `meetings_phase4.integration.test.js`):**
+  - **Meeting Occurrence & Lifecycle Metrics:** Filtered `meetings` using canonical `meetings.start_at` (`m.start_at >= NOW() - INTERVAL '30 days'` or `'90 days'`). Replaced previous indiscriminate `created_at` filters that incorrectly captured scheduling timestamps instead of meeting occurrence dates.
+  - **Child-Table Occurrence Scoping:** Scoped `meeting_attendees`, `meeting_discussion_points`, and `meeting_decisions` to the parent meeting occurrence window via `JOIN meetings m ON m.id = child.meeting_id AND m.organisation_id = child.organisation_id` with `m.start_at` filters.
+  - **Duplication & Cartesian Prevention:** Ensured child-table queries produce exact counts without row multiplication or double-counting, adhering to strict composite foreign key relationships.
+  - **Creation Velocity & Task Semantics:** Preserved `created_at` semantics on `meeting_action_items` to measure actual task creation velocity within the timeframe, alongside overdue checks against `due_date < CURRENT_DATE`.
+- **RSVP Metric Labeling & Safe Semantics (`MeetingsPage.tsx`, `MeetingsPage.test.tsx`):**
+  - **Label Clarification:** Renamed the metric from `"Attendance Rate"` to **`"RSVP Acceptance Rate"`** on Metric Card 3 and Detailed Card B (`"RSVP Status & Responses"` and `"RSVP Acceptance Rate"` row).
+  - **Check-in Disambiguation:** Accurately reflects that ManageX derives this metric from accepted RSVPs divided by total invited attendees, without falsely implying physical or virtual check-in attendance.
+  - **Zero-Denominator Safety:** Maintained safe `0%` evaluations when invited attendee counts are zero, completely avoiding `NaN%` or `Infinity%` runtime errors.
+- **Final Verification & Full Regression Results:**
+  - **Backend Integration Tests:** **100 tests passed** across all 6 meetings suites in `backend/src/platform/meetings/` (added Phase E Tests 14, 15, and 16 in `meetings_phase4.integration.test.js` verifying occurrence date scoping, Cartesian prevention, and zero-denominator safety).
+  - **Broader Backend Suite:** **461 tests passed** across all 32 suites in `npm --prefix backend test`.
+  - **Frontend Component Tests:** **177 tests passed** across all 18 test files (added Phase E Tests 19 and 20 in `MeetingsPage.test.tsx`).
+  - **Frontend Typecheck:** `npm run typecheck:frontend` (`tsc --noEmit`) passed with **0 errors**.
+  - **Frontend Production Build:** `npm run build:frontend` (`tsc && vite build`) succeeded cleanly in 15.81s.
+- **Phase A–E Final Status:**
+  - All Phase A, B, C, D, and E requirements under `docs/meetings-improvement-implementation-plan.md` are **100% implemented, verified, documented, and regression-free**.
+
+---
+
+## Phase D (Meetings Improvement Plan): MoM Detail-Page Polish, Export Verification & Action-Item Completion Metrics
+
+- **MoM Detail-Page Polish (`MeetingDetailPage.tsx`, `MeetingDetailPage.test.tsx`):**
+  - **MoM Sections & Empty States:** Inspected and verified Discussion Points, Decisions, Notes, and Action Items UI. Preserved loading, empty, error, and permission-denied states across all MoM views.
+  - **Confidentiality & Edit Lockout:** Preserved meeting-note confidentiality and edit lockouts on completed/cancelled/missed meetings.
+  - **Action Items Tab Summary:** Added actionable completion summary strip (`meeting-action-summary`) showing:
+    - Actionable completion percentage (`Math.round(actionableRate)%`)
+    - Sub-label with completed vs actionable breakdown (`{doneCount} of {actionableCount} actionable completed · {cancelledCount} cancelled`)
+    - All-cancelled empty state notice (`All {totalCount} items cancelled · No actionable items`) preventing false 100% or `NaN%` displays.
+  - **Minutes Tab Section 3 Summary:** Added actionable summary badge (`mom-action-summary`) next to the action item count badge (`{doneCount}/{actionableCount} actionable completed`).
+- **Markdown & PDF Export Attendee Formatting (`markdownGenerator.js`, `pdfGenerator.js`, `meetings_phase4.integration.test.js`):**
+  - **Attendee Name & Email Hierarchy:** Updated attendee line formatting in both generators to resolve:
+    1. Canonical `fullName` and `email` (`Full Name (email@domain.com)`)
+    2. Legacy `userName` and `userEmail` (`User Name (email@domain.com)`)
+    3. External guest attendees (`email@domain.com (External)`)
+  - **Confidential Notes Redaction & Sanitization:** Verified confidential notes are strictly excluded/redacted for unauthorized viewers with notice in both Markdown and PDF formats. Empty MoM sections and long notes are handled cleanly without layout errors or crashes.
+- **Action-Item Completion Rate Metric Definitions (`meetingService.js`, `MeetingsPage.tsx`, `MeetingDetailPage.tsx`, `types/meetings.ts`):**
+  - **Backend Analytics Derivation:**
+    - `total`: all action items
+    - `done`: action items with status `done`
+    - `cancelled`: action items with status `cancelled`
+    - `actionableTotal = Math.max(0, total - cancelled)`
+    - `actionableCompletionRate = actionableTotal > 0 ? Number(((done / actionableTotal) * 100).toFixed(1)) : 0`
+    - `grossCompletionRate = total > 0 ? Number(((done / total) * 100).toFixed(1)) : 0`
+    - **Backward Compatibility:** Preserved `completionRate: grossCompletionRate` for API backward compatibility.
+  - **Frontend Metrics Presentation:**
+    - Primary card metric on `MeetingsPage.tsx` displays `actionableCompletionRate`.
+    - Sub-label explicitly explains actionable items and cancelled count (`{done} of {actionableTotal} actionable items completed · {cancelled} cancelled`).
+    - Handled zero denominator cleanly (`0%` when `actionableTotal === 0`, and when all items are cancelled displays `"All {cancelled} items cancelled · 0 actionable"`).
+    - Card C (Action Items Lifecycle) displays actionable total and dedicated `Actionable Completion Rate` row alongside Gross Completion Rate.
+- **Verification & Testing:**
+  - **Backend integration tests:** 97 tests passing across 6 suites (added 3 Phase D tests in `meetings_phase4.integration.test.js`: Test 11 verifies analytics derivation, Test 12 verifies zero-division protection on all-cancelled items, Test 13 verifies Markdown & PDF export attendee formatting with canonical, legacy, and external guest representations).
+  - **Frontend component tests:** 175 tests passing across 18 test files (added 2 Phase D tests in `MeetingsPage.test.tsx` and 3 Phase D tests in `MeetingDetailPage.test.tsx`).
+  - **Frontend typecheck:** `npm run typecheck:frontend` (`tsc --noEmit`) passed with 0 errors.
+  - **Frontend production build:** `npm run build:frontend` (`tsc && vite build`) passed with 0 errors.
+
+---
+
+## Phase C (Meetings Improvement Plan): Manual Meeting Links & Terminal-State Join CTA
+
+- **Terminal-State Join CTA Lockdown (`MeetingDetailPage.tsx`):**
+  - **Non-terminal meetings (`scheduled`, `in_progress`):** Actionable Join CTA (`data-testid="join-meeting-cta"`) remains fully active and clickable (`Join Virtual Meeting` with external link icon).
+  - **Authoritative status invariant:** Passing `end_at` alone does NOT treat the meeting as terminal or deactivate the CTA while status remains `scheduled` or `in_progress`.
+  - **Terminal meetings (`completed`, `cancelled`, `missed`):** Actionable Join CTA is deactivated/hidden consistently.
+  - **Inactive notice (`data-testid="inactive-join-notice"`):**
+    - `completed` meetings display: `Meeting ended · Link inactive`.
+    - `cancelled` meetings display: `Meeting cancelled · Link inactive`.
+    - `missed` meetings display: `Meeting missed · Link inactive`.
+  - **Historical meeting link visibility (`data-testid="historical-meeting-url"`):**
+    - Separate from actionable CTA: rendered as read-only monospace metadata (`Historical link: {meeting.virtualUrl}`).
+    - Restricted to authorized organisers/managers (`isOrganiserOrManager`); hidden from standard participants and non-managers to preserve privacy.
+  - **Physical/in-person meetings:** In-person meetings (`locationType: 'in_person'`) with null `virtualUrl` render physical location and cleanly omit both Join CTA and inactive notice.
+- **Preserve Organiser-Provided Meeting Links & Privacy (`meetingService.js`, `ScheduleMeetingDialog.tsx`, `EditMeetingDialog.tsx`):**
+  - Continued 100% support for manually provided meeting URLs (Google Meet, Zoom, etc.) via existing meeting form and data models.
+  - Zero external OAuth, third-party sync, or webhook dependencies introduced.
+  - Server-side validation via Zod http/https URL scheme enforcement remains intact.
+  - Private meetings (`visibility: 'attendees_only'`) enforce strict backend authorization (403 `MEETING_ACCESS_DENIED`), preventing uninvited members from accessing meeting details or virtual URLs.
+  - Terminal meetings enforce strict edit lockout (`409 MEETING_TERMINAL_STATE`), preventing post-completion mutation of virtual links.
+- **Verification & Testing:**
+  - **Backend integration tests:** 94 tests passing across 6 suites (added test `8f` in `meetings.integration.test.js` verifying that Google Meet/Zoom URLs are preserved, private links are denied to unauthorised members, and terminal meetings reject edits to virtualUrl).
+  - **Frontend component tests:** 170 tests passing across 18 test files (added 6 Phase C tests in `MeetingDetailPage.test.tsx` and 1 Phase C test in `MeetingsPage.test.tsx`).
+  - **Frontend typecheck:** `npm run typecheck:frontend` (`tsc --noEmit`) passed with 0 errors.
+  - **Frontend production build:** `npm run build:frontend` (`tsc && vite build`) passed with 0 errors.
+
+---
+
+## Phase B (Meetings Improvement Plan): Overdue Warning, Dynamic Recalculation & MoM Completion Advisory
+
+- **Overdue State Calculation & Dynamic Recalculation (`types/meetings.ts`, `MeetingsPage.tsx`, `MeetingDetailPage.tsx`):**
+  - Implemented canonical `isMeetingOverdue(status, endAt, nowMs)` helper function:
+    - Flags meeting as overdue if and only if status is non-terminal (`scheduled` or `in_progress`) AND `new Date(endAt).getTime() < nowMs`.
+    - Terminal states (`completed`, `cancelled`, `missed`) are strictly never overdue.
+    - Future meetings (`endAt > nowMs`) are strictly never overdue.
+  - Dynamic UI recalculation without polling:
+    - Implemented single-shot timer effect in both `MeetingsPage.tsx` and `MeetingDetailPage.tsx` targeting the exact moment the next upcoming scheduled or in-progress meeting reaches its `endAt`.
+    - Zero continuous intervals (`setInterval`), zero memory leaks, and cleanly cleared timeouts (`clearTimeout`) on unmount and dependency changes.
+  - Overdue Presentation & Non-Mutating Lifecycle:
+    - Added amber `Overdue` badge to meeting cards on `MeetingsPage.tsx`.
+    - Added amber `Overdue` status badge and high-visibility warning banner (`data-testid="overdue-banner"`) on `MeetingDetailPage.tsx`.
+    - Verified that passing scheduled end time does NOT automatically mutate persisted database status.
+    - Preserved explicit organiser lifecycle workflows: organiser can explicitly transition to `completed` or `missed` according to canonical lifecycle rules.
+- **Minutes of Meeting (MoM) Completion Advisory (`MeetingDetailPage.tsx`):**
+  - Added intelligent advisory message in the completion confirmation dialog via `getCompletionConfirmMessage(hasEmptyMom)`:
+    - When discussion points, decisions, and notes are all empty, dialog informs: `"Are you sure you want to complete this meeting? Note: No discussion points, decisions, or notes have been recorded for this meeting. Once completed, minutes cannot be edited."`
+    - When minutes content exists, displays standard completion advisory: `"Are you sure you want to complete this meeting? It cannot be edited after completion."`
+  - Completely non-blocking: organiser can confirm and complete meetings with or without MoM content.
+  - No duplicate dialogs, preserves existing state machine, tenant isolation, and audit logging.
+- **Verification & Testing:**
+  - Backend integration tests: 93 tests passing across 6 suites (added test `8e` verifying that past scheduled end time does NOT auto-mutate database status, and explicit transition to `completed` with empty MoM succeeds).
+  - Frontend component tests: 163 tests passing across 18 test files (including new unit & component tests in `MeetingsPage.test.tsx` and `MeetingDetailPage.test.tsx` verifying overdue badge for in_progress/scheduled, suppression on terminal/future, banner rendering, non-blocking modal, and `isMeetingOverdue` edge cases).
+  - Frontend typecheck: `npm run typecheck:frontend` (`tsc --noEmit`) passed with 0 errors.
+  - Production build: `npm run build:frontend` (`tsc && vite build`) passed with 0 errors.
+
+---
+
+## Phase A (Meetings Improvement Plan): Attendee Names, API Compatibility & RSVP Header
+
+- **API Contract Compatibility & Attendee Serialization (`meetingService.js`):**
+  - Updated `listMeetingAttendees` and `addMeetingAttendee` to return canonical `fullName` and `email` alongside backward-compatible aliases `userName` and `userEmail`.
+  - Maintained complete compatibility with external guest attendees (`user_id IS NULL`, `isExternal: true`, `external_email`).
+  - Aligned MoM export data mapping in `exportMeetingMinutesData` and generators (`markdownGenerator.js`, `pdfGenerator.js`) to resolve `att.fullName || att.userName || att.userEmail || att.externalEmail || 'Unknown'`.
+- **Frontend Contract & Attendee Summary (`MeetingDetailPage.tsx`, `types/meetings.ts`):**
+  - Updated `MeetingAttendee` interface in `frontend/src/types/meetings.ts` to include optional `userName`, `userEmail`, `createdAt`, and `isExternal`.
+  - Replaced informal attendee header with canonical `X invited · Y confirmed` header (where confirmed strictly counts `rsvpStatus === 'accepted'`).
+  - Gracefully handles 0 attendees: renders `0 invited · 0 confirmed` and empty table state row.
+  - Resolved display names with robust fallback order: `fullName` -> `userName` -> `externalEmail` -> `'Member'`.
+  - Resolved emails consistently: `email` -> `userEmail` -> `externalEmail`.
+  - Marked external attendees with `(External)` badge.
+- **Verification & Testing:**
+  - Backend integration tests: 92 tests passing across 6 suites (including new test `14b` verifying canonical and backward-compatible fields for both members and external guests).
+  - Frontend component tests: 155 tests passing across 18 test files (including 3 new Phase A tests in `MeetingDetailPage.test.tsx` verifying summary counts, 0 attendees state, and fallback hierarchy).
+  - Frontend typecheck: `tsc --noEmit` passed with 0 errors.
+  - Production build: `vite build` completed successfully with 0 errors.
+
+---
+
+## Phase 4 (Roadmap): Analytics, Export & Polish
+
+- **Backend Architecture & MOM Export Services (`markdownGenerator.js`, `pdfGenerator.js`, `meetingService.js`):**
+  - **Meeting Minutes Markdown Export (`markdownGenerator.js`):**
+    - Pure ES module formatting meeting metadata (Title, Start/End, Timezone, Status, Location/URL, Organiser, Overview).
+    - Section 1: Attendees & Attendance table (Name/Email, Role, RSVP Status).
+    - Section 2: Ordered Agenda items with duration and descriptions.
+    - Section 3: Ordered Discussion Points with full text notes or draft state notices.
+    - Section 4: Key Decisions with detailed justifications.
+    - Section 5: Action Items table (Title, Assignee, Priority, Due Date, Status, Linked Decision, In Project Task).
+    - Section 6: Additional Notes / Confidential Minutes with strict permission filtering:
+      - Holders of `isOrganiser || meeting.notes.read || meeting.notes.manage` receive full confidential notes.
+      - Ordinary members or viewers receive a confidentiality notice: `[Confidential notes omitted — restricted to authorised meeting organisers and roles]`.
+    - Strict markdown entity sanitation (`sanitizeMarkdown`) escaping pipe delimiters, angle brackets, and markdown controls to prevent layout injection.
+  - **Standard Binary PDF 1.4 Export (`pdfGenerator.js`):**
+    - Pure ES module standard PDF 1.4 buffer generator with Helvetica and Helvetica-Bold fonts.
+    - Features clean typography, running header banner, divider bars, word-wrapping, multi-page break pagination, and proper xref / trailer tables.
+    - Zero external native or heavy dependencies.
+  - **Meeting Export Service & Endpoint (`GET /organisations/:orgId/meetings/:meetingId/export?format=markdown|pdf`):**
+    - Validates format via Zod (`'markdown' | 'pdf'`, 422 for unsupported formats).
+    - Validates tenant isolation and caller membership (404 for cross-organisation access).
+    - Returns proper Content-Type (`text/markdown; charset=utf-8` or `application/pdf`) and `Content-Disposition` header with descriptive filename (`meeting-<id>-minutes.<ext>`).
+    - Records append-only audit event `meeting.exported` with minimal safe metadata (`meetingId`, `format`, `includeNotes`).
+
+- **Backend Meeting Analytics Service & API (`meetingService.js` & `meetings.js`):**
+  - **API Endpoint:** `GET /api/v1/organisations/:orgId/meetings/analytics?timeframe=all|30d|90d`.
+  - **Real Aggregates via SQL Filters:**
+    - Summary: Total meetings, status counts (scheduled, in_progress, completed, cancelled, missed), completion rate (%), overdue scheduled count.
+    - Attendance: Total invitations, breakdown by RSVP (accepted, declined, tentative, pending), acceptance rate (%).
+    - Action Items: Total action items, status breakdown (open, in_progress, done, cancelled), overdue count, completion rate (%).
+    - MOM Artifacts: Total discussion points, total decisions recorded.
+  - **Zero-Division and Edge Case Safety:**
+    - Any rate calculation (`meetingCompletionRate`, `acceptanceRate`, `completionRate`) strictly returns `0` when denominators are zero, preventing `NaN` or `Infinity`.
+    - Cancelled and missed meetings are explicitly excluded from completed metrics.
+    - Strict tenant isolation: Tenant B queries return 0 counts for Tenant A records.
+
+- **Frontend UI & User Experience Enhancements (`MeetingDetailPage.tsx`, `MeetingsPage.tsx`, `types/meetings.ts`):**
+  - **Export Controls in `MeetingDetailPage.tsx`:**
+    - Added dedicated Export action buttons in the meeting header: `Export .MD` and `Export PDF`.
+    - Blob download integration with filename extraction from `Content-Disposition`.
+    - Retains export accessibility for all meeting outcomes including completed, cancelled, and missed meetings.
+    - Integrated loading states (`isExporting`) and toast notifications.
+  - **Analytics Sub-Tab in `MeetingsPage.tsx`:**
+    - Added third top-level sub-tab: `[Meetings] | [My Action Items] | [Analytics]`.
+    - Timeframe toggle pills: `All Time`, `Past 30 Days`, `Past 90 Days`.
+    - Metric Cards: 4 executive KPI cards (Total Meetings, Meeting Completion Rate, Attendance Acceptance Rate, Actions Completed Rate).
+    - Detailed breakdown cards: Meeting Status Breakdown, Attendance & RSVPs, Action Items Lifecycle, and Structured MOM Artifacts.
+    - Clean enterprise empty state when no meetings exist for the period.
+
+- **Verification & Test Coverage:**
+  - Backend integration tests: 82/82 passing across 6 suites:
+    - `meetings_phase4.integration.test.js`: 10/10 passing (markdown export with notes, markdown export without notes, PDF buffer validity, 404 cross-tenant isolation, 422 format validation, `meeting.exported` audit logging, analytics calculation accuracy, cancelled/missed exclusion, empty org zero-denominator safety, tenant isolation).
+    - `meetings_phase3.integration.test.js`: 9/9 passing.
+    - `meetings_mom.integration.test.js`: 7/7 passing.
+    - `meetings_rls_sec009.integration.test.js`: 8/8 passing.
+    - `meetings_regression.integration.test.js`: 19/19 passing.
+    - `meetings.integration.test.js`: 30/30 passing.
+  - Frontend test suites: 152/152 passing across 18 test files (`vitest run`).
+    - Added Phase 4 export tests in `MeetingDetailPage.test.tsx` (26/26 passing).
+    - Added Phase 4 analytics tests in `MeetingsPage.test.tsx` (12/12 passing).
+  - Frontend TypeScript verification: 0 errors (`tsc --noEmit`).
+  - Frontend production build: 0 errors (`vite build` completed in 14.81s).
+
+---
+
+## Phase 3 (Roadmap): Security, Audit & Concurrent Editing
+
+- **Database Architecture & Forward-Only Migration 040:**
+  - Added migration `database/migrations/20261017000040_meetings_root_rls_sec009.sql`.
+  - Hardened PostgreSQL Row-Level Security on the root `meetings` table, eliminating the legacy `app.current_is_platform_admin = 'true'` operational bypass from all four policies: SELECT, INSERT, UPDATE, DELETE.
+  - Re-created policies for runtime role `managex_app` strictly using trusted transaction-local tenant context: `organisation_id = NULLIF(current_setting('app.current_organisation_id', true), '')::uuid`.
+  - Verified and applied cleanly on both local databases: `managex` (dev) and `managex_test` (test). Neon/production was untouched.
+
+- **Backend API & Service Layer Enhancements (`/api/v1/organisations/:orgId/meetings`):**
+  - **Meeting Notes Optimistic Locking (Option A):**
+    - Extended `PUT /:meetingId/notes` and `upsertMeetingNotes` to accept optional `expectedUpdatedAt`.
+    - Implemented concurrency-safe database row lock (`SELECT ... FOR UPDATE`) inside the tenant transaction.
+    - Stale write detection: If `expectedUpdatedAt` is provided and does not match the persisted `updated_at`, throws `ConflictError` (HTTP 409 `CONCURRENT_MODIFICATION`) with `currentUpdatedAt` details without overwriting newer notes.
+    - Preserved backward compatibility: When `expectedUpdatedAt` is omitted, notes update continues working cleanly.
+    - Competing concurrent saves serialize safely on the row lock; one completes and the other detects the timestamp change and conflicts cleanly.
+  - **Security Audit Logging for Confidential Notes Denials:**
+    - Updated `assertMeetingNotesAccess` to record a security audit event `meeting.notes_access_denied` when unauthorized read (`FORBIDDEN_NOTES_ACCESS`) or edit (`FORBIDDEN_NOTES_MANAGE`) is attempted.
+    - Executed via isolated tenant transaction so the audit record commits independently even when the calling transaction aborts with 403.
+    - Strict privacy invariant: Zero confidential text bodies, titles, decisions, or secrets are leaked to audit metadata (metadata contains only `meetingId` and `requestedAction`).
+  - **Action-Item Lifecycle & Terminal State Enforcement:**
+    - Verified assignee field update lock: Assignees without manager permissions can only update status; updating manager fields throws 403 `FORBIDDEN_ACTION_FIELD_UPDATE`.
+    - Enforced terminal state immutability: Reopening or transitioning action items in `done` or `cancelled` status throws 409 `ACTION_ITEM_TERMINAL_STATE`.
+    - Protected deletion: Deleting action items strictly requires organiser, `meeting.action.manage`, or org admin/owner.
+
+- **Frontend UI & User Experience Enhancements:**
+  - **`MeetingDetailPage.tsx`:**
+    - Tracks persisted `notes.updatedAt` and passes `expectedUpdatedAt` in `handleSaveNotes`.
+    - Concurrency conflict handling: On HTTP 409 `CONCURRENT_MODIFICATION`, preserves the user's typed draft in the text area without discarding, and displays an informative alert explaining that another user changed the notes so the user can merge changes.
+  - **`MeetingsPage.tsx`:**
+    - Corrected quick-status toggle button: Disabled for terminal states (`done`, `cancelled`), preventing illegal transitions and optimistic state desynchronization.
+    - Button styling and titles clearly distinguish completed/cancelled items from pending items.
+
+- **Verification & Test Coverage:**
+  - Backend integration tests: 62/62 passing across 4 dedicated test suites:
+    - `meetings.integration.test.js`: 38/38 passing.
+    - `meetings_mom.integration.test.js`: 7/7 passing.
+    - `meetings_phase3.integration.test.js`: 9/9 passing (fresh save, stale rejection 409, backward compatibility, concurrent row-lock race, read/manage denial audit events, action item field/terminal boundaries).
+    - `meetings_rls_sec009.integration.test.js`: 8/8 passing (asserting migration 040, root `meetings` CRUD isolation, platform-admin bypass prevention, RLS WITH CHECK foreign tenant insertion/update rejections, fails closed on empty context).
+  - Frontend test suite: 148/148 passing across 18 test files (`vitest run`).
+  - Frontend TypeScript verification: 0 errors (`tsc --noEmit`).
+  - Frontend production build: 0 errors (`vite build`).
+
+---
+
+## Phase 2 (Roadmap): MOM Enhancement — Decision Linking, Action Items v2 & My Action Items
+
+- **Database Architecture & Forward-Only Migration 039:**
+  - Added migration `database/migrations/20261017000039_meeting_action_items_decision_project_task.sql` adding `decision_id` and `project_task_id` to `meeting_action_items`.
+  - Enforced referential integrity via composite foreign keys:
+    - `fk_meeting_action_items_decision`: `(organisation_id, meeting_id, decision_id)` -> `meeting_decisions (organisation_id, meeting_id, id)` with `ON DELETE SET NULL`.
+    - `fk_meeting_action_items_project_task`: `(organisation_id, project_task_id)` -> `tasks (organisation_id, id)` with `ON DELETE SET NULL`.
+  - Added performance indexes `idx_meeting_action_items_decision` and `idx_meeting_action_items_project_task`.
+  - Verified and applied cleanly on both local databases: `managex` (dev) and `managex_test` (test). Neon/production was untouched.
+
+- **Backend API & Service Layer Enhancements (`/api/v1/organisations/:orgId/meetings`):**
+  - **Cross-Meeting Action Items Query (`GET /action-items`):**
+    - Mounted before parameterised routes to avoid route collisions.
+    - Role-aware scoping: Ordinary members see only their assigned action items; users with `meeting.action.manage`, `meeting.edit`, or org admin/owner can view organisation-wide action items or filter by assignee.
+    - Comprehensive filtering: `timeframe` (`all`, `overdue`, `due_soon`, `completed`), `status`, `priority`, `meetingId`.
+    - Returns paginated action items enriched with meeting title, assignee info, linked decision title, and project task title.
+  - **Decision-to-Action Item Linking:**
+    - Extended action item schemas (`createActionItemSchema`, `updateActionItemSchema`) with optional `decisionId`.
+    - Verified same-meeting and same-tenant integrity: Creating or updating an action item with a decision from another meeting or tenant is rejected with `422 Unprocessable Entity`.
+    - Deleting a source decision preserves action items with `decision_id` gracefully set to `NULL` (`ON DELETE SET NULL`), retaining full task history.
+  - **Projects & Tasks Integration (`POST /:meetingId/action-items/:actionItemId/promote-to-task`):**
+    - Entitlement verification: Checks `projects` module enablement using `checkModuleEntitlement({ organisationId, moduleSlug: 'projects' })`. Disabled module returns `403 MODULE_DISABLED`.
+    - Target project validation: Target project must exist in the active organisation and not be deleted or completed.
+    - Status mapping: Automatically maps meeting action item status (`open` -> `todo`, `in_progress` -> `in_progress`, `done` -> `completed`, `cancelled` -> `cancelled`) to the canonical project task status.
+    - Idempotency & Conflict Prevention: Repeated promotion to the same project returns the existing task with `alreadyPromoted: true`. Attempting to promote an item already attached to a different project returns `409 Conflict`.
+    - Emits `meeting.action_item_promoted` audit log event.
+
+- **Frontend UI & User Experience Enhancements:**
+  - **`MeetingDetailPage.tsx`:**
+    - Decision cards display a count of linked action items (`X action items`) and a "+ Action Item" shortcut button.
+    - Prefilling and locking: Clicking "+ Action Item" on a decision opens the Add Action Item modal with the source decision pre-selected and locked to prevent accidental detachment.
+    - Standalone selector: Opening Add Action Item directly displays a selector to optionally link any decision recorded in the meeting.
+    - Action item cards (both in Minutes tab MOM Section 3 and Dedicated Actions tab) render badges for Overdue, Priority, Status, Linked Decision, and In Project task.
+    - "Promote to Task" button: Opens accessible modal with project selection, promotion policy explanation, and confirmation flow. Once promoted, displays an "In Project: [Task Title]" badge.
+  - **`MeetingsPage.tsx`:**
+    - Top-level sub-tabs switcher: `[Meetings] | [My Action Items]` beneath the header.
+    - Dedicated My Action Items view with interactive search and multi-dimensional filters: Timeframe (`All`, `Overdue`, `Due Soon`, `Completed`), Status (`Open`, `In Progress`, `Done`, `Cancelled`), and Priority (`Urgent`, `High`, `Medium`, `Low`).
+    - Quick status toggle: Checkbox/circle button toggles status between open and done with optimistic UI updates.
+    - Direct cross-navigation: Each action item card links back to its parent meeting details view (`/app/organisations/:orgId/meetings/:meetingId`).
+    - Clean empty states when no action items match the active filters.
+
+- **Verification & Test Coverage:**
+  - Backend integration tests:
+    - `meetings.integration.test.js`: 38/38 passing (added Phase 2 tests for decision linking, cross-meeting rejection, cascade SET NULL, task promotion & idempotency, and organization action items scoping).
+    - `meetings_mom.integration.test.js`: 7/7 passing.
+    - `meetings_regression.integration.test.js`: 19/19 passing.
+    - `meetings_rls_sec009.integration.test.js`: 8/8 passing.
+    - Total backend meetings test suite: **72/72 tests passing (100%)**.
+  - Frontend test suites:
+    - `MeetingDetailPage.test.tsx`: 24/24 passing (added Tests 23-24 for decision action count, + Action Item CTA, overdue/decision/project badges, and task promotion).
+    - `MeetingsPage.test.tsx`: 10/10 passing (added Tests 8-10 for sub-tab navigation, My Action Items list with overdue/decision badges and meeting links, and empty state).
+    - Full frontend Vitest suite: **18 test files, 148/148 tests passing (100%)**.
+  - TypeScript compilation & production build:
+    - `npm --prefix frontend run build` completed cleanly with 0 type errors.
+
+---
+
+## Phase 1 (Roadmap): Meeting Lifecycle State Machine & UI Polish
+
+- **Meeting Lifecycle State Machine & Forward-Only Migration:**
+  - Added forward-only migration `database/migrations/20261017000038_meetings_missed_status.sql` updating `meetings(status)` check constraint to include `'missed'`. Applied cleanly to both `managex` and `managex_test`.
+  - Updated backend lifecycle state machine (`meetingLifecycle.js`):
+    - `scheduled` allows transitions to: `['in_progress', 'cancelled', 'missed']`.
+    - `in_progress` allows transitions to: `['completed', 'cancelled']`.
+    - Terminal states: `completed`, `cancelled`, and `missed` (no outgoing transitions).
+    - Direct transition from `scheduled` to `completed` is strictly forbidden (rejected with 409 Conflict).
+  - Validation rules for `missed`:
+    - Only allowed when current meeting status is `scheduled` and meeting `end_at < NOW()`. Transitions before `end_at` are rejected with 422 Unprocessable Entity.
+    - Locked terminal state in `updateMeeting`: once a meeting is in `missed` status, core meeting details cannot be mutated.
+  - Audit Events:
+    - Emits immutable `meeting.status_changed` and `meeting.missed` audit events with tenant context and zero sensitive payload leakage.
+- **Timezone Canonicalization & Display:**
+  - Implemented `canonicalizeTimeZone` in `meetingLifecycle.js` to normalize deprecated aliases such as `Asia/Calcutta` to canonical IANA `Asia/Kolkata`.
+  - Added friendly timezone labels and common timezone selections in frontend types (`types/meetings.ts`), rendering formatted strings such as `IST (Asia/Kolkata, UTC+05:30)`.
+- **Frontend Remediation & UI Polish:**
+  - **Overdue Indicator**: Derived dynamically in both `MeetingsPage` and `MeetingDetailPage` when a meeting is `scheduled` and its `endAt` timestamp is in the past. Renders amber `Overdue` badge without requiring automated background cron jobs.
+  - **Mark as Missed Action**: Added "Mark as Missed" button to `MeetingDetailPage` for overdue meetings with confirmation dialog, transitioning status cleanly to `missed`.
+  - **Start & Complete Controls**: Organisers and managers see "Start Meeting" when scheduled, and "Complete" only when the meeting is currently `in_progress`.
+  - **RSVP Usability**:
+    - Organiser attendee is excluded from RSVP response card (`meeting.organiserId !== user?.id && currentAttendee.role !== 'organiser'`).
+    - Currently selected RSVP response button is disabled (`disabled={isRsvping || currentAttendee.rsvpStatus === ...}`) to prevent duplicate redundant submissions.
+  - **Toast Notifications**:
+    - Created accessible `Toast` and `ToastContainer` components (`Toast.tsx`) with auto-dismiss (3.5s) and `role="status"` / `aria-live="polite"`.
+    - Integrated toasts into notes and MOM update actions, replacing intrusive alert banners.
+  - **DOM & UX Cleanups**:
+    - Eliminated duplicate breadcrumbs across meetings detail and workspace header.
+    - Reorder controls (Up/Down) for Discussion Points and Decisions are cleanly suppressed when a single item exists.
+    - Empty state for Action Items contains a single primary CTA (`Add First Action Item`).
+- **Verification Evidence:**
+  - Backend integration tests: Added 4 lifecycle & timezone tests to `backend/src/platform/meetings/meetings.integration.test.js` (34/34 tests passed).
+  - Backend MOM suite: `meetings_mom.integration.test.js` (7/7 tests passed).
+  - Backend RLS suite: `meetings_rls_sec009.integration.test.js` (8/8 tests passed).
+  - Total backend tests executed and passing: 49/49.
+  - Frontend unit tests: Added tests 17–22 to `MeetingDetailPage.test.tsx` (22/22 passed), added Phase 1 tests to `MeetingsPage.test.tsx` (7/7 passed), created `Toast.test.tsx` (3/3 passed). Total frontend tests passing: 144/144 across 19 test files.
+  - Frontend typecheck: `tsc --noEmit` passed with 0 errors.
+  - Frontend production build: `npm --prefix frontend run build` succeeded cleanly.
+
+---
+
+## Phase 7-MOM: Structured Minutes of Meeting (MOM) Enhancement
+
+- **Enterprise Structured MOM Data Model & Forward-Only Migration:**
+  - Added forward-only migration `database/migrations/20261017000037_meeting_mom_structured.sql`.
+  - Created `meeting_discussion_points`: UUID primary key, composite foreign key to `meetings(id, organisation_id) ON DELETE CASCADE`, `title` (VARCHAR 255), optional `body` (TEXT up to 50k chars for draft support), deterministic `order_index`, `created_by_id`, `updated_by_id`.
+  - Created `meeting_decisions`: UUID primary key, composite foreign key to `meetings(id, organisation_id) ON DELETE CASCADE`, `title` (VARCHAR 255), optional `details` (TEXT up to 50k chars), deterministic `order_index`, `created_by_id`, `updated_by_id`.
+  - Enabled and forced PostgreSQL Row-Level Security (`FORCE ROW LEVEL SECURITY`) with 8 strict tenant isolation policies (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) restricted to runtime database role `managex_app` without platform-admin bypass.
+  - Fully backward-compatible: Preserved `meeting_notes` table for historical minutes and free-form additional notes without data migration, destructive conversion, or truncation.
+- **Backend Services & API Contracts (`meetingService.js` & `meetings.js`):**
+  - Added CRUD and atomic reordering services for Discussion Points and Decisions (`listMeetingDiscussionPoints`, `createMeetingDiscussionPoint`, `updateMeetingDiscussionPoint`, `deleteMeetingDiscussionPoint`, `reorderMeetingDiscussionPoints`, `listMeetingDecisions`, `createMeetingDecision`, `updateMeetingDecision`, `deleteMeetingDecision`, `reorderMeetingDecisions`).
+  - Strict notes authorization helper `assertMeetingNotesAccess` enforcing access for meeting organisers and explicit `meeting.notes.read` / `meeting.notes.edit` / `meeting.notes.manage` holders; non-permitted attendees receive 403 `FORBIDDEN_NOTES_ACCESS` fail-closed.
+  - Cancelled meetings enforce terminal state locking (409 `MEETING_CANCELLED`).
+  - Comprehensive append-only audit logging for all MOM actions (`meeting.discussion_point_*`, `meeting.decision_*`) with zero text bodies/details in metadata.
+  - Enhanced aggregate `GET /api/v1/organisations/:orgId/meetings/:meetingId/notes` to return `{ notes, discussionPoints, decisions }`.
+- **Frontend MOM Interface Overhaul (`MeetingDetailPage.tsx`):**
+  - Integrated 4-section MOM workspace into Meeting Detail Page (Tab 3) under clear heading "Meeting Minutes (MOM)":
+    1. **MOM Header Card**: Title, subtitle, and dynamic "Edit Mode" vs "View Only" badge with last updated timestamp.
+    2. **Section 1: Discussion Points**: Add point dialog, ordered cards (#1, #2), draft-state indicator, atomic Up/Down reordering, inline edit dialog, delete confirmation dialog, empty state.
+    3. **Section 2: Key Decisions**: Add decision dialog, ordered badges, details display, atomic Up/Down reordering, edit dialog, delete confirmation dialog, empty state.
+    4. **Section 3: Action Items**: Integrated view of meeting action items with title, priority badge, status toggle, assignee, and due date.
+    5. **Section 4: Additional Notes & Historical Minutes**: Preserves legacy notes in full editable textarea with character counter and confidentiality disclaimer.
+- **Verification Evidence:**
+  - Added dedicated integration test suite `backend/src/platform/meetings/meetings_mom.integration.test.js` targeting isolated `managex_test` database (7/7 tests passed: discussion points CRUD & draft, decisions CRUD, legacy notes preservation, authorization gates, audit log privacy, terminal state locking, and direct PostgreSQL RLS tenant isolation).
+  - Meeting integration regression suites: `meetings.integration.test.js` (30/30 passed), `meetings_regression.integration.test.js` (19/19 passed), `meetings_rls_sec009.integration.test.js` (8/8 passed). Total 64/64 backend tests passing.
+  - Added frontend unit tests in `MeetingDetailPage.test.tsx` (tests 13-16: MOM header & 4 sections rendering, discussion points and decisions display, organiser Edit Mode controls vs viewer View Only omission, and cancelled meeting warning with action suppression). Total frontend tests passing: 132/132 across 17 test files.
+  - Frontend production build: `npm --prefix frontend run build` succeeded with 0 TypeScript/Vite errors.
+
+---
+
+## Phase 7-SEC: Meetings Attendees & Agenda RLS Security Remediation (SEC-009)
+
+- **Vulnerability Remediated:**
+  - Removed the legacy `app.current_is_platform_admin = true` bypass from all PostgreSQL Row-Level Security policies on `meeting_attendees` and `meeting_agenda_items` (originating in migration `20261017000013_meetings_core.sql`).
+  - Closed the potential security risk where platform-admin session flags could bypass tenant isolation or grant cross-tenant attendee/agenda access (PRD §6.5, PLAT-004, SEC-009).
+- **Forward-Only Migration:**
+  - Created and applied `database/migrations/20261017000036_meetings_attendees_agenda_rls_sec009.sql`.
+  - Replaced all 8 policies across `meeting_attendees` and `meeting_agenda_items` (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) with strict tenant isolation bound strictly to runtime role `managex_app`:
+    - `USING (organisation_id = NULLIF(current_setting('app.current_organisation_id', true), '')::uuid)`
+    - `WITH CHECK (organisation_id = NULLIF(current_setting('app.current_organisation_id', true), '')::uuid)`
+  - Preserved runtime database role `managex_app` with `NOBYPASSRLS` and table ownership under `postgres`.
+- **Integration Test Verification:**
+  - Created dedicated RLS integration test suite: `backend/src/platform/meetings/meetings_rls_sec009.integration.test.js` targeting isolated database `managex_test`.
+  - Verified 8 security properties:
+    1. Runtime role is `managex_app` with `NOBYPASSRLS = false`.
+    2. Tenant A transaction can SELECT, INSERT, UPDATE, and DELETE its own meeting attendees and agenda items.
+    3. Tenant B transaction cannot read, update, or delete Tenant A meeting attendees or agenda items.
+    4. Missing or empty tenant context fails closed (0 rows visible to `managex_app`).
+    5. RLS `WITH CHECK` rejects inserting rows under a foreign organisation (code 42501).
+    6. RLS `WITH CHECK` rejects updating `organisation_id` to a foreign organisation (code 42501).
+    7. Platform-admin context alone (`isPlatformAdmin: true`, missing `organisationId`) fails closed and does NOT bypass attendee or agenda RLS.
+    8. Same-tenant meeting workflows (attendees, RSVPs, agendas, reordering) continue working cleanly without regression.
+  - Test results: 8/8 tests passed in `meetings_rls_sec009.integration.test.js`; 49/49 tests passed in existing regression suites (`meetings.integration.test.js` and `meetings_regression.integration.test.js`). Total 57/57 tests passing.
+
+---
+
+## Phase 7C-FE: Meetings Frontend Remediation & API Contract Alignment
+
+- **API Contract Alignment (`MeetingDetailPage.tsx`):**
+  - Aligned meeting status transitions to `POST /api/v1/organisations/:orgId/meetings/:meetingId/status` with `{ status }` (previously used `PATCH`).
+  - Aligned RSVP submissions to `POST /api/v1/organisations/:orgId/meetings/:meetingId/rsvp` with `{ rsvpStatus }` (previously used `PATCH`).
+  - Fixed agenda deserialization to read `res.data?.agendaItems || res.data?.agenda || []` (backend returns `{ agendaItems: [...] }`, resolving the bug where 0 items rendered).
+  - Fixed agenda reordering response handling: `PUT /agenda/reorder` returns `{ success: true }`; local reordered state is preserved instead of wiping out the agenda list.
+  - Replaced raw browser `alert()` calls in agenda reordering and action items toggle with ManageX in-app `Alert` component and action error banner.
+- **Implemented Edit Meeting UI (`EditMeetingDialog.tsx` & `MeetingDetailPage.tsx`):**
+  - Created accessible `EditMeetingDialog` component pre-populating title, description, start/end datetimes, timezone, location type, location, virtual URL, and visibility.
+  - Implemented client-side input validation (title min 2 characters, end time strictly after start time, location and virtual URL required based on location type, valid URL format).
+  - Added "Edit Meeting" button to meeting detail header when `canEditMeeting && !isTerminal`.
+  - Dispatches `PATCH /api/v1/organisations/:orgId/meetings/:meetingId` with validated payload, handles error alerts, and refreshes parent state without page reload.
+  - Terminal states (`completed`, `cancelled`) cleanly suppress editing controls.
+- **Frontend Regression Test Coverage:**
+  - Added `frontend/src/pages/workspace/meetings/MeetingsPage.test.tsx` (5/5 tests passing: loading skeleton, empty state, meeting cards rendering, permission-based schedule button gating).
+  - Added `frontend/src/pages/workspace/meetings/MeetingDetailPage.test.tsx` (12/12 tests passing: detail rendering, agendaItems deserialization, POST status transition contract, POST RSVP contract, agenda reorder preservation, Edit Meeting dialog pre-population, form validation, PATCH update contract, permission gates, terminal state button suppression, and confidential notes 403 fail-closed handling).
+  - Full frontend suite: 17/17 test files, 128/128 tests passed.
+  - Frontend production build: `tsc && vite build` succeeded with 0 errors.
+
+---
+
 ## Evaluation & Judging Page UX: Section Navigation & Modular Views
 
 - Replaced vertical monolithic layout on the Evaluation & Judging organiser page (`/app/organisations/:orgId/events/:eventId/rounds/:roundId/evaluation`, `EvaluationPage.tsx`) with a tabbed navigation architecture matching the ManageX Clean Enterprise light design system.

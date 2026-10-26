@@ -18,7 +18,9 @@ describe('Phase 7 — Meetings Core, Minutes, Actions & Notifications Suite', ()
 
   let ownerUserId;
   let organiserUserId;
+  let organiserUserEmail;
   let memberUserId;
+  let memberUserEmail;
   let nonAttendeeUserId;
   let orgBUserId;
 
@@ -67,8 +69,12 @@ describe('Phase 7 — Meetings Core, Minutes, Actions & Notifications Suite', ()
     });
 
     ownerUserId = users.find((u) => u.email.startsWith('owner_')).id;
-    organiserUserId = users.find((u) => u.email.startsWith('organiser_')).id;
-    memberUserId = users.find((u) => u.email.startsWith('member_')).id;
+    const orgUser = users.find((u) => u.email.startsWith('organiser_'));
+    organiserUserId = orgUser.id;
+    organiserUserEmail = orgUser.email;
+    const memUser = users.find((u) => u.email.startsWith('member_'));
+    memberUserId = memUser.id;
+    memberUserEmail = memUser.email;
     nonAttendeeUserId = users.find((u) => u.email.startsWith('nonatt_')).id;
     orgBUserId = users.find((u) => u.email.startsWith('orgb_')).id;
 
@@ -310,6 +316,270 @@ describe('Phase 7 — Meetings Core, Minutes, Actions & Notifications Suite', ()
     assert.equal(res.status, 422);
   });
 
+  it('8a. Phase 1: Direct scheduled -> completed transition is rejected with 409', async () => {
+    // Create a new scheduled meeting
+    const startAt = new Date(Date.now() + 60000).toISOString();
+    const endAt = new Date(Date.now() + 3600000).toISOString();
+    const createRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Direct Complete Test',
+        startAt,
+        endAt,
+        timezone: 'UTC',
+      });
+    assert.equal(createRes.status, 201);
+    const testMeetingId = createRes.body.data.meeting.id;
+
+    // Attempt direct transition to completed without being in_progress
+    const res = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${testMeetingId}/status`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'completed' });
+
+    assert.equal(res.status, 409);
+    assert.equal(res.body.error.code, 'INVALID_MEETING_STATUS_TRANSITION');
+  });
+
+  it('8b. Phase 1: scheduled -> missed is rejected with 422 if end_at has not passed', async () => {
+    // Meeting ends in the future
+    const startAt = new Date(Date.now() + 60000).toISOString();
+    const endAt = new Date(Date.now() + 3600000).toISOString();
+    const createRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Future Meeting Missed Attempt',
+        startAt,
+        endAt,
+        timezone: 'UTC',
+      });
+    assert.equal(createRes.status, 201);
+    const futureMeetingId = createRes.body.data.meeting.id;
+
+    const res = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${futureMeetingId}/status`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'missed' });
+
+    assert.equal(res.status, 422);
+    assert.ok(res.body.error.message.includes('end time has passed'));
+  });
+
+  it('8c. Phase 1: scheduled -> missed succeeds when end_at is in the past, and missed is terminal', async () => {
+    // Meeting ended in past
+    const startAt = new Date(Date.now() - 7200000).toISOString();
+    const endAt = new Date(Date.now() - 3600000).toISOString();
+    const createRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Past Overdue Meeting',
+        startAt,
+        endAt,
+        timezone: 'UTC',
+      });
+    assert.equal(createRes.status, 201);
+    const pastMeetingId = createRes.body.data.meeting.id;
+
+    // Transition to missed
+    const res = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${pastMeetingId}/status`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'missed' });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data.meeting.status, 'missed');
+
+    // Missed meeting is terminal: cannot transition further
+    const nextRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${pastMeetingId}/status`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'in_progress' });
+
+    assert.equal(nextRes.status, 409);
+    assert.equal(nextRes.body.error.code, 'INVALID_MEETING_STATUS_TRANSITION');
+
+    // Missed meeting cannot be edited
+    const editRes = await request(app)
+      .patch(`/api/v1/organisations/${orgAId}/meetings/${pastMeetingId}`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ title: 'New Title' });
+
+    assert.equal(editRes.status, 409);
+    assert.equal(editRes.body.error.code, 'MEETING_TERMINAL_STATE');
+  });
+
+  it('8d. Phase 1: Timezone normalization: Asia/Calcutta is stored as canonical Asia/Kolkata', async () => {
+    const startAt = new Date(Date.now() + 60000).toISOString();
+    const endAt = new Date(Date.now() + 3600000).toISOString();
+    const createRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Kolkata Normalization Test',
+        startAt,
+        endAt,
+        timezone: 'Asia/Calcutta',
+      });
+
+    assert.equal(createRes.status, 201);
+    assert.equal(createRes.body.data.meeting.timezone, 'Asia/Kolkata');
+  });
+
+  it('8e. Phase B: An overdue meeting (past end_at) retains its persisted status without automatic mutation until explicitly transitioned', async () => {
+    const startAt = new Date(Date.now() - 7200000).toISOString();
+    const endAt = new Date(Date.now() - 3600000).toISOString();
+
+    // 1. Create a meeting whose end_at is in the past
+    const createRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Non-Auto-Mutating Overdue Meeting',
+        startAt,
+        endAt,
+        timezone: 'UTC',
+      });
+
+    assert.equal(createRes.status, 201);
+    const mId = createRes.body.data.meeting.id;
+    assert.equal(createRes.body.data.meeting.status, 'scheduled', 'Status must remain scheduled upon creation');
+
+    // 2. Fetch the meeting: verify it has NOT automatically transitioned to missed or completed
+    const getRes = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/${mId}`)
+      .set('Cookie', [organiserCookie, csrfCookie]);
+
+    assert.equal(getRes.status, 200);
+    assert.equal(getRes.body.data.meeting.status, 'scheduled', 'Overdue scheduled meeting must not auto-transition');
+
+    // 3. Organiser starts the meeting -> in_progress
+    const startRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${mId}/status`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'in_progress' });
+
+    assert.equal(startRes.status, 200);
+    assert.equal(startRes.body.data.meeting.status, 'in_progress');
+
+    // 4. Fetch the in_progress meeting past end_at: verify status remains in_progress
+    const getRes2 = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/${mId}`)
+      .set('Cookie', [organiserCookie, csrfCookie]);
+
+    assert.equal(getRes2.status, 200);
+    assert.equal(getRes2.body.data.meeting.status, 'in_progress', 'Overdue in_progress meeting must not auto-transition');
+
+    // 5. Explicit organiser completion succeeds (empty MoM does not block backend completion)
+    const completeRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${mId}/status`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'completed' });
+
+    assert.equal(completeRes.status, 200);
+    assert.equal(completeRes.body.data.meeting.status, 'completed');
+  });
+
+  it('8f. Phase C: Organiser-provided meeting links (Google Meet, Zoom) are preserved, private links are denied to unauthorised members, and terminal meetings reject edits', async () => {
+    const startAt = new Date(Date.now() + 600000).toISOString();
+    const endAt = new Date(Date.now() + 3600000).toISOString();
+    const googleMeetUrl = 'https://meet.google.com/abc-defg-hij';
+
+    // 1. Create a meeting with organiser-provided Google Meet link and attendees_only visibility
+    const createRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Virtual Strategy Sync',
+        startAt,
+        endAt,
+        timezone: 'UTC',
+        locationType: 'virtual',
+        virtualUrl: googleMeetUrl,
+        visibility: 'attendees_only',
+      });
+
+    assert.equal(createRes.status, 201);
+    const mId = createRes.body.data.meeting.id;
+    assert.equal(createRes.body.data.meeting.virtualUrl, googleMeetUrl);
+
+    // 2. Organiser can fetch the meeting and see the virtualUrl
+    const getRes = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/${mId}`)
+      .set('Cookie', [organiserCookie, csrfCookie]);
+
+    assert.equal(getRes.status, 200);
+    assert.equal(getRes.body.data.meeting.virtualUrl, googleMeetUrl);
+
+    // 3. Uninvited ordinary member cannot view attendees_only meeting (403 MEETING_ACCESS_DENIED)
+    const deniedRes = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/${mId}`)
+      .set('Cookie', [nonAttendeeCookie, csrfCookie]);
+
+    assert.equal(deniedRes.status, 403);
+    assert.equal(deniedRes.body.error.code, 'MEETING_ACCESS_DENIED');
+
+    // 4. Update meeting with Zoom URL while non-terminal succeeds
+    const zoomUrl = 'https://zoom.us/j/1234567890';
+    const updateRes = await request(app)
+      .patch(`/api/v1/organisations/${orgAId}/meetings/${mId}`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ virtualUrl: zoomUrl });
+
+    assert.equal(updateRes.status, 200);
+    assert.equal(updateRes.body.data.meeting.virtualUrl, zoomUrl);
+
+    // 5. Advance meeting through lifecycle: in_progress -> completed (terminal)
+    await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${mId}/status`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'in_progress' });
+
+    const completeRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${mId}/status`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ status: 'completed' });
+
+    assert.equal(completeRes.status, 200);
+    assert.equal(completeRes.body.data.meeting.status, 'completed');
+
+    // 6. Fetching the completed meeting preserves historical virtualUrl
+    const terminalGetRes = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/${mId}`)
+      .set('Cookie', [organiserCookie, csrfCookie]);
+
+    assert.equal(terminalGetRes.status, 200);
+    assert.equal(terminalGetRes.body.data.meeting.virtualUrl, zoomUrl);
+
+    // 7. Attempting to edit virtualUrl on terminal completed meeting is rejected (409)
+    const editTerminalRes = await request(app)
+      .patch(`/api/v1/organisations/${orgAId}/meetings/${mId}`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ virtualUrl: 'https://meet.google.com/new-link' });
+
+    assert.equal(editTerminalRes.status, 409);
+    assert.equal(editTerminalRes.body.error.code, 'MEETING_TERMINAL_STATE');
+  });
+
   // ---------------------------------------------------------------------------
   // 3. MTG-003: Attendees & Visibility Controls
   // ---------------------------------------------------------------------------
@@ -365,6 +635,11 @@ describe('Phase 7 — Meetings Core, Minutes, Actions & Notifications Suite', ()
     assert.equal(addRes.status, 201);
     assert.equal(addRes.body.data.attendee.userId, memberUserId);
     assert.equal(addRes.body.data.attendee.rsvpStatus, 'pending');
+    assert.equal(addRes.body.data.attendee.fullName, 'Meeting Member');
+    assert.equal(addRes.body.data.attendee.userName, 'Meeting Member');
+    assert.equal(addRes.body.data.attendee.email, memberUserEmail);
+    assert.equal(addRes.body.data.attendee.userEmail, memberUserEmail);
+    assert.equal(addRes.body.data.attendee.isExternal, false);
     attendeeMemberId = addRes.body.data.attendee.id;
 
     // 2. Duplicate internal attendee rejected with 409
@@ -404,6 +679,11 @@ describe('Phase 7 — Meetings Core, Minutes, Actions & Notifications Suite', ()
     assert.equal(addRes.status, 201);
     assert.equal(addRes.body.data.attendee.externalEmail, extEmail);
     assert.equal(addRes.body.data.attendee.userId, null);
+    assert.equal(addRes.body.data.attendee.fullName, null);
+    assert.equal(addRes.body.data.attendee.userName, null);
+    assert.equal(addRes.body.data.attendee.email, extEmail);
+    assert.equal(addRes.body.data.attendee.userEmail, extEmail);
+    assert.equal(addRes.body.data.attendee.isExternal, true);
 
     // Duplicate external email rejected
     const dupRes = await request(app)
@@ -463,6 +743,33 @@ describe('Phase 7 — Meetings Core, Minutes, Actions & Notifications Suite', ()
 
     assert.equal(removeRes.status, 409);
     assert.equal(removeRes.body.error.code, 'CANNOT_REMOVE_ORGANISER');
+  });
+
+  it('14b. Phase A: GET meeting attendees returns canonical fullName, email, and backward-compatible aliases userName, userEmail', async () => {
+    const listRes = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/${attendeesOnlyMeetingId}/attendees`)
+      .set('Cookie', [organiserCookie, csrfCookie]);
+
+    assert.equal(listRes.status, 200);
+    const attendees = listRes.body.data.attendees;
+    assert.ok(Array.isArray(attendees));
+
+    const orgAtt = attendees.find((a) => a.userId === organiserUserId);
+    assert.ok(orgAtt, 'Organiser attendee must be present');
+    assert.equal(orgAtt.fullName, 'Meeting Organiser');
+    assert.equal(orgAtt.userName, 'Meeting Organiser');
+    assert.equal(orgAtt.email, organiserUserEmail);
+    assert.equal(orgAtt.userEmail, organiserUserEmail);
+    assert.equal(orgAtt.isExternal, false);
+
+    const extAtt = attendees.find((a) => a.externalEmail === 'guest.expert@advisory.example');
+    assert.ok(extAtt, 'External attendee must be present');
+    assert.equal(extAtt.fullName, null);
+    assert.equal(extAtt.userName, null);
+    assert.equal(extAtt.email, 'guest.expert@advisory.example');
+    assert.equal(extAtt.userEmail, 'guest.expert@advisory.example');
+    assert.equal(extAtt.externalEmail, 'guest.expert@advisory.example');
+    assert.equal(extAtt.isExternal, true);
   });
 
   // ---------------------------------------------------------------------------
@@ -942,4 +1249,181 @@ describe('Phase 7 — Meetings Core, Minutes, Actions & Notifications Suite', ()
     const cancelMail = mailboxAfterCancel.find((m) => m.subject.includes('Cancelled:'));
     assert.ok(cancelMail, 'Expected meeting cancelled notification email');
   });
+
+  // ---------------------------------------------------------------------------
+  // 7. Phase 2 (Roadmap ?6): MOM Enhancement ? Decision Linking, Action Items v2 & Promotion
+  // ---------------------------------------------------------------------------
+
+  let p2MeetingId;
+  let p2DecisionId;
+  let p2ActionItemId;
+  let p2ProjectId;
+
+  it('31. Phase 2: Action Item created with decisionId linking; rejects cross-meeting decision (422)', async () => {
+    // 1. Create a fresh meeting
+    const meetRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Phase 2 Architecture Review',
+        startAt: new Date(Date.now() + 86400000).toISOString(),
+        endAt: new Date(Date.now() + 90000000).toISOString(),
+        timezone: 'Asia/Kolkata',
+      });
+    assert.equal(meetRes.status, 201);
+    p2MeetingId = meetRes.body.data.meeting.id;
+
+    // 2. Create a decision in this meeting
+    const decRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${p2MeetingId}/decisions`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Adopt PostgreSQL composite FKs',
+        details: 'Enforce database integrity for decision links.',
+      });
+    assert.equal(decRes.status, 201);
+    p2DecisionId = decRes.body.data.decision.id;
+
+    // 3. Attempt to link an invalid decisionId (random UUID)
+    const invalidRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${p2MeetingId}/action-items`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Invalid decision link attempt',
+        assigneeId: memberUserId,
+        priority: 'high',
+        decisionId: '00000000-0000-0000-0000-000000000000',
+      });
+    assert.equal(invalidRes.status, 422);
+    assert.equal(invalidRes.body.error.code, 'VALIDATION_ERROR');
+    assert.ok(invalidRes.body.error.message.includes('decision'));
+
+    // 4. Create action item with valid decision link
+    const actionRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${p2MeetingId}/action-items`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        title: 'Implement composite FK migration',
+        description: 'Add migration 039 to enforce decision_id composite foreign key',
+        assigneeId: memberUserId,
+        priority: 'urgent',
+        decisionId: p2DecisionId,
+      });
+    assert.equal(actionRes.status, 201);
+    p2ActionItemId = actionRes.body.data.actionItem.id;
+    assert.equal(actionRes.body.data.actionItem.decisionId, p2DecisionId);
+    assert.equal(actionRes.body.data.actionItem.status, 'open');
+  });
+
+  it('32. Phase 2: Deleting source decision triggers ON DELETE SET NULL on linked action items', async () => {
+    // Delete the decision
+    const delRes = await request(app)
+      .delete(`/api/v1/organisations/${orgAId}/meetings/${p2MeetingId}/decisions/${p2DecisionId}`)
+      .set('Cookie', [organiserCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken);
+    assert.equal(delRes.status, 200);
+
+    // Verify action item still exists, but decisionId is set to null
+    const listRes = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/${p2MeetingId}/action-items`)
+      .set('Cookie', [organiserCookie, csrfCookie]);
+    assert.equal(listRes.status, 200);
+
+    const item = listRes.body.data.actionItems.find((a) => a.id === p2ActionItemId);
+    assert.ok(item, 'Action item must be preserved after decision deletion');
+    assert.equal(item.decisionId, null, 'decisionId must be set to null via ON DELETE SET NULL');
+    assert.equal(item.decisionTitle, null);
+  });
+
+  it('33. Phase 2: Promote action item to Projects task with status mapping and idempotency', async () => {
+    // 1. Explicitly disable projects module for Org A to test module entitlement gate
+    await request(app)
+      .patch(`/api/v1/organisations/${orgAId}/modules/projects`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ isEnabled: false });
+
+    // Promotion fails if projects module is disabled
+    const failModuleRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${p2MeetingId}/action-items/${p2ActionItemId}/promote-to-task`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ projectId: '00000000-0000-0000-0000-000000000000' });
+    assert.equal(failModuleRes.status, 403);
+    assert.equal(failModuleRes.body.error.code, 'MODULE_DISABLED');
+
+    // 2. Enable projects module for Org A
+    await request(app)
+      .patch(`/api/v1/organisations/${orgAId}/modules/projects`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ isEnabled: true });
+
+    // 3. Create a project in Org A via database helper
+    await withSystemTransaction(async (client) => {
+      const projRes = await client.query(
+        `INSERT INTO projects (organisation_id, name, description, status, owner_id, created_by_id)
+         VALUES ($1, 'Core Platform Q4', 'Platform roadmap project', 'active', $2, $2)
+         RETURNING id`,
+        [orgAId, ownerUserId]
+      );
+      p2ProjectId = projRes.rows[0].id;
+    });
+
+    // 4. Promote action item to project task
+    const promoteRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${p2MeetingId}/action-items/${p2ActionItemId}/promote-to-task`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ projectId: p2ProjectId });
+
+    assert.equal(promoteRes.status, 200);
+    assert.equal(promoteRes.body.data.alreadyPromoted, false);
+    assert.ok(promoteRes.body.data.task.id);
+    assert.equal(promoteRes.body.data.task.status, 'todo', 'Action item open maps to task todo');
+    assert.equal(promoteRes.body.data.actionItem.projectTaskId, promoteRes.body.data.task.id);
+
+    // 5. Idempotent retry: promoting again returns existing task
+    const retryRes = await request(app)
+      .post(`/api/v1/organisations/${orgAId}/meetings/${p2MeetingId}/action-items/${p2ActionItemId}/promote-to-task`)
+      .set('Cookie', [ownerCookie, csrfCookie])
+      .set('X-CSRF-Token', csrfToken)
+      .send({ projectId: p2ProjectId });
+
+    assert.equal(retryRes.status, 200);
+    assert.equal(retryRes.body.data.alreadyPromoted, true);
+    assert.equal(retryRes.body.data.task.id, promoteRes.body.data.task.id);
+  });
+
+  it('34. Phase 2: Organisation Action Items (GET /action-items): role scoping & filters', async () => {
+    // 1. Member view: ordinary member sees only their own action items
+    const memberRes = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/action-items`)
+      .set('Cookie', [memberCookie, csrfCookie]);
+
+    assert.equal(memberRes.status, 200);
+    const memberItems = memberRes.body.data.actionItems;
+    assert.ok(memberItems.length > 0);
+    for (const item of memberItems) {
+      assert.equal(item.assigneeId, memberUserId, 'Ordinary member must only see items assigned to them');
+    }
+
+    // 2. Owner/Manager view: can see all items, filter by status, priority, timeframe
+    const allRes = await request(app)
+      .get(`/api/v1/organisations/${orgAId}/meetings/action-items?status=open&priority=urgent`)
+      .set('Cookie', [ownerCookie, csrfCookie]);
+
+    assert.equal(allRes.status, 200);
+    const allItems = allRes.body.data.actionItems;
+    assert.ok(allItems.length > 0);
+    const foundP2 = allItems.find((a) => a.id === p2ActionItemId);
+    assert.ok(foundP2, 'Created action item must be visible in organization action items view');
+    assert.ok(allRes.body.data.pagination);
+    assert.equal(allRes.body.data.pagination.page, 1);
+  });
+
 });
