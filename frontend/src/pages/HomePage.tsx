@@ -28,39 +28,39 @@ export function HomePage() {
   const modules = [
     {
       title: 'Events & Hackathons',
-      badge: 'Live & Included',
+      badge: 'Events & Challenges',
       description: 'End-to-end event and challenge management. Enable participant registrations, team formation, project link submissions, and blind scoring with verified leaderboards.',
       icon: Calendar,
       features: [
-        'Custom team formation & cap controls',
+        'Team formation with custom member limits',
         'Structured submission links (GitHub, live demo, slides)',
-        'Assigned-only judge scoring with custom criteria',
-        'Controlled winner announcements',
+        'Independent judge scoring with custom evaluation criteria',
+        'Leaderboard rankings and winner announcements',
       ],
       route: '/modules',
     },
     {
       title: 'Meetings & Minutes',
-      badge: 'Live & Included',
+      badge: 'Agendas & Minutes',
       description: 'Structured organizational meetings. Build ordered agendas, manage attendee confirmations across timezones, write confidential minutes, and assign tracked action items.',
       icon: Video,
       features: [
         'Timezone-aware scheduling & notifications',
-        'Live attendance roll-call tracking',
-        'Confidential minutes with role-gated visibility',
+        'Real-time RSVP and attendee tracking',
+        'Confidential minutes with role-based access',
         'Action items with direct owner assignments & due dates',
       ],
       route: '/modules',
     },
     {
       title: 'Projects & Tasks',
-      badge: 'Live & Included',
+      badge: 'Workflows & Delivery',
       description: 'Flexible agile delivery workspaces. Organize member rosters, track project lifecycles, and switch seamlessly between interactive Kanban boards and structured List views.',
       icon: CheckSquare,
       features: [
         'Interactive Drag & Drop Kanban & List views',
         'Priority tagging (Urgent, High, Medium, Low)',
-        'Safe task state transitions & due dates',
+        'Structured task lifecycles with deadlines & priorities',
         'Team assignments with activity tracking',
       ],
       route: '/modules',
@@ -83,13 +83,13 @@ export function HomePage() {
     {
       step: '03',
       title: 'Invite Team & Participants',
-      description: 'Add organizers, managers, and members with distinct permission scopes. Share public registration links for events and hackathons.',
+      description: 'Invite organizers, managers, and members with tailored roles and permissions. Share public registration links for events and hackathons.',
       icon: Users,
     },
     {
       step: '04',
       title: 'Operate with Confidence',
-      description: 'Collect submissions, run structured agendas, and deliver projects with complete enterprise data privacy and immutable audit logging.',
+      description: 'Collect submissions, run structured agendas, and deliver projects with enterprise data privacy and complete audit trails.',
       icon: ShieldCheck,
     },
   ];
@@ -97,7 +97,7 @@ export function HomePage() {
   const faqs = [
     {
       q: 'Can my organization use only one module (e.g. only Events or only Meetings)?',
-      a: 'Yes. ManageX is built on a modular architecture. You can enable only Events & Hackathons, only Meetings, or only Projects & Tasks. Your workspace dashboard and navigation automatically reflect only the modules your organization opts into.',
+      a: 'Yes. ManageX is fully modular. You can enable only Events & Hackathons, only Meetings, or only Projects & Tasks. Your workspace dashboard and navigation automatically adapt to only the modules your organization enables.',
     },
     {
       q: 'How do students and external participants register for hackathons?',
@@ -109,11 +109,11 @@ export function HomePage() {
     },
     {
       q: 'Is our organization data separated and secure from other organizations?',
-      a: 'Yes, absolutely. ManageX enforces strict multi-tenant isolation at both the application and database layers. Each organization has its own isolated data boundary, preventing any cross-tenant data visibility.',
+      a: 'Yes, absolutely. ManageX is engineered with enterprise-grade data privacy. Each organization operates in a dedicated, isolated workspace, ensuring your records, meetings, and projects are strictly confidential and never accessible by other organizations.',
     },
     {
       q: 'Can confidential meeting minutes be restricted from general members?',
-      a: 'Yes. Meeting organizers can mark minutes as confidential, restricting access strictly to designated attendees and organization administrators while keeping general organization members protected from sensitive discussions.',
+      a: 'Yes. Meeting organizers can mark minutes as confidential, restricting access strictly to designated attendees and organization administrators while ensuring general organization members cannot access sensitive discussions.',
     },
   ];
 
@@ -122,11 +122,11 @@ export function HomePage() {
       {/* Hero Section */}
       <section className="text-center space-y-6 max-w-4xl mx-auto pt-6">
         <h1 className="text-4xl sm:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.15]">
-          Three modules. One account. <br />
+          One unified platform. One account. <br />
           <span className="text-brand-600">Total operational clarity.</span>
         </h1>
         <p className="text-lg sm:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto">
-          ManageX delivers unified management for Hackathons & Events, Structured Meetings, and Agile Projects—with dedicated workspace isolation and role-based security.
+          ManageX delivers unified management for Hackathons & Events, Structured Meetings, and Agile Projects—with dedicated workspace privacy and role-based security.
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
@@ -244,7 +244,7 @@ export function HomePage() {
             Security & Governance You Can Rely On
           </h2>
           <p className="text-sm text-slate-500 max-w-xl mx-auto">
-            Engineered with strict tenant isolation, granular role scopes, and comprehensive audit transparency.
+            Built with dedicated workspace privacy, granular role permissions, and full audit transparency.
           </p>
         </div>
 
@@ -253,9 +253,9 @@ export function HomePage() {
             <div className="h-9 w-9 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
               <Lock className="h-5 w-5" />
             </div>
-            <h3 className="font-bold text-slate-900 text-base">Strict Workspace Privacy</h3>
+            <h3 className="font-bold text-slate-900 text-base">Dedicated Workspace Privacy</h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Every organization operates within an isolated tenant boundary. Multi-tenant protections prevent unauthorized data cross-talk.
+              Every organization operates within its own secure workspace. Enterprise-grade isolation ensures your team data remains strictly confidential and protected.
             </p>
           </div>
 
@@ -265,7 +265,7 @@ export function HomePage() {
             </div>
             <h3 className="font-bold text-slate-900 text-base">Granular Role Governance</h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Separate scopes for organization leadership, project contributors, event evaluators, and meeting attendees with verified server authorization.
+              Define clear roles for organization leaders, project contributors, event judges, and meeting attendees to ensure members only access what they need.
             </p>
           </div>
 
@@ -273,9 +273,9 @@ export function HomePage() {
             <div className="h-9 w-9 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
               <FileText className="h-5 w-5" />
             </div>
-            <h3 className="font-bold text-slate-900 text-base">Immutable Audit History</h3>
+            <h3 className="font-bold text-slate-900 text-base">Complete Audit Trails</h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Every sensitive action—from role modifications to judge score submissions and status updates—is logged with timestamps and actor details.
+              Every critical action—from permission changes to evaluation scores and status updates—is recorded with timestamps and verified user details.
             </p>
           </div>
         </div>
