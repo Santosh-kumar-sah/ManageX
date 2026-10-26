@@ -3,26 +3,28 @@
  * Strictly adheres to PRD Section 8.1 (MTG-001, MTG-002, MTG-003, MTG-004) and docs/security.md.
  */
 
-export const MEETING_STATUSES = ['scheduled', 'in_progress', 'completed', 'cancelled'];
+export const MEETING_STATUSES = ['scheduled', 'in_progress', 'completed', 'cancelled', 'missed'];
 export const MEETING_VISIBILITIES = ['organisation', 'attendees_only'];
 export const MEETING_LOCATION_TYPES = ['in_person', 'virtual', 'hybrid'];
 export const MEETING_ATTENDEE_ROLES = ['organiser', 'participant', 'viewer', 'guest'];
 export const MEETING_RSVP_STATUSES = ['pending', 'accepted', 'declined', 'tentative'];
 
 /**
- * Canonical 4-status transition map (MTG-002).
- * PRD §8.1:
- * - scheduled -> in_progress, completed, cancelled
+ * Canonical 5-status transition map (Phase 1, Section 5.1).
+ * Roadmap §5.1:
+ * - scheduled -> in_progress, cancelled, missed
  * - in_progress -> completed, cancelled
  * - completed -> terminal
  * - cancelled -> terminal
- * Do not introduce an archived meeting status.
+ * - missed -> terminal
+ * Direct scheduled -> completed is rejected (must be started first).
  */
 export const MEETING_TRANSITION_MAP = {
-  scheduled: ['in_progress', 'completed', 'cancelled'],
+  scheduled: ['in_progress', 'cancelled', 'missed'],
   in_progress: ['completed', 'cancelled'],
   completed: [],
   cancelled: [],
+  missed: [],
 };
 
 /**
@@ -75,4 +77,18 @@ export function isValidIanaTimeZone(timeZone) {
     return false;
   }
 }
+
+/**
+ * Normalizes legacy timezone identifiers to canonical IANA equivalents (Phase 1, Section 5.3).
+ * Specifically normalizes 'Asia/Calcutta' to canonical 'Asia/Kolkata'.
+ */
+export function canonicalizeTimeZone(timeZone) {
+  if (typeof timeZone !== 'string') return timeZone;
+  const trimmed = timeZone.trim();
+  if (trimmed === 'Asia/Calcutta') {
+    return 'Asia/Kolkata';
+  }
+  return trimmed;
+}
+
 

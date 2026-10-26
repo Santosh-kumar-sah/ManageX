@@ -5,6 +5,7 @@
 
 import { withTenantTransaction } from '../database/transaction.js';
 import { recordAuditEvent } from '../audit/auditService.js';
+import { checkModuleEntitlement } from '../modules/moduleService.js';
 import {
   MEETING_STATUSES,
   MEETING_VISIBILITIES,
@@ -13,6 +14,7 @@ import {
   MEETING_RSVP_STATUSES,
   isValidMeetingTransition,
   isValidIanaTimeZone,
+  canonicalizeTimeZone,
   ACTION_ITEM_STATUSES,
   ACTION_ITEM_PRIORITIES,
   isValidActionItemTransition,
@@ -25,6 +27,8 @@ import {
 } from '../common/errors.js';
 import { sendEmail } from '../email/emailService.js';
 import { logger } from '../middleware/logger.js';
+import { generateMeetingPdf } from './pdfGenerator.js';
+import { generateMeetingMarkdown } from './markdownGenerator.js';
 
 function hasPermission(permissions, key) {
   if (!permissions) return false;
@@ -70,8 +74,44 @@ function formatNoteRow(row) {
     updatedById: row.updated_by_id,
     authorName: row.author_name || null,
     authorEmail: row.author_email || null,
-    createdAt: row.created_at ? row.created_at.toISOString() : null,
-    updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
+    createdAt: row.created_at ? (row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString()) : null,
+    updatedAt: row.updated_at ? (row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(row.updated_at).toISOString()) : null,
+  };
+}
+
+function formatDiscussionPoint(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    organisationId: row.organisation_id,
+    meetingId: row.meeting_id,
+    title: row.title,
+    body: row.body || '',
+    orderIndex: row.order_index,
+    createdById: row.created_by_id,
+    updatedById: row.updated_by_id || null,
+    authorName: row.author_name || null,
+    authorEmail: row.author_email || null,
+    createdAt: row.created_at ? (row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString()) : null,
+    updatedAt: row.updated_at ? (row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(row.updated_at).toISOString()) : null,
+  };
+}
+
+function formatDecision(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    organisationId: row.organisation_id,
+    meetingId: row.meeting_id,
+    title: row.title,
+    details: row.details || '',
+    orderIndex: row.order_index,
+    createdById: row.created_by_id,
+    updatedById: row.updated_by_id || null,
+    authorName: row.author_name || null,
+    authorEmail: row.author_email || null,
+    createdAt: row.created_at ? (row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString()) : null,
+    updatedAt: row.updated_at ? (row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(row.updated_at).toISOString()) : null,
   };
 }
 
@@ -81,6 +121,7 @@ function formatActionItemRow(row) {
     id: row.id,
     organisationId: row.organisation_id,
     meetingId: row.meeting_id,
+    meetingTitle: row.meeting_title || null,
     title: row.title,
     description: row.description || null,
     assigneeId: row.assignee_id,
@@ -91,9 +132,13 @@ function formatActionItemRow(row) {
     status: row.status,
     agendaItemId: row.agenda_item_id || null,
     agendaItemTitle: row.agenda_item_title || null,
+    decisionId: row.decision_id || null,
+    decisionTitle: row.decision_title || null,
+    projectTaskId: row.project_task_id || null,
+    projectTaskTitle: row.project_task_title || null,
     createdById: row.created_by_id,
-    createdAt: row.created_at ? row.created_at.toISOString() : null,
-    updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
+    createdAt: row.created_at ? (row.created_at instanceof Date ? row.created_at.toISOString() : new Date(row.created_at).toISOString()) : null,
+    updatedAt: row.updated_at ? (row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(row.updated_at).toISOString()) : null,
   };
 }
 
@@ -134,6 +179,8 @@ export async function createMeeting(
   if (!isValidIanaTimeZone(timezone)) {
     throw new ValidationError(`Invalid IANA time-zone identifier: "${timezone}".`);
   }
+
+  const canonicalTz = canonicalizeTimeZone(timezone);
 
   if (!MEETING_VISIBILITIES.includes(visibility)) {
     throw new ValidationError(`Invalid visibility "${visibility}". Allowed: ${MEETING_VISIBILITIES.join(', ')}.`);
@@ -176,7 +223,7 @@ export async function createMeeting(
       description ? description.trim() : null,
       startDate.toISOString(),
       endDate.toISOString(),
-      timezone.trim(),
+      canonicalTz,
       locationType,
       location ? location.trim() : null,
       virtualUrl ? virtualUrl.trim() : null,
@@ -425,7 +472,7 @@ export async function updateMeeting(
     const currentMeeting = lockRes.rows[0];
 
     // Invariant (MTG-002): Terminal states cannot be edited
-    if (['completed', 'cancelled'].includes(currentMeeting.status)) {
+    if (['completed', 'cancelled', 'missed'].includes(currentMeeting.status)) {
       throw new ConflictError(
         `Cannot edit meeting in terminal '${currentMeeting.status}' status.`,
         'MEETING_TERMINAL_STATE'
@@ -471,7 +518,7 @@ export async function updateMeeting(
 
     const title = updates.title !== undefined ? updates.title.trim() : currentMeeting.title;
     const description = updates.description !== undefined ? updates.description : currentMeeting.description;
-    const timezone = updates.timezone !== undefined ? updates.timezone.trim() : currentMeeting.timezone;
+    const timezone = updates.timezone !== undefined ? canonicalizeTimeZone(updates.timezone) : currentMeeting.timezone;
     const locationType = updates.locationType !== undefined ? updates.locationType : currentMeeting.location_type;
     const location = updates.location !== undefined ? updates.location : currentMeeting.location;
     const virtualUrl = updates.virtualUrl !== undefined ? updates.virtualUrl : currentMeeting.virtual_url;
@@ -579,6 +626,16 @@ export async function transitionMeetingStatus(
       );
     }
 
+    if (nextStatus === 'missed') {
+      const now = new Date();
+      if (new Date(meeting.end_at) >= now) {
+        throw new ValidationError(
+          'Cannot mark meeting as missed before its scheduled end time has passed.',
+          'MEETING_NOT_OVERDUE'
+        );
+      }
+    }
+
     // 3. Update status
     const updateSql = `
       UPDATE meetings
@@ -660,8 +717,11 @@ export async function listMeetingAttendees(organisationId, meetingId, viewerUser
       meetingId: row.meeting_id,
       organisationId: row.organisation_id,
       userId: row.user_id,
+      fullName: row.user_name || null,
+      email: row.user_email || row.external_email || null,
       userName: row.user_name || null,
       userEmail: row.user_email || row.external_email || null,
+      externalEmail: row.external_email || null,
       isExternal: !row.user_id,
       role: row.role,
       rsvpStatus: row.rsvp_status,
@@ -708,11 +768,15 @@ export async function addMeetingAttendee(
 
     let insertUserId = null;
     let insertEmail = null;
+    let userRow = null;
 
     if (userId) {
       // Internal attendee: must be active member of the organisation (MTG-003)
       const memRes = await client.query(
-        `SELECT id FROM organisation_memberships WHERE organisation_id = $1 AND user_id = $2 AND status = 'active'`,
+        `SELECT m.id, u.full_name, u.email 
+         FROM organisation_memberships m
+         JOIN users u ON u.id = m.user_id
+         WHERE m.organisation_id = $1 AND m.user_id = $2 AND m.status = 'active'`,
         [organisationId, userId]
       );
       if (memRes.rows.length === 0) {
@@ -728,6 +792,7 @@ export async function addMeetingAttendee(
         throw new ConflictError('User is already an attendee of this meeting.', 'ATTENDEE_ALREADY_EXISTS');
       }
       insertUserId = userId;
+      userRow = memRes.rows[0];
     } else {
       // External attendee: valid email
       const cleanEmail = externalEmail.trim().toLowerCase();
@@ -773,12 +838,20 @@ export async function addMeetingAttendee(
       client,
     });
 
+    const fullName = userRow ? userRow.full_name : null;
+    const email = userRow ? userRow.email : (res.rows[0].external_email || null);
+
     return {
       id: res.rows[0].id,
       meetingId: res.rows[0].meeting_id,
       organisationId: res.rows[0].organisation_id,
       userId: res.rows[0].user_id,
+      fullName,
+      email,
+      userName: fullName,
+      userEmail: email,
       externalEmail: res.rows[0].external_email,
+      isExternal: !res.rows[0].user_id,
       role: res.rows[0].role,
       rsvpStatus: res.rows[0].rsvp_status,
       invitedAt: res.rows[0].invited_at.toISOString(),
@@ -1167,41 +1240,130 @@ export async function reorderMeetingAgenda(
 }
 
 // -----------------------------------------------------------------------------
-// 4. Confidential Notes / Minutes (MTG-005, ADR-014)
+// 4. Confidential Notes / Minutes / MOM (MTG-005, ADR-014, Structured MOM)
 // -----------------------------------------------------------------------------
 
-export async function getMeetingNotes(organisationId, meetingId, actorUserId, actorPermissions = []) {
-  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
-    const meetRes = await client.query(
-      `SELECT organiser_id, visibility FROM meetings WHERE id = $1 AND organisation_id = $2`,
-      [meetingId, organisationId]
+/**
+ * Records a security audit event when confidential notes or minutes access is denied.
+ * Strictly adheres to PRD §6.5, §8.2, AUD-003, AUD-005, and SEC-009.
+ * Ensures zero private note bodies, descriptions, or secrets are leaked to audit logs.
+ */
+async function recordNotesAccessDenied({
+  organisationId,
+  actorUserId,
+  meetingId,
+  action,
+  ipAddress,
+  userAgent,
+}) {
+  try {
+    await withTenantTransaction({ organisationId, userId: actorUserId }, async (auditClient) => {
+      await recordAuditEvent({
+        organisationId,
+        actorId: actorUserId,
+        action: 'meeting.notes_access_denied',
+        entityType: 'meeting_notes',
+        entityId: meetingId,
+        metadata: {
+          meetingId,
+          requestedAction: action,
+        },
+        ipAddress,
+        userAgent,
+        client: auditClient,
+      });
+    });
+  } catch (err) {
+    logger.warn(
+      { err: err.message, meetingId, actorUserId, action },
+      'Failed to record meeting.notes_access_denied audit event'
     );
+  }
+}
 
-    if (meetRes.rows.length === 0) {
-      throw new NotFoundError('Meeting not found.', 'MEETING_NOT_FOUND');
-    }
+/**
+ * Asserts read or manage access to confidential minutes and structured MOM.
+ * In accordance with PRD §8.2, §20.14 and SEC-009:
+ * - Organiser or holders of explicit meeting.notes.* permissions have access.
+ * - Attendee status alone does NOT grant access.
+ * - Organisation Owner/Admin do not receive automatic private-notes access solely because of their role.
+ */
+async function assertMeetingNotesAccess(
+  client,
+  organisationId,
+  meetingId,
+  actorUserId,
+  actorPermissions,
+  action = 'read',
+  { ipAddress, userAgent } = {}
+) {
+  const meetRes = await client.query(
+    `SELECT organiser_id, status FROM meetings WHERE id = $1 AND organisation_id = $2`,
+    [meetingId, organisationId]
+  );
 
-    const meeting = meetRes.rows[0];
+  if (meetRes.rows.length === 0) {
+    throw new NotFoundError('Meeting not found.', 'MEETING_NOT_FOUND');
+  }
 
-    // Confidential minutes access rule (MTG-005, PRD §8.2, ADR-014):
-    // By default only the organiser and users granted meeting.notes.read / meeting.notes.manage
-    // (or org.admin / org.owner) can read private notes.
-    // Attendee status alone does NOT grant access.
-    const isOrganiser = meeting.organiser_id === actorUserId;
+  const meeting = meetRes.rows[0];
+  const isOrganiser = meeting.organiser_id === actorUserId;
+
+  if (action === 'read') {
     const canRead =
       isOrganiser ||
       hasPermission(actorPermissions, 'meeting.notes.read') ||
-      hasPermission(actorPermissions, 'meeting.notes.manage') ||
-      hasPermission(actorPermissions, 'org.admin') ||
-      hasPermission(actorPermissions, 'org.owner');
+      hasPermission(actorPermissions, 'meeting.notes.manage');
 
     if (!canRead) {
+      await recordNotesAccessDenied({
+        organisationId,
+        actorUserId,
+        meetingId,
+        action,
+        ipAddress,
+        userAgent,
+      });
       throw new AuthorizationError(
         'Confidential minutes are restricted to organisers and authorised roles. Attendee status alone does not grant access.',
         'FORBIDDEN_NOTES_ACCESS'
       );
     }
+  } else {
+    // action === 'manage' / 'edit'
+    const canEdit =
+      isOrganiser ||
+      hasPermission(actorPermissions, 'meeting.notes.edit') ||
+      hasPermission(actorPermissions, 'meeting.notes.manage');
 
+    if (!canEdit) {
+      await recordNotesAccessDenied({
+        organisationId,
+        actorUserId,
+        meetingId,
+        action,
+        ipAddress,
+        userAgent,
+      });
+      throw new AuthorizationError(
+        'Not authorised to edit confidential meeting minutes.',
+        'FORBIDDEN_NOTES_MANAGE'
+      );
+    }
+
+    if (meeting.status === 'cancelled') {
+      throw new ConflictError('Cannot author or edit minutes for a cancelled meeting.', 'MEETING_CANCELLED');
+    }
+  }
+
+  return meeting;
+}
+
+export async function getMeetingNotes(organisationId, meetingId, actorUserId, actorPermissions = [], { ipAddress, userAgent } = {}) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'read', { ipAddress, userAgent });
+
+    // 1. Additional / historical notes
     const notesRes = await client.query(
       `SELECT n.*, u.full_name as author_name, u.email as author_email
        FROM meeting_notes n
@@ -1210,11 +1372,31 @@ export async function getMeetingNotes(organisationId, meetingId, actorUserId, ac
       [meetingId, organisationId]
     );
 
-    if (notesRes.rows.length === 0) {
-      return null;
-    }
+    // 2. Discussion points
+    const discRes = await client.query(
+      `SELECT d.*, u.full_name as author_name, u.email as author_email
+       FROM meeting_discussion_points d
+       JOIN users u ON u.id = d.created_by_id
+       WHERE d.meeting_id = $1 AND d.organisation_id = $2
+       ORDER BY d.order_index ASC, d.created_at ASC`,
+      [meetingId, organisationId]
+    );
 
-    return formatNoteRow(notesRes.rows[0]);
+    // 3. Decisions
+    const decRes = await client.query(
+      `SELECT dec.*, u.full_name as author_name, u.email as author_email
+       FROM meeting_decisions dec
+       JOIN users u ON u.id = dec.created_by_id
+       WHERE dec.meeting_id = $1 AND dec.organisation_id = $2
+       ORDER BY dec.order_index ASC, dec.created_at ASC`,
+      [meetingId, organisationId]
+    );
+
+    return {
+      notes: notesRes.rows.length > 0 ? formatNoteRow(notesRes.rows[0]) : null,
+      discussionPoints: discRes.rows.map(formatDiscussionPoint),
+      decisions: decRes.rows.map(formatDecision),
+    };
   });
 }
 
@@ -1224,7 +1406,7 @@ export async function upsertMeetingNotes(
   content,
   actorUserId,
   actorPermissions = [],
-  { ipAddress, userAgent } = {}
+  { ipAddress, userAgent, expectedUpdatedAt } = {}
 ) {
   if (typeof content !== 'string' || content.trim().length === 0) {
     throw new ValidationError('Meeting notes content must be a non-empty string.');
@@ -1235,56 +1417,61 @@ export async function upsertMeetingNotes(
   }
 
   return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
-    // 1. Lock meeting row
-    const meetRes = await client.query(
-      `SELECT organiser_id, status FROM meetings WHERE id = $1 AND organisation_id = $2 FOR UPDATE`,
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage', {
+      ipAddress,
+      userAgent,
+    });
+
+    // Concurrency-safe check with row lock (SEC-009 / Roadmap §3.4)
+    const existingRes = await client.query(
+      `SELECT id, updated_at, updated_by_id FROM meeting_notes
+       WHERE meeting_id = $1 AND organisation_id = $2
+       FOR UPDATE`,
       [meetingId, organisationId]
     );
 
-    if (meetRes.rows.length === 0) {
-      throw new NotFoundError('Meeting not found.', 'MEETING_NOT_FOUND');
-    }
+    let res;
+    if (existingRes.rows.length > 0) {
+      const existing = existingRes.rows[0];
 
-    const meeting = meetRes.rows[0];
+      // Optimistic concurrency check if expectedUpdatedAt was supplied
+      if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null && expectedUpdatedAt !== '') {
+        const persistedTime = new Date(existing.updated_at).getTime();
+        const expectedTime = new Date(expectedUpdatedAt).getTime();
 
-    const isOrganiser = meeting.organiser_id === actorUserId;
-    const canEdit =
-      isOrganiser ||
-      hasPermission(actorPermissions, 'meeting.notes.edit') ||
-      hasPermission(actorPermissions, 'meeting.notes.manage') ||
-      hasPermission(actorPermissions, 'org.admin') ||
-      hasPermission(actorPermissions, 'org.owner');
+        if (Number.isNaN(expectedTime) || persistedTime !== expectedTime) {
+          throw new ConflictError(
+            'The meeting notes have been modified by another user. Please refresh and review before saving.',
+            'CONCURRENT_MODIFICATION',
+            {
+              currentUpdatedAt: existing.updated_at instanceof Date ? existing.updated_at.toISOString() : new Date(existing.updated_at).toISOString(),
+              updatedById: existing.updated_by_id,
+            }
+          );
+        }
+      }
 
-    if (!canEdit) {
-      throw new AuthorizationError(
-        'Not authorised to edit confidential meeting minutes.',
-        'FORBIDDEN_NOTES_MANAGE'
+      res = await client.query(
+        `UPDATE meeting_notes
+         SET content = $1, updated_by_id = $2, updated_at = NOW()
+         WHERE id = $3 AND organisation_id = $4
+         RETURNING *`,
+        [content.trim(), actorUserId, existing.id, organisationId]
+      );
+    } else {
+      res = await client.query(
+        `INSERT INTO meeting_notes (
+           organisation_id, meeting_id, content, created_by_id, updated_by_id, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $4, NOW())
+         ON CONFLICT (meeting_id) DO UPDATE
+         SET content = EXCLUDED.content, updated_by_id = EXCLUDED.updated_by_id, updated_at = NOW()
+         RETURNING *`,
+        [organisationId, meetingId, content.trim(), actorUserId]
       );
     }
 
-    if (meeting.status === 'cancelled') {
-      throw new ConflictError('Cannot author or edit minutes for a cancelled meeting.', 'MEETING_CANCELLED');
-    }
-
-    // 2. Upsert meeting_notes
-    const upsertSql = `
-      INSERT INTO meeting_notes (
-        organisation_id, meeting_id, content, created_by_id, updated_by_id, updated_at
-      )
-      VALUES ($1, $2, $3, $4, $4, NOW())
-      ON CONFLICT (meeting_id) DO UPDATE
-      SET content = $3, updated_by_id = $4, updated_at = NOW()
-      RETURNING *
-    `;
-
-    const res = await client.query(upsertSql, [
-      organisationId,
-      meetingId,
-      content.trim(),
-      actorUserId,
-    ]);
-
-    // 3. Audit log (MTG-005: Do not put note bodies in audit metadata)
+    // Audit log (MTG-005/SEC-008: Zero confidential text bodies in audit logs)
     await recordAuditEvent({
       organisationId,
       actorId: actorUserId,
@@ -1300,7 +1487,532 @@ export async function upsertMeetingNotes(
       client,
     });
 
-    return formatNoteRow(res.rows[0]);
+    const userRes = await client.query(
+      `SELECT full_name, email FROM users WHERE id = $1`,
+      [res.rows[0].created_by_id]
+    );
+    const author = userRes.rows[0] || {};
+    return formatNoteRow({
+      ...res.rows[0],
+      author_name: author.full_name,
+      author_email: author.email,
+    });
+  });
+}
+
+// -----------------------------------------------------------------------------
+// 4.1 Discussion Points (Structured MOM)
+// -----------------------------------------------------------------------------
+
+export async function listMeetingDiscussionPoints(organisationId, meetingId, actorUserId, actorPermissions = []) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'read');
+
+    const res = await client.query(
+      `SELECT d.*, u.full_name as author_name, u.email as author_email
+       FROM meeting_discussion_points d
+       JOIN users u ON u.id = d.created_by_id
+       WHERE d.meeting_id = $1 AND d.organisation_id = $2
+       ORDER BY d.order_index ASC, d.created_at ASC`,
+      [meetingId, organisationId]
+    );
+
+    return res.rows.map(formatDiscussionPoint);
+  });
+}
+
+export async function createMeetingDiscussionPoint(
+  organisationId,
+  meetingId,
+  data,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  const title = (data.title || '').trim();
+  if (!title) {
+    throw new ValidationError('Discussion point title is required.');
+  }
+  if (title.length > 255) {
+    throw new ValidationError('Discussion point title cannot exceed 255 characters.');
+  }
+
+  const body = (data.body !== undefined && data.body !== null) ? String(data.body).trim() : '';
+  if (body.length > 50000) {
+    throw new ValidationError('Discussion point body exceeds maximum length of 50,000 characters.');
+  }
+
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage');
+
+    const maxOrderRes = await client.query(
+      `SELECT COALESCE(MAX(order_index), -1) AS max_order
+       FROM meeting_discussion_points
+       WHERE meeting_id = $1 AND organisation_id = $2`,
+      [meetingId, organisationId]
+    );
+    const nextOrder = maxOrderRes.rows[0].max_order + 1;
+
+    const insertSql = `
+      INSERT INTO meeting_discussion_points (
+        organisation_id, meeting_id, title, body, order_index, created_by_id, updated_by_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $6)
+      RETURNING *
+    `;
+    const res = await client.query(insertSql, [
+      organisationId,
+      meetingId,
+      title,
+      body,
+      nextOrder,
+      actorUserId,
+    ]);
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.discussion_point_created',
+      entityType: 'meeting_discussion_point',
+      entityId: res.rows[0].id,
+      metadata: {
+        meetingId,
+        orderIndex: nextOrder,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    const authorRes = await client.query(
+      `SELECT full_name, email FROM users WHERE id = $1`,
+      [actorUserId]
+    );
+    const author = authorRes.rows[0] || {};
+    return formatDiscussionPoint({
+      ...res.rows[0],
+      author_name: author.full_name,
+      author_email: author.email,
+    });
+  });
+}
+
+export async function updateMeetingDiscussionPoint(
+  organisationId,
+  meetingId,
+  pointId,
+  data,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage');
+
+    const existingRes = await client.query(
+      `SELECT id, title, body FROM meeting_discussion_points
+       WHERE id = $1 AND meeting_id = $2 AND organisation_id = $3 FOR UPDATE`,
+      [pointId, meetingId, organisationId]
+    );
+
+    if (existingRes.rows.length === 0) {
+      throw new NotFoundError('Discussion point not found.', 'DISCUSSION_POINT_NOT_FOUND');
+    }
+
+    const current = existingRes.rows[0];
+    const newTitle = data.title !== undefined ? String(data.title).trim() : current.title;
+    if (!newTitle) {
+      throw new ValidationError('Discussion point title cannot be empty.');
+    }
+    if (newTitle.length > 255) {
+      throw new ValidationError('Discussion point title cannot exceed 255 characters.');
+    }
+
+    const newBody = data.body !== undefined ? String(data.body).trim() : current.body;
+    if (newBody.length > 50000) {
+      throw new ValidationError('Discussion point body exceeds maximum length of 50,000 characters.');
+    }
+
+    const updateSql = `
+      UPDATE meeting_discussion_points
+      SET title = $1, body = $2, updated_by_id = $3, updated_at = NOW()
+      WHERE id = $4 AND meeting_id = $5 AND organisation_id = $6
+      RETURNING *
+    `;
+    const res = await client.query(updateSql, [
+      newTitle,
+      newBody,
+      actorUserId,
+      pointId,
+      meetingId,
+      organisationId,
+    ]);
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.discussion_point_updated',
+      entityType: 'meeting_discussion_point',
+      entityId: pointId,
+      metadata: {
+        meetingId,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    const userRes = await client.query(
+      `SELECT full_name, email FROM users WHERE id = $1`,
+      [res.rows[0].created_by_id]
+    );
+    const author = userRes.rows[0] || {};
+    return formatDiscussionPoint({
+      ...res.rows[0],
+      author_name: author.full_name,
+      author_email: author.email,
+    });
+  });
+}
+
+export async function deleteMeetingDiscussionPoint(
+  organisationId,
+  meetingId,
+  pointId,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage');
+
+    const res = await client.query(
+      `DELETE FROM meeting_discussion_points
+       WHERE id = $1 AND meeting_id = $2 AND organisation_id = $3
+       RETURNING id`,
+      [pointId, meetingId, organisationId]
+    );
+
+    if (res.rows.length === 0) {
+      throw new NotFoundError('Discussion point not found.', 'DISCUSSION_POINT_NOT_FOUND');
+    }
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.discussion_point_deleted',
+      entityType: 'meeting_discussion_point',
+      entityId: pointId,
+      metadata: {
+        meetingId,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return { success: true };
+  });
+}
+
+export async function reorderMeetingDiscussionPoints(
+  organisationId,
+  meetingId,
+  itemIds,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    throw new ValidationError('itemIds must be a non-empty array of discussion point UUIDs.');
+  }
+
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage');
+
+    for (let i = 0; i < itemIds.length; i++) {
+      await client.query(
+        `UPDATE meeting_discussion_points
+         SET order_index = $1, updated_at = NOW()
+         WHERE id = $2 AND meeting_id = $3 AND organisation_id = $4`,
+        [i, itemIds[i], meetingId, organisationId]
+      );
+    }
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.discussion_points_reordered',
+      entityType: 'meeting_discussion_points',
+      entityId: meetingId,
+      metadata: {
+        meetingId,
+        count: itemIds.length,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return { success: true };
+  });
+}
+
+// -----------------------------------------------------------------------------
+// 4.2 Decisions (Structured MOM)
+// -----------------------------------------------------------------------------
+
+export async function listMeetingDecisions(organisationId, meetingId, actorUserId, actorPermissions = []) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'read');
+
+    const res = await client.query(
+      `SELECT dec.*, u.full_name as author_name, u.email as author_email
+       FROM meeting_decisions dec
+       JOIN users u ON u.id = dec.created_by_id
+       WHERE dec.meeting_id = $1 AND dec.organisation_id = $2
+       ORDER BY dec.order_index ASC, dec.created_at ASC`,
+      [meetingId, organisationId]
+    );
+
+    return res.rows.map(formatDecision);
+  });
+}
+
+export async function createMeetingDecision(
+  organisationId,
+  meetingId,
+  data,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  const title = (data.title || '').trim();
+  if (!title) {
+    throw new ValidationError('Decision title is required.');
+  }
+  if (title.length > 255) {
+    throw new ValidationError('Decision title cannot exceed 255 characters.');
+  }
+
+  const details = (data.details !== undefined && data.details !== null) ? String(data.details).trim() : '';
+  if (details.length > 50000) {
+    throw new ValidationError('Decision details exceed maximum length of 50,000 characters.');
+  }
+
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage');
+
+    const maxOrderRes = await client.query(
+      `SELECT COALESCE(MAX(order_index), -1) AS max_order
+       FROM meeting_decisions
+       WHERE meeting_id = $1 AND organisation_id = $2`,
+      [meetingId, organisationId]
+    );
+    const nextOrder = maxOrderRes.rows[0].max_order + 1;
+
+    const insertSql = `
+      INSERT INTO meeting_decisions (
+        organisation_id, meeting_id, title, details, order_index, created_by_id, updated_by_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $6)
+      RETURNING *
+    `;
+    const res = await client.query(insertSql, [
+      organisationId,
+      meetingId,
+      title,
+      details,
+      nextOrder,
+      actorUserId,
+    ]);
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.decision_created',
+      entityType: 'meeting_decision',
+      entityId: res.rows[0].id,
+      metadata: {
+        meetingId,
+        orderIndex: nextOrder,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    const authorRes = await client.query(
+      `SELECT full_name, email FROM users WHERE id = $1`,
+      [actorUserId]
+    );
+    const author = authorRes.rows[0] || {};
+    return formatDecision({
+      ...res.rows[0],
+      author_name: author.full_name,
+      author_email: author.email,
+    });
+  });
+}
+
+export async function updateMeetingDecision(
+  organisationId,
+  meetingId,
+  decisionId,
+  data,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage');
+
+    const existingRes = await client.query(
+      `SELECT id, title, details FROM meeting_decisions
+       WHERE id = $1 AND meeting_id = $2 AND organisation_id = $3 FOR UPDATE`,
+      [decisionId, meetingId, organisationId]
+    );
+
+    if (existingRes.rows.length === 0) {
+      throw new NotFoundError('Decision not found.', 'DECISION_NOT_FOUND');
+    }
+
+    const current = existingRes.rows[0];
+    const newTitle = data.title !== undefined ? String(data.title).trim() : current.title;
+    if (!newTitle) {
+      throw new ValidationError('Decision title cannot be empty.');
+    }
+    if (newTitle.length > 255) {
+      throw new ValidationError('Decision title cannot exceed 255 characters.');
+    }
+
+    const newDetails = data.details !== undefined ? String(data.details).trim() : current.details;
+    if (newDetails.length > 50000) {
+      throw new ValidationError('Decision details exceed maximum length of 50,000 characters.');
+    }
+
+    const updateSql = `
+      UPDATE meeting_decisions
+      SET title = $1, details = $2, updated_by_id = $3, updated_at = NOW()
+      WHERE id = $4 AND meeting_id = $5 AND organisation_id = $6
+      RETURNING *
+    `;
+    const res = await client.query(updateSql, [
+      newTitle,
+      newDetails,
+      actorUserId,
+      decisionId,
+      meetingId,
+      organisationId,
+    ]);
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.decision_updated',
+      entityType: 'meeting_decision',
+      entityId: decisionId,
+      metadata: {
+        meetingId,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    const userRes = await client.query(
+      `SELECT full_name, email FROM users WHERE id = $1`,
+      [res.rows[0].created_by_id]
+    );
+    const author = userRes.rows[0] || {};
+    return formatDecision({
+      ...res.rows[0],
+      author_name: author.full_name,
+      author_email: author.email,
+    });
+  });
+}
+
+export async function deleteMeetingDecision(
+  organisationId,
+  meetingId,
+  decisionId,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage');
+
+    const res = await client.query(
+      `DELETE FROM meeting_decisions
+       WHERE id = $1 AND meeting_id = $2 AND organisation_id = $3
+       RETURNING id`,
+      [decisionId, meetingId, organisationId]
+    );
+
+    if (res.rows.length === 0) {
+      throw new NotFoundError('Decision not found.', 'DECISION_NOT_FOUND');
+    }
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.decision_deleted',
+      entityType: 'meeting_decision',
+      entityId: decisionId,
+      metadata: {
+        meetingId,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return { success: true };
+  });
+}
+
+export async function reorderMeetingDecisions(
+  organisationId,
+  meetingId,
+  itemIds,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    throw new ValidationError('itemIds must be a non-empty array of decision UUIDs.');
+  }
+
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    await assertMeetingNotesAccess(client, organisationId, meetingId, actorUserId, actorPermissions, 'manage');
+
+    for (let i = 0; i < itemIds.length; i++) {
+      await client.query(
+        `UPDATE meeting_decisions
+         SET order_index = $1, updated_at = NOW()
+         WHERE id = $2 AND meeting_id = $3 AND organisation_id = $4`,
+        [i, itemIds[i], meetingId, organisationId]
+      );
+    }
+
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.decisions_reordered',
+      entityType: 'meeting_decisions',
+      entityId: meetingId,
+      metadata: {
+        meetingId,
+        count: itemIds.length,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return { success: true };
   });
 }
 
@@ -1316,7 +2028,7 @@ export async function createMeetingActionItem(
   actorPermissions = [],
   { ipAddress, userAgent } = {}
 ) {
-  const { title, description, assigneeId, dueDate, priority = 'medium', agendaItemId } = itemData;
+  const { title, description, assigneeId, dueDate, priority = 'medium', agendaItemId, decisionId } = itemData;
 
   if (!title || typeof title !== 'string' || !title.trim()) {
     throw new ValidationError('Action item title is required (1-200 characters).');
@@ -1390,13 +2102,28 @@ export async function createMeetingActionItem(
       }
     }
 
-    // 4. Insert action item
+    // 4. Validate decisionId belongs to same meeting and org if specified (Phase 2, Roadmap §6.2)
+    if (decisionId) {
+      const decisionRes = await client.query(
+        `SELECT id FROM meeting_decisions WHERE id = $1 AND meeting_id = $2 AND organisation_id = $3`,
+        [decisionId, meetingId, organisationId]
+      );
+
+      if (decisionRes.rows.length === 0) {
+        throw new ValidationError(
+          'Source decision must belong to this meeting and organisation.',
+          'INVALID_DECISION'
+        );
+      }
+    }
+
+    // 5. Insert action item
     const insertSql = `
       INSERT INTO meeting_action_items (
         organisation_id, meeting_id, title, description, assignee_id, due_date,
-        priority, status, agenda_item_id, created_by_id
+        priority, status, agenda_item_id, decision_id, created_by_id
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'open', $8, $9, $10)
       RETURNING *
     `;
 
@@ -1409,6 +2136,7 @@ export async function createMeetingActionItem(
       dueDate || null,
       priority,
       agendaItemId || null,
+      decisionId || null,
       actorUserId,
     ]);
 
@@ -1423,6 +2151,8 @@ export async function createMeetingActionItem(
         title: title.trim(),
         assigneeId,
         priority,
+        decisionId: decisionId || null,
+        agendaItemId: agendaItemId || null,
       },
       ipAddress,
       userAgent,
@@ -1440,10 +2170,14 @@ export async function listMeetingActionItems(organisationId, meetingId, viewerUs
   return withTenantTransaction({ organisationId, userId: viewerUserId }, async (client) => {
     const res = await client.query(
       `SELECT a.*, u.full_name AS assignee_name, u.email AS assignee_email,
-              ag.title AS agenda_item_title
+              ag.title AS agenda_item_title,
+              d.title AS decision_title,
+              t.title AS project_task_title
        FROM meeting_action_items a
        JOIN users u ON u.id = a.assignee_id
        LEFT JOIN meeting_agenda_items ag ON ag.id = a.agenda_item_id
+       LEFT JOIN meeting_decisions d ON d.id = a.decision_id
+       LEFT JOIN tasks t ON t.id = a.project_task_id
        WHERE a.meeting_id = $1 AND a.organisation_id = $2
        ORDER BY 
          CASE a.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
@@ -1512,7 +2246,8 @@ export async function updateMeetingActionItem(
         updates.assigneeId !== undefined ||
         updates.priority !== undefined ||
         updates.dueDate !== undefined ||
-        updates.agendaItemId !== undefined
+        updates.agendaItemId !== undefined ||
+        updates.decisionId !== undefined
       ) {
         throw new AuthorizationError(
           'Assignees without management permissions can only update action item status.',
@@ -1574,6 +2309,26 @@ export async function updateMeetingActionItem(
       }
     }
 
+    // 7. Validate decision change if present (Phase 2, Roadmap §6.2)
+    let nextDecisionId = actionItem.decision_id;
+    if (updates.decisionId !== undefined && updates.decisionId !== actionItem.decision_id) {
+      if (updates.decisionId) {
+        const decRes = await client.query(
+          `SELECT id FROM meeting_decisions WHERE id = $1 AND meeting_id = $2 AND organisation_id = $3`,
+          [updates.decisionId, meetingId, organisationId]
+        );
+        if (decRes.rows.length === 0) {
+          throw new ValidationError(
+            'Source decision must belong to this meeting and organisation.',
+            'INVALID_DECISION'
+          );
+        }
+        nextDecisionId = updates.decisionId;
+      } else {
+        nextDecisionId = null;
+      }
+    }
+
     const title = updates.title !== undefined ? updates.title.trim() : actionItem.title;
     const description = updates.description !== undefined ? updates.description : actionItem.description;
     const priority = updates.priority !== undefined ? updates.priority : actionItem.priority;
@@ -1582,8 +2337,8 @@ export async function updateMeetingActionItem(
     const updateSql = `
       UPDATE meeting_action_items
       SET title = $1, description = $2, assignee_id = $3, priority = $4,
-          status = $5, due_date = $6, agenda_item_id = $7, updated_at = NOW()
-      WHERE id = $8 AND meeting_id = $9 AND organisation_id = $10
+          status = $5, due_date = $6, agenda_item_id = $7, decision_id = $8, updated_at = NOW()
+      WHERE id = $9 AND meeting_id = $10 AND organisation_id = $11
       RETURNING *
     `;
 
@@ -1595,6 +2350,7 @@ export async function updateMeetingActionItem(
       nextStatus,
       dueDate || null,
       nextAgendaItemId,
+      nextDecisionId,
       actionItemId,
       meetingId,
       organisationId,
@@ -1611,6 +2367,7 @@ export async function updateMeetingActionItem(
         fromStatus: actionItem.status,
         toStatus: nextStatus,
         priority,
+        decisionId: nextDecisionId || null,
       },
       ipAddress,
       userAgent,
@@ -1672,6 +2429,268 @@ export async function deleteMeetingActionItem(
     });
 
     return { success: true };
+  });
+}
+
+/**
+ * Cross-meeting action items query for My Action Items view (Phase 2, Roadmap §6.4).
+ * Defaults ordinary users to items assigned to themselves.
+ * Managers with meeting.action.manage / meeting.edit can filter by any member.
+ */
+export async function listOrganisationActionItems(
+  organisationId,
+  viewerUserId,
+  viewerPermissions = [],
+  filters = {}
+) {
+  const {
+    assigneeId,
+    status,
+    priority,
+    timeframe,
+    meetingId,
+    page = 1,
+    limit = 20,
+  } = filters;
+
+  const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+  const parsedLimit = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+  const offset = (parsedPage - 1) * parsedLimit;
+
+  const canManageAll =
+    hasPermission(viewerPermissions, 'meeting.action.manage') ||
+    hasPermission(viewerPermissions, 'meeting.edit') ||
+    hasPermission(viewerPermissions, 'org.admin') ||
+    hasPermission(viewerPermissions, 'org.owner');
+
+  return withTenantTransaction({ organisationId, userId: viewerUserId }, async (client) => {
+    const conditions = ['a.organisation_id = $1'];
+    const params = [organisationId];
+
+    // Ordinary users can ONLY view action items assigned to themselves (Roadmap §6.4)
+    if (!canManageAll) {
+      params.push(viewerUserId);
+      conditions.push(`a.assignee_id = $${params.length}`);
+    } else if (assigneeId) {
+      if (assigneeId === 'me') {
+        params.push(viewerUserId);
+        conditions.push(`a.assignee_id = $${params.length}`);
+      } else {
+        params.push(assigneeId);
+        conditions.push(`a.assignee_id = $${params.length}`);
+      }
+    }
+
+    if (status && status !== 'all') {
+      params.push(status);
+      conditions.push(`a.status = $${params.length}`);
+    }
+
+    if (priority && priority !== 'all') {
+      params.push(priority);
+      conditions.push(`a.priority = $${params.length}`);
+    }
+
+    if (meetingId) {
+      params.push(meetingId);
+      conditions.push(`a.meeting_id = $${params.length}`);
+    }
+
+    if (timeframe === 'overdue') {
+      conditions.push(`a.due_date < CURRENT_DATE AND a.status NOT IN ('done', 'cancelled')`);
+    } else if (timeframe === 'due_soon') {
+      conditions.push(`a.due_date >= CURRENT_DATE AND a.due_date <= CURRENT_DATE + INTERVAL '7 days' AND a.status NOT IN ('done', 'cancelled')`);
+    } else if (timeframe === 'completed') {
+      conditions.push(`a.status = 'done'`);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    // Count total matching items
+    const countRes = await client.query(
+      `SELECT COUNT(*) FROM meeting_action_items a WHERE ${whereClause}`,
+      params
+    );
+    const totalItems = parseInt(countRes.rows[0].count, 10);
+
+    // Data query with meeting and linked entity metadata
+    const dataSql = `
+      SELECT a.*, 
+             u.full_name AS assignee_name, u.email AS assignee_email,
+             m.title AS meeting_title,
+             ag.title AS agenda_item_title,
+             d.title AS decision_title,
+             t.title AS project_task_title
+      FROM meeting_action_items a
+      JOIN users u ON u.id = a.assignee_id
+      JOIN meetings m ON m.id = a.meeting_id
+      LEFT JOIN meeting_agenda_items ag ON ag.id = a.agenda_item_id
+      LEFT JOIN meeting_decisions d ON d.id = a.decision_id
+      LEFT JOIN tasks t ON t.id = a.project_task_id
+      WHERE ${whereClause}
+      ORDER BY 
+        CASE 
+          WHEN a.due_date < CURRENT_DATE AND a.status NOT IN ('done', 'cancelled') THEN 1 
+          ELSE 2 
+        END,
+        a.due_date ASC NULLS LAST,
+        CASE a.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+        a.created_at DESC
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+    `;
+
+    const dataRes = await client.query(dataSql, [...params, parsedLimit, offset]);
+    const actionItems = dataRes.rows.map(formatActionItemRow);
+
+    return {
+      actionItems,
+      pagination: {
+        page: parsedPage,
+        limit: parsedLimit,
+        totalItems,
+        totalPages: Math.ceil(totalItems / parsedLimit) || 1,
+        hasNextPage: parsedPage * parsedLimit < totalItems,
+        hasPrevPage: parsedPage > 1,
+      },
+    };
+  });
+}
+
+/**
+ * Explicit opt-in promotion of a meeting action item to a canonical Projects task (Phase 2, Roadmap §6.5).
+ * Reuses canonical tasks table, enforces project permissions, maps status, and records audit event.
+ */
+export async function promoteMeetingActionItemToProjectTask(
+  organisationId,
+  meetingId,
+  actionItemId,
+  destinationProjectId,
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  if (!destinationProjectId) {
+    throw new ValidationError('Destination projectId is required for project task promotion.');
+  }
+
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    // 1. Verify module entitlement for projects
+    const entitlement = await checkModuleEntitlement({ organisationId, moduleSlug: 'projects' });
+    if (!entitlement.isEnabled) {
+      throw new AuthorizationError('Projects module is disabled for this organisation.', 'MODULE_DISABLED');
+    }
+
+    // 2. Verify user has task.create or management permission
+    const canCreateTask =
+      hasPermission(actorPermissions, 'task.create') ||
+      hasPermission(actorPermissions, 'project.edit') ||
+      hasPermission(actorPermissions, 'org.admin') ||
+      hasPermission(actorPermissions, 'org.owner');
+    if (!canCreateTask) {
+      throw new AuthorizationError('Not authorised to create tasks in projects.', 'FORBIDDEN');
+    }
+
+    // 3. Verify destination project exists and belongs to organisation
+    const projRes = await client.query(
+      `SELECT id, name, status FROM projects WHERE id = $1 AND organisation_id = $2`,
+      [destinationProjectId, organisationId]
+    );
+    if (projRes.rows.length === 0) {
+      throw new NotFoundError('Destination project not found in this organisation.', 'PROJECT_NOT_FOUND');
+    }
+    if (projRes.rows[0].status === 'archived') {
+      throw new ConflictError('Cannot create tasks in an archived project.', 'PROJECT_ARCHIVED');
+    }
+
+    // 4. Lock action item
+    const itemRes = await client.query(
+      `SELECT * FROM meeting_action_items WHERE id = $1 AND meeting_id = $2 AND organisation_id = $3 FOR UPDATE`,
+      [actionItemId, meetingId, organisationId]
+    );
+    if (itemRes.rows.length === 0) {
+      throw new NotFoundError('Action item not found.', 'ACTION_ITEM_NOT_FOUND');
+    }
+    const actionItem = itemRes.rows[0];
+
+    // Idempotent retry: if already promoted to this project, return existing
+    if (actionItem.project_task_id) {
+      const existingTaskRes = await client.query(
+        `SELECT id, project_id, title, status FROM tasks WHERE id = $1 AND organisation_id = $2`,
+        [actionItem.project_task_id, organisationId]
+      );
+      if (existingTaskRes.rows.length > 0) {
+        return {
+          actionItem: formatActionItemRow(actionItem),
+          task: existingTaskRes.rows[0],
+          alreadyPromoted: true,
+        };
+      }
+    }
+
+    // 5. Map meeting action item status to canonical Projects task status
+    // Action item: 'open', 'in_progress', 'done', 'cancelled'
+    // Task: 'backlog', 'todo', 'in_progress', 'blocked', 'done'
+    const statusMap = {
+      open: 'todo',
+      in_progress: 'in_progress',
+      done: 'done',
+      cancelled: 'blocked',
+    };
+    const taskStatus = statusMap[actionItem.status] || 'todo';
+
+    // 6. Insert into tasks table
+    const taskInsertSql = `
+      INSERT INTO tasks (
+        organisation_id, project_id, title, description, status, priority,
+        created_by_id, assignee_id, due_date
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *
+    `;
+
+    const taskDueDate = actionItem.due_date ? new Date(actionItem.due_date).toISOString() : null;
+    const taskRes = await client.query(taskInsertSql, [
+      organisationId,
+      destinationProjectId,
+      actionItem.title,
+      actionItem.description || null,
+      taskStatus,
+      actionItem.priority,
+      actorUserId,
+      actionItem.assignee_id,
+      taskDueDate,
+    ]);
+    const createdTask = taskRes.rows[0];
+
+    // 7. Link createdTask.id back to meeting_action_items
+    await client.query(
+      `UPDATE meeting_action_items SET project_task_id = $1, updated_at = NOW() WHERE id = $2 AND organisation_id = $3`,
+      [createdTask.id, actionItemId, organisationId]
+    );
+
+    // 8. Audit event
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.action_item_promoted',
+      entityType: 'meeting_action_item',
+      entityId: actionItemId,
+      metadata: {
+        meetingId,
+        projectTaskId: createdTask.id,
+        projectId: destinationProjectId,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    actionItem.project_task_id = createdTask.id;
+    return {
+      actionItem: formatActionItemRow(actionItem),
+      task: createdTask,
+      alreadyPromoted: false,
+    };
   });
 }
 
@@ -1767,6 +2786,357 @@ export async function sendMeetingInvitations(
     });
 
     return { sentCount, failedCount, recipients };
+  });
+}
+
+// -----------------------------------------------------------------------------
+// 7. Meeting Analytics & Export (Roadmap Phase 4)
+// -----------------------------------------------------------------------------
+
+/**
+ * Computes aggregated meeting completion, attendance, action item, and MOM metrics for an organisation.
+ * Derived strictly from real database records under tenant isolation.
+ *
+ * @param {string} organisationId
+ * @param {string} actorUserId
+ * @param {Array<string>} [actorPermissions=[]]
+ * @param {object} [options={}]
+ * @param {string} [options.timeframe='all']
+ * @returns {Promise<object>}
+ */
+export async function getMeetingAnalytics(
+  organisationId,
+  actorUserId,
+  actorPermissions = [],
+  { timeframe = 'all' } = {}
+) {
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    // 1. Build date filter SQL according to canonical metric date semantics (MTG-IMP-12)
+    // - Meeting occurrence and lifecycle metrics use meetings.start_at
+    // - Creation/velocity metrics use created_at
+    // - Child-table occurrence metrics join through parent meeting m.start_at
+    let meetingOccurrenceFilterSql = '';
+    let velocityFilterSql = '';
+    const timeParams = [organisationId];
+
+    if (timeframe === '30d') {
+      meetingOccurrenceFilterSql = ` AND m.start_at >= NOW() - INTERVAL '30 days' AND m.start_at <= NOW()`;
+      velocityFilterSql = ` AND created_at >= NOW() - INTERVAL '30 days' AND created_at <= NOW()`;
+    } else if (timeframe === '90d') {
+      meetingOccurrenceFilterSql = ` AND m.start_at >= NOW() - INTERVAL '90 days' AND m.start_at <= NOW()`;
+      velocityFilterSql = ` AND created_at >= NOW() - INTERVAL '90 days' AND created_at <= NOW()`;
+    }
+
+    // 1. Meeting completion and status metrics (occurrence-scoped)
+    const meetRes = await client.query(
+      `SELECT
+         COUNT(*)::int as total_meetings,
+         COUNT(*) FILTER (WHERE m.status = 'scheduled')::int as scheduled_count,
+         COUNT(*) FILTER (WHERE m.status = 'in_progress')::int as in_progress_count,
+         COUNT(*) FILTER (WHERE m.status = 'completed')::int as completed_count,
+         COUNT(*) FILTER (WHERE m.status = 'cancelled')::int as cancelled_count,
+         COUNT(*) FILTER (WHERE m.status = 'missed')::int as missed_count,
+         COUNT(*) FILTER (WHERE m.status = 'scheduled' AND m.end_at < NOW())::int as overdue_scheduled_count
+       FROM meetings m
+       WHERE m.organisation_id = $1 ${meetingOccurrenceFilterSql}`,
+      timeParams
+    );
+    const m = meetRes.rows[0];
+    const totalMeetings = m.total_meetings || 0;
+    const completedMeetings = m.completed_count || 0;
+    const meetingCompletionRate = totalMeetings > 0
+      ? Math.round((completedMeetings / totalMeetings) * 1000) / 10
+      : 0;
+
+    // 2. Attendance & RSVP metrics (parent-meeting occurrence scoped)
+    const attRes = await client.query(
+      `SELECT
+         COUNT(*)::int as total_invitations,
+         COUNT(*) FILTER (WHERE a.rsvp_status = 'accepted')::int as accepted_count,
+         COUNT(*) FILTER (WHERE a.rsvp_status = 'declined')::int as declined_count,
+         COUNT(*) FILTER (WHERE a.rsvp_status = 'tentative')::int as tentative_count,
+         COUNT(*) FILTER (WHERE a.rsvp_status = 'pending')::int as pending_count
+       FROM meeting_attendees a
+       JOIN meetings m ON m.id = a.meeting_id AND m.organisation_id = a.organisation_id
+       WHERE a.organisation_id = $1 ${meetingOccurrenceFilterSql}`,
+      timeParams
+    );
+    const a = attRes.rows[0];
+    const totalInvitations = a.total_invitations || 0;
+    const acceptedInvitations = a.accepted_count || 0;
+    const acceptanceRate = totalInvitations > 0
+      ? Math.round((acceptedInvitations / totalInvitations) * 1000) / 10
+      : 0;
+
+    // 3. Action items metrics (velocity & due-date scoped)
+    const actRes = await client.query(
+      `SELECT
+         COUNT(*)::int as total_action_items,
+         COUNT(*) FILTER (WHERE status = 'open')::int as open_count,
+         COUNT(*) FILTER (WHERE status = 'in_progress')::int as in_progress_count,
+         COUNT(*) FILTER (WHERE status = 'done')::int as done_count,
+         COUNT(*) FILTER (WHERE status = 'cancelled')::int as cancelled_count,
+         COUNT(*) FILTER (WHERE status IN ('open', 'in_progress') AND due_date < CURRENT_DATE)::int as overdue_count
+       FROM meeting_action_items
+       WHERE organisation_id = $1 ${velocityFilterSql}`,
+      timeParams
+    );
+    const ai = actRes.rows[0];
+    const totalActions = ai.total_action_items || 0;
+    const doneActions = ai.done_count || 0;
+    const cancelledActions = ai.cancelled_count || 0;
+    const actionableTotal = Math.max(0, totalActions - cancelledActions);
+    const grossCompletionRate = totalActions > 0
+      ? Math.round((doneActions / totalActions) * 1000) / 10
+      : 0;
+    const actionableCompletionRate = actionableTotal > 0
+      ? Math.round((doneActions / actionableTotal) * 1000) / 10
+      : 0;
+
+    // 4. MOM structural artifacts counts (parent-meeting occurrence scoped)
+    const momRes = await client.query(
+      `SELECT
+         (SELECT COUNT(*)::int
+          FROM meeting_discussion_points dp
+          JOIN meetings m ON m.id = dp.meeting_id AND m.organisation_id = dp.organisation_id
+          WHERE dp.organisation_id = $1 ${meetingOccurrenceFilterSql}
+         ) as total_discussion_points,
+         (SELECT COUNT(*)::int
+          FROM meeting_decisions d
+          JOIN meetings m ON m.id = d.meeting_id AND m.organisation_id = d.organisation_id
+          WHERE d.organisation_id = $1 ${meetingOccurrenceFilterSql}
+         ) as total_decisions`,
+      timeParams
+    );
+    const mom = momRes.rows[0];
+
+    return {
+      timeframe,
+      summary: {
+        totalMeetings,
+        scheduledMeetings: m.scheduled_count || 0,
+        inProgressMeetings: m.in_progress_count || 0,
+        completedMeetings,
+        cancelledMeetings: m.cancelled_count || 0,
+        missedMeetings: m.missed_count || 0,
+        overdueScheduledMeetings: m.overdue_scheduled_count || 0,
+        meetingCompletionRate,
+      },
+      attendance: {
+        totalInvitations,
+        accepted: acceptedInvitations,
+        declined: a.declined_count || 0,
+        tentative: a.tentative_count || 0,
+        pending: a.pending_count || 0,
+        acceptanceRate,
+      },
+      actionItems: {
+        total: totalActions,
+        open: ai.open_count || 0,
+        inProgress: ai.in_progress_count || 0,
+        done: doneActions,
+        cancelled: cancelledActions,
+        actionableTotal,
+        overdue: ai.overdue_count || 0,
+        actionableCompletionRate,
+        grossCompletionRate,
+        completionRate: grossCompletionRate,
+      },
+      mom: {
+        totalDiscussionPoints: mom.total_discussion_points || 0,
+        totalDecisions: mom.total_decisions || 0,
+      },
+    };
+  });
+}
+
+/**
+ * Exports authorized meeting and MOM details in either Markdown or PDF format.
+ *
+ * @param {string} organisationId
+ * @param {string} meetingId
+ * @param {string} format - 'markdown' | 'pdf'
+ * @param {string} actorUserId
+ * @param {Array<string>} [actorPermissions=[]]
+ * @param {object} [context={}]
+ * @returns {Promise<{ content: string|Buffer, contentType: string, filename: string }>}
+ */
+export async function exportMeeting(
+  organisationId,
+  meetingId,
+  format = 'markdown',
+  actorUserId,
+  actorPermissions = [],
+  { ipAddress, userAgent } = {}
+) {
+  const normalizedFormat = String(format).toLowerCase().trim();
+  if (!['markdown', 'pdf'].includes(normalizedFormat)) {
+    throw new ValidationError(`Invalid export format "${format}". Supported formats are "markdown" and "pdf".`);
+  }
+
+  // First verify user has access to meeting (404/403)
+  const meeting = await getMeetingById(organisationId, meetingId, actorUserId, actorPermissions);
+
+  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+    // 1. Fetch Attendees
+    const attRes = await client.query(
+      `SELECT a.*, u.full_name AS user_name, u.email AS user_email
+       FROM meeting_attendees a
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE a.meeting_id = $1 AND a.organisation_id = $2
+       ORDER BY 
+         CASE a.role WHEN 'organiser' THEN 1 WHEN 'facilitator' THEN 2 WHEN 'scribe' THEN 3 ELSE 4 END,
+         COALESCE(u.full_name, a.external_email) ASC`,
+      [meetingId, organisationId]
+    );
+    const attendees = attRes.rows.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      fullName: r.user_name || null,
+      email: r.user_email || r.external_email || null,
+      userName: r.user_name || null,
+      userEmail: r.user_email || r.external_email || null,
+      externalEmail: r.external_email || null,
+      isExternal: !r.user_id,
+      role: r.role,
+      rsvpStatus: r.rsvp_status,
+    }));
+
+    // 2. Fetch Agenda Items
+    const agendaRes = await client.query(
+      `SELECT * FROM meeting_agenda_items
+       WHERE meeting_id = $1 AND organisation_id = $2
+       ORDER BY order_index ASC, created_at ASC`,
+      [meetingId, organisationId]
+    );
+    const agendaItems = agendaRes.rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      durationMinutes: r.duration_minutes,
+      orderIndex: r.order_index,
+      description: r.description,
+    }));
+
+    // 3. Confidential Notes & MOM permission check (MTG-005, SEC-009)
+    const isOrganiser = meeting.organiser_id === actorUserId;
+    const canAccessNotes =
+      isOrganiser ||
+      hasPermission(actorPermissions, 'meeting.notes.read') ||
+      hasPermission(actorPermissions, 'meeting.notes.manage');
+
+    // 4. Fetch Discussion Points
+    const discRes = await client.query(
+      `SELECT d.*, u.full_name as author_name, u.email as author_email
+       FROM meeting_discussion_points d
+       JOIN users u ON u.id = d.created_by_id
+       WHERE d.meeting_id = $1 AND d.organisation_id = $2
+       ORDER BY d.order_index ASC, d.created_at ASC`,
+      [meetingId, organisationId]
+    );
+    const discussionPoints = discRes.rows.map(formatDiscussionPoint);
+
+    // 5. Fetch Decisions
+    const decRes = await client.query(
+      `SELECT dec.*, u.full_name as author_name, u.email as author_email
+       FROM meeting_decisions dec
+       JOIN users u ON u.id = dec.created_by_id
+       WHERE dec.meeting_id = $1 AND dec.organisation_id = $2
+       ORDER BY dec.order_index ASC, dec.created_at ASC`,
+      [meetingId, organisationId]
+    );
+    const decisions = decRes.rows.map(formatDecision);
+
+    // 6. Fetch Action Items
+    const actRes = await client.query(
+      `SELECT a.*, u.full_name AS assignee_name, u.email AS assignee_email,
+              ag.title AS agenda_item_title,
+              d.title AS decision_title,
+              t.title AS project_task_title
+       FROM meeting_action_items a
+       JOIN users u ON u.id = a.assignee_id
+       LEFT JOIN meeting_agenda_items ag ON ag.id = a.agenda_item_id
+       LEFT JOIN meeting_decisions d ON d.id = a.decision_id
+       LEFT JOIN tasks t ON t.id = a.project_task_id
+       WHERE a.meeting_id = $1 AND a.organisation_id = $2
+       ORDER BY 
+         CASE a.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 ELSE 5 END,
+         a.due_date ASC NULLS LAST,
+         a.created_at ASC`,
+      [meetingId, organisationId]
+    );
+    const actionItems = actRes.rows.map(formatActionItemRow);
+
+    // 7. Fetch Notes if authorized
+    let notes = null;
+    if (canAccessNotes) {
+      const notesRes = await client.query(
+        `SELECT n.*, u.full_name as author_name, u.email as author_email
+         FROM meeting_notes n
+         JOIN users u ON u.id = n.created_by_id
+         WHERE n.meeting_id = $1 AND n.organisation_id = $2`,
+        [meetingId, organisationId]
+      );
+      if (notesRes.rows.length > 0) {
+        notes = formatNoteRow(notesRes.rows[0]);
+      }
+    }
+
+    // Generate output
+    const safeTitle = (meeting.title || 'meeting')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+      .substring(0, 50) || 'meeting';
+
+    let content;
+    let contentType;
+    let filename;
+
+    if (normalizedFormat === 'markdown') {
+      content = generateMeetingMarkdown({
+        meeting,
+        attendees,
+        agendaItems,
+        discussionPoints,
+        decisions,
+        actionItems,
+        notes,
+        canAccessNotes,
+      });
+      contentType = 'text/markdown; charset=utf-8';
+      filename = `${safeTitle}-minutes.md`;
+    } else {
+      content = generateMeetingPdf({
+        meeting,
+        attendees,
+        agendaItems,
+        discussionPoints,
+        decisions,
+        actionItems,
+        notes,
+        canAccessNotes,
+      });
+      contentType = 'application/pdf';
+      filename = `${safeTitle}-minutes.pdf`;
+    }
+
+    // Record audit event (AUD-001)
+    await recordAuditEvent({
+      organisationId,
+      actorId: actorUserId,
+      action: 'meeting.exported',
+      entityType: 'meeting',
+      entityId: meetingId,
+      metadata: {
+        format: normalizedFormat,
+        includedConfidentialNotes: canAccessNotes,
+      },
+      ipAddress,
+      userAgent,
+      client,
+    });
+
+    return { content, contentType, filename };
   });
 }
 

@@ -27,11 +27,25 @@ import {
   reorderMeetingAgenda,
   getMeetingNotes,
   upsertMeetingNotes,
+  listMeetingDiscussionPoints,
+  createMeetingDiscussionPoint,
+  updateMeetingDiscussionPoint,
+  deleteMeetingDiscussionPoint,
+  reorderMeetingDiscussionPoints,
+  listMeetingDecisions,
+  createMeetingDecision,
+  updateMeetingDecision,
+  deleteMeetingDecision,
+  reorderMeetingDecisions,
   listMeetingActionItems,
   createMeetingActionItem,
   updateMeetingActionItem,
   deleteMeetingActionItem,
+  listOrganisationActionItems,
+  promoteMeetingActionItemToProjectTask,
   sendMeetingInvitations,
+  getMeetingAnalytics,
+  exportMeeting,
 } from '../platform/meetings/meetingService.js';
 import { sendSuccess } from '../platform/common/responses.js';
 import { ValidationError } from '../platform/common/errors.js';
@@ -58,8 +72,8 @@ const createMeetingSchema = z.object({
 const updateMeetingSchema = createMeetingSchema.partial();
 
 const transitionStatusSchema = z.object({
-  status: z.enum(['scheduled', 'in_progress', 'completed', 'cancelled'], {
-    errorMap: () => ({ message: "Status must be one of: 'scheduled', 'in_progress', 'completed', 'cancelled'" }),
+  status: z.enum(['scheduled', 'in_progress', 'completed', 'cancelled', 'missed'], {
+    errorMap: () => ({ message: "Status must be one of: 'scheduled', 'in_progress', 'completed', 'cancelled', 'missed'" }),
   }),
 });
 
@@ -91,6 +105,39 @@ const upsertNotesSchema = z.object({
     .string({ required_error: 'Content is required' })
     .min(1, 'Meeting notes content must be a non-empty string')
     .max(50000, 'Meeting notes content exceeds maximum allowed length of 50,000 characters'),
+  expectedUpdatedAt: z.string().datetime({ offset: true }).or(z.string()).optional(),
+});
+
+const createDiscussionPointSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(255, 'Title cannot exceed 255 characters'),
+  body: z.string().max(50000, 'Body exceeds maximum allowed length of 50,000 characters').optional().default(''),
+});
+
+const updateDiscussionPointSchema = z.object({
+  title: z.string().trim().min(1, 'Title cannot be empty').max(255, 'Title cannot exceed 255 characters').optional(),
+  body: z.string().max(50000, 'Body exceeds maximum allowed length of 50,000 characters').optional(),
+}).refine(data => data.title !== undefined || data.body !== undefined, {
+  message: 'At least one field (title or body) must be provided for update',
+});
+
+const reorderDiscussionPointsSchema = z.object({
+  itemIds: z.array(z.string().uuid('Valid discussion point UUID required')).min(1, 'itemIds cannot be empty'),
+});
+
+const createDecisionSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(255, 'Title cannot exceed 255 characters'),
+  details: z.string().max(50000, 'Details exceed maximum allowed length of 50,000 characters').optional().default(''),
+});
+
+const updateDecisionSchema = z.object({
+  title: z.string().trim().min(1, 'Title cannot be empty').max(255, 'Title cannot exceed 255 characters').optional(),
+  details: z.string().max(50000, 'Details exceed maximum allowed length of 50,000 characters').optional(),
+}).refine(data => data.title !== undefined || data.details !== undefined, {
+  message: 'At least one field (title or details) must be provided for update',
+});
+
+const reorderDecisionsSchema = z.object({
+  itemIds: z.array(z.string().uuid('Valid decision UUID required')).min(1, 'itemIds cannot be empty'),
 });
 
 const createActionItemSchema = z.object({
@@ -100,6 +147,7 @@ const createActionItemSchema = z.object({
   dueDate: z.string().optional().nullable(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
   agendaItemId: z.string().uuid('Valid agenda item UUID is required').optional().nullable(),
+  decisionId: z.string().uuid('Valid decision UUID is required').optional().nullable(),
 });
 
 const updateActionItemSchema = z.object({
@@ -110,6 +158,11 @@ const updateActionItemSchema = z.object({
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   status: z.enum(['open', 'in_progress', 'done', 'cancelled']).optional(),
   agendaItemId: z.string().uuid().optional().nullable(),
+  decisionId: z.string().uuid().optional().nullable(),
+});
+
+const promoteActionItemSchema = z.object({
+  projectId: z.string().uuid('Valid destination project UUID is required'),
 });
 
 const sendInvitesSchema = z
@@ -117,6 +170,14 @@ const sendInvitesSchema = z
     attendeeIds: z.array(z.string().uuid('Valid attendee UUID required')).optional(),
   })
   .optional();
+
+const analyticsQuerySchema = z.object({
+  timeframe: z.enum(['all', '30d', '90d']).default('all'),
+});
+
+const exportQuerySchema = z.object({
+  format: z.enum(['markdown', 'pdf']).default('markdown'),
+});
 
 // -----------------------------------------------------------------------------
 // Module Entitlement & Membership Guard (Fail-Closed Defense-in-Depth)
@@ -170,6 +231,55 @@ meetingsRouter.post(
       );
 
       return sendSuccess(res, 201, { meeting });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.get(
+  '/action-items',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const viewerPermissions = req.membership?.permissions || [];
+      const result = await listOrganisationActionItems(
+        req.organisation.id,
+        req.user.id,
+        viewerPermissions,
+        req.query
+      );
+
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.get(
+  '/analytics',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = analyticsQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid query parameters', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const analytics = await getMeetingAnalytics(
+        req.organisation.id,
+        req.user.id,
+        viewerPermissions,
+        { timeframe: parsed.data.timeframe }
+      );
+
+      return sendSuccess(res, 200, analytics);
     } catch (err) {
       next(err);
     }
@@ -246,6 +356,37 @@ meetingsRouter.post(
       );
 
       return sendSuccess(res, 200, { meeting });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.get(
+  '/:meetingId/export',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = exportQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid query parameters', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const result = await exportMeeting(
+        req.organisation.id,
+        req.params.meetingId,
+        parsed.data.format,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      return res.send(result.content);
     } catch (err) {
       next(err);
     }
@@ -485,7 +626,7 @@ meetingsRouter.put(
 );
 
 // -----------------------------------------------------------------------------
-// 4. Confidential Minutes / Notes Routes (MTG-005)
+// 4. Confidential Minutes / Notes / Structured MOM Routes (MTG-005, Structured MOM)
 // -----------------------------------------------------------------------------
 
 meetingsRouter.get(
@@ -496,14 +637,19 @@ meetingsRouter.get(
   async (req, res, next) => {
     try {
       const viewerPermissions = req.membership?.permissions || [];
-      const notes = await getMeetingNotes(
+      const result = await getMeetingNotes(
         req.organisation.id,
         req.params.meetingId,
         req.user.id,
-        viewerPermissions
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
       );
 
-      return sendSuccess(res, 200, { notes });
+      return sendSuccess(res, 200, {
+        notes: result.notes,
+        discussionPoints: result.discussionPoints,
+        decisions: result.decisions,
+      });
     } catch (err) {
       next(err);
     }
@@ -522,6 +668,11 @@ meetingsRouter.put(
         throw new ValidationError('Validation failed', parsed.error.issues);
       }
 
+      const expectedUpdatedAt =
+        parsed.data.expectedUpdatedAt ||
+        req.headers['if-unmodified-since'] ||
+        undefined;
+
       const viewerPermissions = req.membership?.permissions || [];
       const notes = await upsertMeetingNotes(
         req.organisation.id,
@@ -529,10 +680,284 @@ meetingsRouter.put(
         parsed.data.content,
         req.user.id,
         viewerPermissions,
-        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+        {
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          expectedUpdatedAt,
+        }
       );
 
       return sendSuccess(res, 200, { notes });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// 4.1 Discussion Points Routes
+meetingsRouter.get(
+  '/:meetingId/discussion-points',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const viewerPermissions = req.membership?.permissions || [];
+      const discussionPoints = await listMeetingDiscussionPoints(
+        req.organisation.id,
+        req.params.meetingId,
+        req.user.id,
+        viewerPermissions
+      );
+
+      return sendSuccess(res, 200, { discussionPoints });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.post(
+  '/:meetingId/discussion-points',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = createDiscussionPointSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const discussionPoint = await createMeetingDiscussionPoint(
+        req.organisation.id,
+        req.params.meetingId,
+        parsed.data,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 201, { discussionPoint });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.patch(
+  '/:meetingId/discussion-points/:pointId',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = updateDiscussionPointSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const discussionPoint = await updateMeetingDiscussionPoint(
+        req.organisation.id,
+        req.params.meetingId,
+        req.params.pointId,
+        parsed.data,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, { discussionPoint });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.delete(
+  '/:meetingId/discussion-points/:pointId',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const viewerPermissions = req.membership?.permissions || [];
+      const result = await deleteMeetingDiscussionPoint(
+        req.organisation.id,
+        req.params.meetingId,
+        req.params.pointId,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.put(
+  '/:meetingId/discussion-points/reorder',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = reorderDiscussionPointsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const result = await reorderMeetingDiscussionPoints(
+        req.organisation.id,
+        req.params.meetingId,
+        parsed.data.itemIds,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// 4.2 Decisions Routes
+meetingsRouter.get(
+  '/:meetingId/decisions',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const viewerPermissions = req.membership?.permissions || [];
+      const decisions = await listMeetingDecisions(
+        req.organisation.id,
+        req.params.meetingId,
+        req.user.id,
+        viewerPermissions
+      );
+
+      return sendSuccess(res, 200, { decisions });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.post(
+  '/:meetingId/decisions',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = createDecisionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const decision = await createMeetingDecision(
+        req.organisation.id,
+        req.params.meetingId,
+        parsed.data,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 201, { decision });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.patch(
+  '/:meetingId/decisions/:decisionId',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = updateDecisionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const decision = await updateMeetingDecision(
+        req.organisation.id,
+        req.params.meetingId,
+        req.params.decisionId,
+        parsed.data,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, { decision });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.delete(
+  '/:meetingId/decisions/:decisionId',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const viewerPermissions = req.membership?.permissions || [];
+      const result = await deleteMeetingDecision(
+        req.organisation.id,
+        req.params.meetingId,
+        req.params.decisionId,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.put(
+  '/:meetingId/decisions/reorder',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = reorderDecisionsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const result = await reorderMeetingDecisions(
+        req.organisation.id,
+        req.params.meetingId,
+        parsed.data.itemIds,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, result);
     } catch (err) {
       next(err);
     }
@@ -636,6 +1061,36 @@ meetingsRouter.delete(
         req.organisation.id,
         req.params.meetingId,
         req.params.actionItemId,
+        req.user.id,
+        viewerPermissions,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+meetingsRouter.post(
+  '/:meetingId/action-items/:actionItemId/promote-to-task',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = promoteActionItemSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const viewerPermissions = req.membership?.permissions || [];
+      const result = await promoteMeetingActionItemToProjectTask(
+        req.organisation.id,
+        req.params.meetingId,
+        req.params.actionItemId,
+        parsed.data.projectId,
         req.user.id,
         viewerPermissions,
         { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
