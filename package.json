@@ -16,7 +16,7 @@
     "test:frontend": "npm --prefix frontend test",
     "test": "npm run test:backend && npm run test:frontend",
     "migrate": "node database/migrate.js",
-    "seed": "node backend/scripts/seed_demo.js"
+    "seed": "node database/seed-demo-users.js"
   },
   "engines": {
     "node": ">=20.0.0"

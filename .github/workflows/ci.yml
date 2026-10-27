@@ -1,0 +1,147 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install backend dependencies
+        run: npm --prefix backend install
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install
+
+      - name: Run backend lint
+        run: npm run lint:backend
+
+      - name: Run frontend lint
+        run: npm run lint:frontend
+
+  typecheck:
+    name: Typecheck Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install
+
+      - name: Run frontend typecheck
+        run: npm run typecheck:frontend
+
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: managex
+          POSTGRES_USER: managex_app
+          POSTGRES_PASSWORD: placeholder_password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U managex_app -d managex"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install backend dependencies
+        run: npm --prefix backend install
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://managex_app:placeholder_password@localhost:5432/managex
+        run: npm run migrate
+
+      - name: Seed demo users
+        env:
+          DATABASE_URL: postgresql://managex_app:placeholder_password@localhost:5432/managex
+        run: npm run seed
+
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql://managex_app:placeholder_password@localhost:5432/managex
+          NODE_ENV: test
+          SESSION_SECRET: test_session_secret
+          CSRF_SECRET: test_csrf_secret
+          FRONTEND_ORIGIN: http://localhost:5173
+        run: npm run test:backend
+
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install
+
+      - name: Run frontend tests
+        run: npm run test:frontend
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install
+
+      - name: Run frontend production build
+        run: npm run build:frontend

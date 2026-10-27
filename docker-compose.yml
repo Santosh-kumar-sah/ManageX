@@ -1,0 +1,63 @@
+# ManageX Local Development Environment
+# Spins up PostgreSQL + Backend + Frontend for local development
+
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: managex-postgres
+    environment:
+      POSTGRES_DB: managex
+      POSTGRES_USER: managex_app
+      POSTGRES_PASSWORD: managex_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - managex_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U managex_app -d managex"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: managex-backend
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: postgresql://managex_app:managex_dev_password@postgres:5432/managex
+      SESSION_SECRET: dev_session_secret_change_me_in_production
+      CSRF_SECRET: dev_csrf_secret_change_me_in_production
+      FRONTEND_ORIGIN: http://localhost:5173
+      SMTP_HOST: ""
+      SMTP_PORT: 587
+      SMTP_USER: ""
+      SMTP_PASS: ""
+      EMAIL_FROM: "ManageX <notifications@managex.local>"
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
+    container_name: managex-frontend
+    environment:
+      VITE_API_BASE_URL: /api/v1
+      VITE_APP_ENV: development
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  managex_postgres_data:
