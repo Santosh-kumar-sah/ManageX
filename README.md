@@ -121,3 +121,5 @@ Run workspace-wide linting, typechecking, and tests:
 ---
 
 > **Verification note:** README edit made to test the local → GitHub push workflow.
+>
+> **Test 2:** Second push to validate ruleset enforcement (2026-10-27).
