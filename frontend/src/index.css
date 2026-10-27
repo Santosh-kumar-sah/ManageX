@@ -112,6 +112,8 @@
 
   /* Structural rule — section divider */
   .rule {
-    @apply border-t border-border-subtle mt-8 mb-8;
+    border-top: 1px solid oklch(0.945 0.004 250);
+    margin-top: 2rem;
+    margin-bottom: 2rem;
   }
 }
