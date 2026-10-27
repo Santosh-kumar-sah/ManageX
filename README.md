@@ -117,3 +117,7 @@ Run workspace-wide linting, typechecking, and tests:
   - Meetings module: **Phase 7**
   - Projects & Tasks module: **Phase 8**
   - Platform administration console backend: **Phase 9**
+
+---
+
+> **Verification note:** README edit made to test the local → GitHub push workflow.
