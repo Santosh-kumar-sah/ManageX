@@ -25,6 +25,23 @@ export default {
           DEFAULT: '#e2e8f0',
           strong: '#cbd5e1',
         },
+        // Semantic design tokens (OKLCH-based)
+        background: 'oklch(1 0 0)',
+        foreground: 'oklch(0.19 0.005 263.66)',
+        primary: 'oklch(0.563 0.22 263.66)',
+        'primary-foreground': 'oklch(1 0 0)',
+        secondary: 'oklch(0.975 0.002 263.66)',
+        'secondary-foreground': 'oklch(0.19 0.005 263.66)',
+        muted: 'oklch(0.975 0.002 263.66)',
+        'muted-foreground': 'oklch(0.45 0.005 263.66)',
+        accent: 'oklch(0.975 0.002 263.66)',
+        'accent-foreground': 'oklch(0.19 0.005 263.66)',
+        destructive: 'oklch(0.577 0.245 27.325)',
+        'destructive-foreground': 'oklch(1 0 0)',
+        border: 'oklch(0.889 0.008 263.66)',
+        ring: 'oklch(0.563 0.22 263.66)',
+        card: 'oklch(1 0 0)',
+        'card-foreground': 'oklch(0.19 0.005 263.66)',
       },
       fontFamily: {
         sans: [

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 
 export interface ToastProps {
@@ -10,24 +10,56 @@ export interface ToastProps {
 }
 
 export function Toast({
+  id,
   type = 'success',
   message,
-  durationMs = 3500,
+  durationMs = 5000,
   onClose,
 }: ToastProps) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (durationMs <= 0) return;
-    const timer = setTimeout(() => {
-      onClose();
-    }, durationMs);
 
-    return () => clearTimeout(timer);
+    let startTime = Date.now();
+    let remaining = durationMs;
+    let paused = false;
+
+    const tick = () => {
+      if (!paused && progressRef.current) {
+        const elapsed = Date.now() - startTime;
+        remaining = durationMs - elapsed;
+        const pct = Math.max(0, (remaining / durationMs) * 100);
+        progressRef.current.style.width = `${pct}%`;
+      }
+      if (remaining > 0) {
+        timerRef.current = setTimeout(tick, 50);
+      } else {
+        onClose();
+      }
+    };
+
+    timerRef.current = setTimeout(tick, 50);
+
+    const handleMouseEnter = () => { paused = true; };
+    const handleMouseLeave = () => { paused = false; startTime = Date.now() - (durationMs - remaining); };
+
+    const el = progressRef.current;
+    el?.addEventListener('mouseenter', handleMouseEnter);
+    el?.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      el?.removeEventListener('mouseenter', handleMouseEnter);
+      el?.removeEventListener('mouseleave', handleMouseLeave);
+    };
   }, [durationMs, onClose]);
 
   const icons = {
-    success: <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />,
-    error: <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />,
-    info: <Info className="h-4 w-4 text-brand-600 shrink-0" />,
+    success: <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true" />,
+    error: <AlertCircle className="h-4 w-4 text-red-600 shrink-0" aria-hidden="true" />,
+    info: <Info className="h-4 w-4 text-brand-600 shrink-0" aria-hidden="true" />,
   };
 
   const borderStyles = {
@@ -38,12 +70,21 @@ export function Toast({
 
   return (
     <div
+      id={id}
       role="status"
       aria-live="polite"
-      className={`flex items-center justify-between gap-3 p-3 px-4 rounded-lg border shadow-md transition-all text-sm max-w-md ${borderStyles[type]}`}
+      aria-atomic="true"
+      className={`flex items-center justify-between gap-3 p-3 px-4 rounded-lg border shadow-md transition-all text-sm max-w-md ${borderStyles[type]} relative overflow-hidden`}
       data-testid="toast-notification"
     >
-      <div className="flex items-center gap-2.5">
+      {/* Progress bar */}
+      <div className="absolute top-0 left-0 h-1 bg-white/30" />
+      <div
+        ref={progressRef}
+        className="absolute top-0 left-0 h-1 bg-white transition-all duration-[5000ms] ease-linear w-full"
+      />
+
+      <div className="flex items-center gap-2.5 flex-1">
         {icons[type]}
         <span className="font-medium">{message}</span>
       </div>
@@ -51,7 +92,7 @@ export function Toast({
         type="button"
         onClick={onClose}
         aria-label="Close notification"
-        className="p-1 rounded hover:bg-black/5 text-slate-500 hover:text-slate-800 transition-colors"
+        className="p-1 rounded hover:bg-black/5 text-slate-500 hover:text-slate-800 transition-colors shrink-0"
       >
         <X className="h-3.5 w-3.5" />
       </button>
@@ -62,7 +103,7 @@ export function Toast({
 export function ToastContainer({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-auto"
+      className="fixed bottom-5 right-5 z-[60] flex flex-col gap-2 pointer-events-auto"
       aria-label="Notifications"
     >
       {children}

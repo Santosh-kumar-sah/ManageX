@@ -1,12 +1,25 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 
-export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  variant?: 'default' | 'hover' | 'elevated';
+}
+
+export function Card({ className, variant = 'default', children, ...props }: React.HTMLAttributes<HTMLDivElement> & CardProps) {
+  const baseStyles = 'rounded-lg border border-border bg-white shadow-subtle';
+  const variantStyles = {
+    default: '',
+    hover: 'hover:shadow-card hover:border-brand-200 transition-all duration-200',
+    elevated: 'shadow-card border-transparent',
+  };
+
   return (
     <div
-      className={cn('rounded-lg border border-border bg-white shadow-subtle', className)}
+      className={cn(baseStyles, variantStyles[variant], className)}
       {...props}
-    />
+    >
+      {children}
+    </div>
   );
 }
 
@@ -32,5 +45,5 @@ export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDi
 }
 
 export function CardFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex items-center p-6 pt-0', className)} {...props} />;
+  return <div className={cn('flex items-center gap-2 p-6 pt-0 border-t border-border', className)} {...props} />;
 }

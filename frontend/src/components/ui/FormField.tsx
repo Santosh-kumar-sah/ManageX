@@ -20,6 +20,11 @@ export function FormField({
   className,
   children,
 }: FormFieldProps) {
+  const hasError = Boolean(error);
+  const errorId = htmlFor ? `${htmlFor}-error` : undefined;
+  const helperId = htmlFor ? `${htmlFor}-helper` : undefined;
+  const describedBy = [errorId, helperId].filter(Boolean).join(' ') || undefined;
+
   return (
     <div className={cn('space-y-1.5', className)}>
       {label && (
@@ -31,13 +36,19 @@ export function FormField({
           {required && <span className="ml-1 text-red-500" aria-hidden="true">*</span>}
         </label>
       )}
-      {children}
+      {React.isValidElement(children)
+        ? React.cloneElement(children as React.ReactElement, {
+            id: htmlFor,
+            'aria-describedby': describedBy,
+            'aria-invalid': hasError || undefined,
+          })
+        : children}
       {error ? (
-        <p className="text-xs text-red-600 font-medium" role="alert">
+        <p id={errorId} className="text-xs text-red-600 font-medium" role="alert">
           {error}
         </p>
       ) : helperText ? (
-        <p className="text-xs text-slate-500">{helperText}</p>
+        <p id={helperId} className="text-xs text-slate-500">{helperText}</p>
       ) : null}
     </div>
   );

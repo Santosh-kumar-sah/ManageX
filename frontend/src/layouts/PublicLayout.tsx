@@ -3,6 +3,7 @@ import { Layers, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { ColdStartBanner } from '@/components/ui/ColdStartBanner';
+import { SkipLink } from '@/components/ui/SkipLink';
 import { useAuth } from '@/api/AuthContext';
 import { useOrg } from '@/api/OrgContext';
 
@@ -20,6 +21,7 @@ export function PublicLayout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-subtle">
+      <SkipLink />
       <ColdStartBanner />
 
       {/* Top Header */}

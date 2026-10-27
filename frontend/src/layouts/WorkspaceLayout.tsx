@@ -25,6 +25,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ColdStartBanner } from '@/components/ui/ColdStartBanner';
+import { SkipLink } from '@/components/ui/SkipLink';
 import { apiClient } from '@/api/client';
 import { useAuth } from '@/api/AuthContext';
 import { useOrg } from '@/api/OrgContext';
@@ -270,6 +271,7 @@ export function WorkspaceLayout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-subtle">
+      <SkipLink />
       <ColdStartBanner />
 
       <div className="flex-1 flex">

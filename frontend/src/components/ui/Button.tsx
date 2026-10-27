@@ -6,10 +6,12 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
+  iconLeft?: React.ReactNode;
+  iconRight?: React.ReactNode;
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', isLoading = false, disabled, children, ...props }, ref) => {
+  ({ className, variant = 'primary', size = 'md', isLoading = false, disabled, children, iconLeft, iconRight, ...props }, ref) => {
     const baseStyles = 'inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none';
 
     const variants = {
@@ -35,8 +37,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         aria-disabled={disabled || isLoading ? true : undefined}
         {...props}
       >
-        {isLoading && <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden="true" />}
+        {isLoading && (
+          <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden="true" />
+        )}
+        {iconLeft && !isLoading && <span className="shrink-0">{iconLeft}</span>}
         {children}
+        {iconRight && !isLoading && <span className="shrink-0">{iconRight}</span>}
       </button>
     );
   }

@@ -3,13 +3,14 @@ import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 import { Button } from './Button';
 
-export interface DialogProps {
+interface DialogProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
   description?: string;
   children?: React.ReactNode;
   className?: string;
+  closeOnBackdropClick?: boolean;
 }
 
 export function Dialog({
@@ -19,6 +20,7 @@ export function Dialog({
   description,
   children,
   className,
+  closeOnBackdropClick = true,
 }: DialogProps) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -40,17 +42,21 @@ export function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-dialog flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? 'dialog-title' : undefined}
       aria-describedby={description ? 'dialog-description' : undefined}
+      onClick={closeOnBackdropClick ? (e: React.MouseEvent) => {
+        if (e.target === e.currentTarget) onClose();
+      } : undefined}
     >
       <div
         className={cn(
-          'relative w-full max-w-lg rounded-lg border border-border bg-white p-6 shadow-lg duration-200',
+          'relative w-full max-w-lg rounded-lg border border-border bg-white shadow-dialog duration-200 animate-in zoom-in',
           className
         )}
+        onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
@@ -75,7 +81,7 @@ export function Dialog({
   );
 }
 
-export interface ConfirmDialogProps {
+interface ConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;

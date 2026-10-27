@@ -6,13 +6,15 @@ describe('Toast Component', () => {
   it('renders toast with message, status role, and appropriate styling for success', () => {
     const onClose = vi.fn();
     const html = renderToStaticMarkup(
-      <Toast message="Meeting updated successfully" type="success" onClose={onClose} />
+      <Toast id="toast-1" message="Meeting updated successfully" type="success" onClose={onClose} />
     );
 
     expect(html).toContain('Meeting updated successfully');
     expect(html).toContain('role="status"');
     expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('aria-atomic="true"');
     expect(html).toContain('Close notification');
+    expect(html).toContain('id="toast-1"');
   });
 
   it('renders toast with error variant styling and message', () => {
@@ -34,5 +36,15 @@ describe('Toast Component', () => {
 
     expect(html).toContain('aria-label="Notifications"');
     expect(html).toContain('Item saved');
+  });
+
+  it('renders progress bar element', () => {
+    const onClose = vi.fn();
+    const html = renderToStaticMarkup(
+      <Toast message="Processing" onClose={onClose} />
+    );
+
+    expect(html).toContain('duration-[5000ms]');
+    expect(html).toContain('relative overflow-hidden');
   });
 });
