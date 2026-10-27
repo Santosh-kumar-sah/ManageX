@@ -1,12 +1,6 @@
 import { cn } from '@/lib/utils';
 
-export interface SkipLinkProps {
-  href?: string;
-  label?: string;
-  className?: string;
-}
-
-export function SkipLink({ href = '#main-content', label = 'Skip to main content', className }: SkipLinkProps) {
+export function SkipLink({ href = '#main-content', label = 'Skip to main content', className }: { href?: string; label?: string; className?: string }) {
   return (
     <a
       href={href}

@@ -42,7 +42,7 @@ export function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-dialog flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-dialog flex items-center justify-center p-6 bg-slate-900/35 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? 'dialog-title' : undefined}
@@ -53,29 +53,29 @@ export function Dialog({
     >
       <div
         className={cn(
-          'relative w-full max-w-lg rounded-lg border border-border bg-white shadow-dialog duration-200 animate-in zoom-in',
+          'relative w-full max-w-lg rounded-xl border border-border-strong bg-white shadow-dialog',
           className
         )}
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-sm p-1 text-slate-400 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          className="absolute right-4 top-4 rounded-sm p-1.5 text-slate-500 hover:text-brand-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           aria-label="Close dialog"
         >
           <X className="h-4 w-4" />
         </button>
 
         {title && (
-          <h2 id="dialog-title" className="text-lg font-semibold text-slate-900 mb-1">
+          <h2 id="dialog-title" className="text-lg font-semibold text-foreground mb-1 tracking-tight">
             {title}
           </h2>
         )}
         {description && (
-          <p id="dialog-description" className="text-sm text-slate-500 mb-4">{description}</p>
+          <p id="dialog-description" className="text-sm text-slate-600 mb-5">{description}</p>
         )}
 
-        <div className="mt-2">{children}</div>
+        <div className="mt-2 pb-6">{children}</div>
       </div>
     </div>
   );

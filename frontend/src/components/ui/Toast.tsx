@@ -57,9 +57,9 @@ export function Toast({
   }, [durationMs, onClose]);
 
   const icons = {
-    success: <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true" />,
-    error: <AlertCircle className="h-4 w-4 text-red-600 shrink-0" aria-hidden="true" />,
-    info: <Info className="h-4 w-4 text-brand-600 shrink-0" aria-hidden="true" />,
+    success: <CheckCircle className="h-4 w-4 text-emerald-700 shrink-0" aria-hidden="true" />,
+    error: <AlertCircle className="h-4 w-4 text-red-700 shrink-0" aria-hidden="true" />,
+    info: <Info className="h-4 w-4 text-brand-700 shrink-0" aria-hidden="true" />,
   };
 
   const borderStyles = {
@@ -74,14 +74,14 @@ export function Toast({
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className={`flex items-center justify-between gap-3 p-3 px-4 rounded-lg border shadow-md transition-all text-sm max-w-md ${borderStyles[type]} relative overflow-hidden`}
+      className={`flex items-center justify-between gap-3 p-3 px-4 rounded-lg border shadow-subtle text-sm max-w-md relative overflow-hidden ${borderStyles[type]}`}
       data-testid="toast-notification"
     >
       {/* Progress bar */}
-      <div className="absolute top-0 left-0 h-1 bg-white/30" />
+      <div className="absolute top-0 left-0 h-0.5 bg-current/30" />
       <div
         ref={progressRef}
-        className="absolute top-0 left-0 h-1 bg-white transition-all duration-[5000ms] ease-linear w-full"
+        className="absolute top-0 left-0 h-0.5 bg-current transition-all duration-[5000ms] ease-linear w-full"
       />
 
       <div className="flex items-center gap-2.5 flex-1">

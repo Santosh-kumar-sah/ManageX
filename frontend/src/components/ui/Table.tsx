@@ -20,8 +20,8 @@ export function Table({ className, emptyState, children, ...props }: TableProps)
           <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-slate-50 border border-slate-100">
             <FolderOpen className="h-10 w-10 text-slate-400 stroke-1" />
           </div>
-          <h4 className="text-base font-semibold text-slate-900 mb-1">{'No items found'}</h4>
-          <p className="text-sm text-slate-500 max-w-sm">{emptyState}</p>
+          <h4 className="text-base font-semibold text-foreground mb-1">{'No items found'}</h4>
+          <p className="text-sm text-slate-600 max-w-sm">{emptyState}</p>
         </div>
       ) : (
         <table className={cn('w-full caption-bottom text-sm text-left', className)} {...props}>
@@ -44,7 +44,7 @@ export function TableRow({ className, ...props }: React.HTMLAttributes<HTMLTable
   return (
     <tr
       className={cn(
-        'border-b border-border transition-colors hover:bg-slate-50/50 data-[state=selected]:bg-slate-100',
+        'border-b border-border transition-colors hover:bg-surface-subtle data-[state=selected]:bg-brand-50',
         className
       )}
       {...props}
@@ -57,7 +57,7 @@ export function TableHead({ className, scope = 'col', ...props }: React.ThHTMLAt
     <th
       scope={scope}
       className={cn(
-        'h-10 px-4 text-xs font-semibold uppercase tracking-wider text-slate-500 align-middle [&:has([role=checkbox])]:pr-0',
+        'h-10 px-4 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500 align-middle [&:has([role=checkbox])]:pr-0',
         className
       )}
       {...props}

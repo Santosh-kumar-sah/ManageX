@@ -394,7 +394,7 @@ export function WorkspaceLayout() {
               <>
                 {/* Module-Scoped Navigation */}
                 <div>
-                  <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div className="px-3 mb-2 text-[10px] font-semibold text-slate-500 tracking-[0.06em]">
                     {currentModuleInfo.title}
                   </div>
                   <div className="space-y-1">
@@ -439,7 +439,7 @@ export function WorkspaceLayout() {
 
                 {/* Return to ManageX Platform */}
                 <div className="pt-4 border-t border-border">
-                  <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <div className="px-3 mb-2 text-[10px] font-semibold text-slate-500 tracking-[0.06em]">
                     Platform
                   </div>
                   <Link
@@ -473,7 +473,7 @@ export function WorkspaceLayout() {
                 {/* Modules or Participant Links Section */}
                 {organisations.length > 0 ? (
                   <div>
-                    <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <div className="px-3 mb-2 text-[10px] font-semibold text-slate-500 tracking-[0.06em]">
                       Modules
                     </div>
                     <div className="space-y-1">
@@ -503,7 +503,7 @@ export function WorkspaceLayout() {
                   </div>
                 ) : (
                   <div>
-                    <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <div className="px-3 mb-2 text-[10px] font-semibold text-slate-500 tracking-[0.06em]">
                       Participant Links
                     </div>
                     <div className="space-y-1">
@@ -533,7 +533,7 @@ export function WorkspaceLayout() {
                 {/* Organisation Admin Section */}
                 {adminNav.length > 0 && (
                   <div>
-                    <div className="px-3 mb-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <div className="px-3 mb-2 text-[10px] font-semibold text-slate-500 tracking-[0.06em]">
                       Organisation Admin
                     </div>
                     <div className="space-y-1">

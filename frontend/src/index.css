@@ -6,56 +6,19 @@
   :root {
     color-scheme: light;
 
-    /* Brand tokens - indigo-based, OKLCH-inspired */
-    --color-brand-50: oklch(0.967 0.003 263.66);
-    --color-brand-100: oklch(0.879 0.012 263.66);
-    --color-brand-500: oklch(0.639 0.18 263.66);
-    --color-brand-600: oklch(0.563 0.22 263.66);
-    --color-brand-700: oklch(0.487 0.19 263.66);
-    --color-brand-800: oklch(0.411 0.15 263.66);
-    --color-brand-900: oklch(0.355 0.1 263.66);
-
-    /* Surface tokens */
-    --color-surface-subtle: oklch(0.975 0.002 263.66);
-    --color-surface-default: oklch(1 0 0);
-    --color-surface-card: oklch(1 0 0);
-    --color-surface-overlay: rgba(15, 23, 42, 0.4);
-
-    /* Border tokens */
-    --color-border-subtle: oklch(0.945 0.004 263.66);
-    --color-border-default: oklch(0.889 0.008 263.66);
-    --color-border-strong: oklch(0.811 0.012 263.66);
-
-    /* Semantic tokens */
-    --color-background: oklch(1 0 0);
-    --color-foreground: oklch(0.19 0.005 263.66);
-    --color-primary: oklch(0.563 0.22 263.66);
-    --color-primary-foreground: oklch(1 0 0);
-    --color-secondary: oklch(0.975 0.002 263.66);
-    --color-secondary-foreground: oklch(0.19 0.005 263.66);
-    --color-muted: oklch(0.975 0.002 263.66);
-    --color-muted-foreground: oklch(0.45 0.005 263.66);
-    --color-accent: oklch(0.975 0.002 263.66);
-    --color-accent-foreground: oklch(0.19 0.005 263.66);
-    --color-destructive: oklch(0.577 0.245 27.325);
-    --color-destructive-foreground: oklch(1 0 0);
-    --color-border: oklch(0.889 0.008 263.66);
-    --color-ring: oklch(0.563 0.22 263.66);
-    --color-card: oklch(1 0 0);
-    --color-card-foreground: oklch(0.19 0.005 263.66);
-
     /* Radius tokens */
-    --radius-sm: 0.25rem;
-    --radius-md: 0.375rem;
-    --radius-lg: 0.5rem;
-    --radius-xl: 0.75rem;
+    --radius-sm: 0.125rem;
+    --radius-md: 0.25rem;
+    --radius-lg: 0.375rem;
+    --radius-xl: 0.5rem;
+    --radius-none: 0;
 
-    /* Shadow tokens */
-    --shadow-subtle: 0 1px 2px 0 oklch(0 0 0 / 0.05);
-    --shadow-card: 0 1px 3px 0 oklch(0 0 0 / 0.07), 0 1px 2px -1px oklch(0 0 0 / 0.05);
-    --shadow-dialog: 0 10px 15px -3px oklch(0 0 0 / 0.1), 0 4px 6px -4px oklch(0 0 0 / 0.05);
+    /* Shadow tokens — minimal, borders do the work */
+    --shadow-subtle: 0 1px 0 0 oklch(0 0 0 / 0.04);
+    --shadow-card: 0 1px 2px 0 oklch(0 0 0 / 0.03);
+    --shadow-dialog: 0 20px 25px -5px oklch(0 0 0 / 0.1), 0 10px 10px -5px oklch(0 0 0 / 0.04);
 
-    /* Transition tokens */
+    /* Transition tokens — only on interaction, never decorative */
     --transition-default: 150ms cubic-bezier(0.4, 0, 0.2, 1);
     --transition-fast: 75ms cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -66,12 +29,14 @@
     --z-toast: 400;
   }
 
+  /* Focus-visible — precise, deliberate */
   *:focus-visible {
-    outline: 2px solid oklch(0.563 0.22 263.66);
+    outline: 2px solid oklch(0.45 0.02 250);
     outline-offset: 2px;
+    outline-style: solid;
   }
 
-  /* Reduced motion support */
+  /* Reduced motion — respect user preference */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -83,26 +48,70 @@
     }
   }
 
-  /* Skip link for keyboard navigation */
+  /* Skip link — keyboard navigation */
   .skip-link {
     position: absolute;
-    top: -40px;
+    top: -48px;
     left: 0;
-    background: oklch(0.563 0.22 263.66);
+    background: oklch(0.28 0.015 250);
     color: oklch(1 0 0);
-    padding: 8px 16px;
+    padding: 6px 14px;
     text-decoration: none;
+    font-size: 0.875rem;
     font-weight: 600;
     border-radius: var(--radius-md);
     z-index: var(--z-toast);
     transition: top var(--transition-fast);
+    border: 1px solid oklch(0.87 0.008 250);
   }
 
   .skip-link:focus {
     top: 0;
   }
 
+  /* Selection — accent color */
+  ::selection {
+    background: oklch(0.72 0.16 55 / 0.3);
+    color: oklch(0.22 0.01 250);
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'kern' 1;
+  }
+
+  /* Structural base — no generic decoration */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight text-foreground;
+    letter-spacing: -0.02em;
+  }
+
+  h1 { @apply text-5xl mb-6; }
+  h2 { @apply text-4xl mb-5; }
+  h3 { @apply text-3xl mb-4; }
+  h4 { @apply text-2xl mb-3; }
+
+  p {
+    @apply leading-relaxed;
+  }
+
+  /* Links — underlined, deliberate */
+  a {
+    @apply text-brand-700 transition-colors underline underline-offset-2;
+    text-underline-offset: 2px;
+  }
+  a:hover {
+    @apply text-brand-900;
+  }
+
+  /* Labels — letter-spaced, small, NOT all-caps (generic tell) */
+  .label {
+    @apply text-xs font-medium text-slate-600 mb-1 block;
+    letter-spacing: 0.03em;
+  }
+
+  /* Structural rule — section divider */
+  .rule {
+    @apply border-t border-border-subtle mt-8 mb-8;
   }
 }
