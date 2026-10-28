@@ -13,6 +13,7 @@ import { requireModuleEntitlement } from '../platform/middleware/module.js';
 import {
   createMeeting,
   getMeetingById,
+  getMeetingJoinUrl,
   listMeetings,
   updateMeeting,
   transitionMeetingStatus,
@@ -47,8 +48,9 @@ import {
   getMeetingAnalytics,
   exportMeeting,
 } from '../platform/meetings/meetingService.js';
+import { syncMeetingWithGoogle } from '../platform/integrations/googleMeetService.js';
 import { sendSuccess } from '../platform/common/responses.js';
-import { ValidationError } from '../platform/common/errors.js';
+import { ValidationError, AuthorizationError } from '../platform/common/errors.js';
 
 export const meetingsRouter = Router({ mergeParams: true });
 
@@ -67,6 +69,7 @@ const createMeetingSchema = z.object({
   virtualUrl: z.string().url('Virtual URL must be a valid http/https URL').optional().or(z.literal('')),
   visibility: z.enum(['organisation', 'attendees_only']).default('organisation'),
   organiserId: z.string().uuid('Valid organiser UUID is required').optional(),
+  conferenceProvider: z.enum(['manual', 'google_meet', 'none']).optional(),
 });
 
 const updateMeetingSchema = createMeetingSchema.partial();
@@ -356,6 +359,95 @@ meetingsRouter.post(
       );
 
       return sendSuccess(res, 200, { meeting });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/v1/organisations/:orgId/meetings/:meetingId/sync-google
+ * Explicit on-demand retry endpoint for Google Calendar / Meet synchronization.
+ * Requires: active organisation membership and meeting.edit permission or meeting organiser.
+ */
+meetingsRouter.post(
+  '/:meetingId/sync-google',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  async (req, res, next) => {
+    try {
+      const rawPerms = req.membership?.permissions;
+      const viewerPermissions = Array.isArray(rawPerms)
+        ? rawPerms
+        : (rawPerms instanceof Set ? Array.from(rawPerms) : []);
+      const hasEditPerm =
+        viewerPermissions.includes('meeting.edit') ||
+        viewerPermissions.includes('meeting.status.manage') ||
+        viewerPermissions.includes('org.admin') ||
+        viewerPermissions.includes('org.owner');
+
+      // Check organiser if caller lacks explicit edit permission
+      if (!hasEditPerm) {
+        const meeting = await getMeetingById(
+          req.organisation.id,
+          req.params.meetingId,
+          req.user.id,
+          viewerPermissions
+        );
+        if (meeting.organiserId !== req.user.id) {
+          throw new AuthorizationError(
+            'Permission denied to synchronize Google Meet link. Required: organiser or meeting.edit'
+          );
+        }
+      }
+
+      const syncResult = await syncMeetingWithGoogle({
+        organisationId: req.organisation.id,
+        meetingId: req.params.meetingId,
+        actorUserId: req.user.id,
+      });
+
+      const updatedMeeting = await getMeetingById(
+        req.organisation.id,
+        req.params.meetingId,
+        req.user.id,
+        viewerPermissions
+      );
+
+      return sendSuccess(res, 200, {
+        meeting: updatedMeeting,
+        syncResult,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/v1/organisations/:orgId/meetings/:meetingId/join
+ * Authenticated Join Gateway (Phase 1B.5, Section 10.2).
+ * Validates membership, visibility, terminal state, URL safety, records audit log, and returns virtualUrl.
+ */
+meetingsRouter.get(
+  '/:meetingId/join',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  async (req, res, next) => {
+    try {
+      const rawPerms = req.membership?.permissions;
+      const viewerPermissions = Array.isArray(rawPerms)
+        ? rawPerms
+        : (rawPerms instanceof Set ? Array.from(rawPerms) : []);
+
+      const result = await getMeetingJoinUrl(
+        req.organisation.id,
+        req.params.meetingId,
+        req.user.id,
+        viewerPermissions
+      );
+
+      return sendSuccess(res, 200, result);
     } catch (err) {
       next(err);
     }

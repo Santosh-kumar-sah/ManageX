@@ -3,6 +3,7 @@
  * Strictly adheres to PRD Section 8.1 (MTG-001, MTG-002, MTG-003, MTG-004), docs/security.md, and docs/architecture.md.
  */
 
+import { randomUUID } from 'node:crypto';
 import { withTenantTransaction } from '../database/transaction.js';
 import { recordAuditEvent } from '../audit/auditService.js';
 import { checkModuleEntitlement } from '../modules/moduleService.js';
@@ -20,6 +21,7 @@ import {
   isValidActionItemTransition,
 } from './meetingLifecycle.js';
 import {
+  AppError,
   NotFoundError,
   ValidationError,
   ConflictError,
@@ -29,6 +31,7 @@ import { sendEmail } from '../email/emailService.js';
 import { logger } from '../middleware/logger.js';
 import { generateMeetingPdf } from './pdfGenerator.js';
 import { generateMeetingMarkdown } from './markdownGenerator.js';
+import { syncMeetingWithGoogle } from '../integrations/googleMeetService.js';
 
 function hasPermission(permissions, key) {
   if (!permissions) return false;
@@ -60,6 +63,17 @@ function formatMeetingRow(row) {
     updatedAt: row.updated_at ? row.updated_at.toISOString() : null,
     attendeeCount: row.attendee_count !== undefined ? Number(row.attendee_count) : undefined,
     agendaCount: row.agenda_count !== undefined ? Number(row.agenda_count) : undefined,
+    conferenceProvider: row.conference_provider || 'manual',
+    googleCalendarEventId: row.google_calendar_event_id || null,
+    googleCalendarEtag: row.google_calendar_etag || null,
+    googleConferenceRequestId: row.google_conference_request_id || null,
+    googleSyncStatus: row.google_sync_status || 'none',
+    googleSyncError: row.google_sync_error || null,
+    googleSyncLastAttemptAt: row.google_sync_last_attempt_at
+      ? row.google_sync_last_attempt_at instanceof Date
+        ? row.google_sync_last_attempt_at.toISOString()
+        : new Date(row.google_sync_last_attempt_at).toISOString()
+      : null,
   };
 }
 
@@ -163,6 +177,7 @@ export async function createMeeting(
     virtualUrl,
     visibility = 'organisation',
     organiserId = actorUserId,
+    conferenceProvider: requestedProvider,
   } = data;
 
   const startDate = new Date(startAt);
@@ -190,7 +205,16 @@ export async function createMeeting(
     throw new ValidationError(`Invalid locationType "${locationType}". Allowed: ${MEETING_LOCATION_TYPES.join(', ')}.`);
   }
 
-  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+  // Determine conference provider and sync status
+  let conferenceProvider = requestedProvider;
+  if (!conferenceProvider) {
+    conferenceProvider = locationType === 'in_person' ? 'none' : 'manual';
+  }
+  const isGoogleMeet = conferenceProvider === 'google_meet';
+  const googleSyncStatus = isGoogleMeet ? 'pending_create' : 'none';
+  const googleConferenceRequestId = isGoogleMeet ? randomUUID() : null;
+
+  const meetingRow = await withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
     // 1. Verify organiser exists and is an active member of this organisation
     const memRes = await client.query(
       `SELECT m.id, m.status, u.full_name, u.email
@@ -209,11 +233,13 @@ export async function createMeeting(
       INSERT INTO meetings (
         organisation_id, title, description, start_at, end_at, timezone,
         location_type, location, virtual_url, visibility, status,
-        organiser_id, created_by_id
+        organiser_id, created_by_id, conference_provider, google_sync_status,
+        google_conference_request_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, 'scheduled',
-        $11, $12
+        $11, $12, $13, $14,
+        $15
       ) RETURNING *
     `;
 
@@ -230,6 +256,9 @@ export async function createMeeting(
       visibility,
       organiserId,
       actorUserId,
+      conferenceProvider,
+      googleSyncStatus,
+      googleConferenceRequestId,
     ]);
 
     const createdMeeting = res.rows[0];
@@ -254,6 +283,7 @@ export async function createMeeting(
         startAt: createdMeeting.start_at.toISOString(),
         visibility: createdMeeting.visibility,
         locationType: createdMeeting.location_type,
+        conferenceProvider,
       },
       ipAddress,
       userAgent,
@@ -267,6 +297,29 @@ export async function createMeeting(
 
     return formatMeetingRow(createdMeeting);
   });
+
+  // Stage 2 & 3: Decoupled Google Meet synchronization outside initial DB transaction
+  if (isGoogleMeet) {
+    try {
+      await syncMeetingWithGoogle({
+        organisationId,
+        meetingId: meetingRow.id,
+        actorUserId,
+      });
+
+      const refreshed = await getMeetingById(organisationId, meetingRow.id, actorUserId);
+      if (refreshed) {
+        return refreshed;
+      }
+    } catch (syncErr) {
+      logger.warn(
+        { err: syncErr.message, meetingId: meetingRow.id },
+        'Google Meet creation sync encountered error'
+      );
+    }
+  }
+
+  return meetingRow;
 }
 
 export async function getMeetingById(organisationId, meetingId, viewerUserId, viewerPermissions = []) {
@@ -316,6 +369,111 @@ export async function getMeetingById(organisationId, meetingId, viewerUserId, vi
     }
 
     return formatMeetingRow(meeting);
+  });
+}
+
+/**
+ * Authenticated Join Gateway (Phase 1B.5, Plan Section 10.2).
+ * Validates visibility, terminal lockdown, and URL scheme safety.
+ * Emits audit log and returns sanitized virtual meeting URL without mutating meeting status.
+ *
+ * @param {string} organisationId
+ * @param {string} meetingId
+ * @param {string} viewerUserId
+ * @param {Array<string>|Set<string>} [viewerPermissions=[]]
+ * @returns {Promise<{ virtualUrl: string }>}
+ */
+export async function getMeetingJoinUrl(organisationId, meetingId, viewerUserId, viewerPermissions = []) {
+  return withTenantTransaction({ organisationId, userId: viewerUserId }, async (client) => {
+    // 1. Fetch meeting
+    const query = `
+      SELECT id, organisation_id, visibility, status, virtual_url, organiser_id, conference_provider
+      FROM meetings
+      WHERE id = $1 AND organisation_id = $2
+    `;
+    const res = await client.query(query, [meetingId, organisationId]);
+    if (res.rows.length === 0) {
+      throw new NotFoundError('Meeting not found.', 'MEETING_NOT_FOUND');
+    }
+
+    const meeting = res.rows[0];
+
+    // 2. Visibility Check:
+    // If attendees_only, user must be organiser, active attendee, or meeting admin / org manager
+    if (meeting.visibility === 'attendees_only') {
+      const isOrganiser = meeting.organiser_id === viewerUserId;
+      const hasAdminPerm =
+        hasPermission(viewerPermissions, 'meeting.edit') ||
+        hasPermission(viewerPermissions, 'meeting.status.manage') ||
+        hasPermission(viewerPermissions, 'org.admin') ||
+        hasPermission(viewerPermissions, 'org.owner');
+
+      if (!isOrganiser && !hasAdminPerm) {
+        const attRes = await client.query(
+          `SELECT id FROM meeting_attendees WHERE meeting_id = $1 AND user_id = $2`,
+          [meetingId, viewerUserId]
+        );
+        if (attRes.rows.length === 0) {
+          throw new AuthorizationError(
+            'Access denied. This meeting is restricted to attendees only.',
+            'MEETING_ACCESS_DENIED'
+          );
+        }
+      }
+    }
+
+    // 3. Terminal Lockdown:
+    // If meeting is completed, cancelled, or missed, reject with HTTP 409 MEETING_TERMINAL_STATE
+    if (['completed', 'cancelled', 'missed'].includes(meeting.status)) {
+      throw new AppError(
+        `Cannot join meeting in terminal state: ${meeting.status}`,
+        409,
+        'MEETING_TERMINAL_STATE'
+      );
+    }
+
+    // 4. Virtual URL Existence:
+    if (!meeting.virtual_url || typeof meeting.virtual_url !== 'string' || !meeting.virtual_url.trim()) {
+      throw new NotFoundError(
+        'Virtual meeting link is not available or has not been generated yet.',
+        'MEETING_LINK_NOT_FOUND'
+      );
+    }
+
+    const trimmedUrl = meeting.virtual_url.trim();
+
+    // 5. Scheme Safety:
+    // Validates that virtual_url uses http: or https:. Blocks javascript:, data:, or protocol-relative // URLs.
+    try {
+      const parsedUrl = new URL(trimmedUrl);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        throw new Error('Unsupported protocol');
+      }
+    } catch {
+      throw new AppError(
+        'Invalid virtual URL scheme. Must be a valid HTTP or HTTPS URL.',
+        422,
+        'INVALID_URL_SCHEME'
+      );
+    }
+
+    // 6. Audit Event: Records meeting.joined with actor_id, meeting_id, and timestamp
+    await recordAuditEvent({
+      organisationId,
+      actorId: viewerUserId,
+      action: 'meeting.joined',
+      entityType: 'meeting',
+      entityId: meetingId,
+      metadata: {
+        conferenceProvider: meeting.conference_provider,
+      },
+      client,
+    });
+
+    // 7. Status Invariant: Status remains untouched (e.g. 'scheduled' stays 'scheduled')
+    return {
+      virtualUrl: trimmedUrl,
+    };
   });
 }
 
@@ -458,7 +616,9 @@ export async function updateMeeting(
   actorUserId,
   { ipAddress, userAgent } = {}
 ) {
-  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+  let shouldSync = false;
+
+  const meetingRow = await withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
     // 1. Lock meeting row
     const lockRes = await client.query(
       `SELECT * FROM meetings WHERE id = $1 AND organisation_id = $2 FOR UPDATE`,
@@ -525,12 +685,25 @@ export async function updateMeeting(
     const visibility = updates.visibility !== undefined ? updates.visibility : currentMeeting.visibility;
     const organiserId = updates.organiserId !== undefined ? updates.organiserId : currentMeeting.organiser_id;
 
+    // Detect reschedule for Google Meet synchronization
+    const isReschedule =
+      (updates.startAt && new Date(updates.startAt).getTime() !== new Date(currentMeeting.start_at).getTime()) ||
+      (updates.endAt && new Date(updates.endAt).getTime() !== new Date(currentMeeting.end_at).getTime()) ||
+      (updates.timezone && canonicalizeTimeZone(updates.timezone) !== currentMeeting.timezone) ||
+      (updates.title && updates.title.trim() !== currentMeeting.title);
+
+    let nextGoogleSyncStatus = currentMeeting.google_sync_status;
+    if (currentMeeting.conference_provider === 'google_meet' && isReschedule) {
+      nextGoogleSyncStatus = 'pending_update';
+      shouldSync = true;
+    }
+
     const updateSql = `
       UPDATE meetings
       SET title = $1, description = $2, start_at = $3, end_at = $4, timezone = $5,
           location_type = $6, location = $7, virtual_url = $8, visibility = $9,
-          organiser_id = $10, updated_at = NOW()
-      WHERE id = $11 AND organisation_id = $12
+          organiser_id = $10, google_sync_status = $11, updated_at = NOW()
+      WHERE id = $12 AND organisation_id = $13
       RETURNING *
     `;
 
@@ -545,6 +718,7 @@ export async function updateMeeting(
       virtualUrl,
       visibility,
       organiserId,
+      nextGoogleSyncStatus,
       meetingId,
       organisationId,
     ]);
@@ -592,6 +766,27 @@ export async function updateMeeting(
 
     return formatMeetingRow(res.rows[0]);
   });
+
+  if (shouldSync) {
+    try {
+      await syncMeetingWithGoogle({
+        organisationId,
+        meetingId,
+        actorUserId,
+      });
+      const refreshed = await getMeetingById(organisationId, meetingId, actorUserId);
+      if (refreshed) {
+        return refreshed;
+      }
+    } catch (syncErr) {
+      logger.warn(
+        { err: syncErr.message, meetingId },
+        'Google Meet reschedule sync encountered error'
+      );
+    }
+  }
+
+  return meetingRow;
 }
 
 export async function transitionMeetingStatus(
@@ -605,7 +800,9 @@ export async function transitionMeetingStatus(
     throw new ValidationError(`Invalid meeting status "${nextStatus}". Allowed: ${MEETING_STATUSES.join(', ')}.`);
   }
 
-  return withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
+  let shouldDeleteGoogleEvent = false;
+
+  const meetingRow = await withTenantTransaction({ organisationId, userId: actorUserId }, async (client) => {
     // 1. Lock meeting row
     const lockRes = await client.query(
       `SELECT * FROM meetings WHERE id = $1 AND organisation_id = $2 FOR UPDATE`,
@@ -636,15 +833,21 @@ export async function transitionMeetingStatus(
       }
     }
 
+    let nextGoogleSyncStatus = meeting.google_sync_status;
+    if (nextStatus === 'cancelled' && meeting.conference_provider === 'google_meet') {
+      nextGoogleSyncStatus = 'pending_delete';
+      shouldDeleteGoogleEvent = true;
+    }
+
     // 3. Update status
     const updateSql = `
       UPDATE meetings
-      SET status = $1, updated_at = NOW()
-      WHERE id = $2 AND organisation_id = $3
+      SET status = $1, google_sync_status = $2, updated_at = NOW()
+      WHERE id = $3 AND organisation_id = $4
       RETURNING *
     `;
 
-    const res = await client.query(updateSql, [nextStatus, meetingId, organisationId]);
+    const res = await client.query(updateSql, [nextStatus, nextGoogleSyncStatus, meetingId, organisationId]);
 
     // Dispatch cancellation email notifications (MTG-007)
     if (nextStatus === 'cancelled') {
@@ -689,6 +892,27 @@ export async function transitionMeetingStatus(
 
     return formatMeetingRow(res.rows[0]);
   });
+
+  if (shouldDeleteGoogleEvent) {
+    try {
+      await syncMeetingWithGoogle({
+        organisationId,
+        meetingId,
+        actorUserId,
+      });
+      const refreshed = await getMeetingById(organisationId, meetingId, actorUserId);
+      if (refreshed) {
+        return refreshed;
+      }
+    } catch (syncErr) {
+      logger.warn(
+        { err: syncErr.message, meetingId },
+        'Google Meet cancellation sync encountered error'
+      );
+    }
+  }
+
+  return meetingRow;
 }
 
 // -----------------------------------------------------------------------------

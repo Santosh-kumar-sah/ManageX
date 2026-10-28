@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +12,8 @@ import { ShieldAlert, ArrowRightLeft, LogOut } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import { useOrg } from '@/api/OrgContext';
 import { useAuth } from '@/api/AuthContext';
+import { cn } from '@/lib/utils';
+import { IntegrationsSettingsTab } from './settings/IntegrationsSettingsTab';
 
 interface MemberCandidate {
   userId: string;
@@ -27,10 +29,22 @@ interface MemberCandidate {
 export function OrgSettingsPage() {
   const { orgId } = useParams<{ orgId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { activeOrg, activeDetails, refreshOrganisations } = useOrg();
   const { user } = useAuth();
 
   const effectiveOrgId = orgId && orgId !== 'default' ? orgId : activeOrg?.id;
+  const activeTab = searchParams.get('tab') === 'integrations' ? 'integrations' : 'general';
+
+  function handleTabChange(tab: 'general' | 'integrations') {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'general') {
+      next.delete('tab');
+    } else {
+      next.set('tab', 'integrations');
+    }
+    setSearchParams(next);
+  }
 
   // Form states
   const [name, setName] = useState(activeOrg?.name || '');
@@ -201,19 +215,54 @@ export function OrgSettingsPage() {
         </p>
       </div>
 
-      {nameSuccess && (
-        <Alert variant="success" title="Success">
-          {nameSuccess}
-        </Alert>
-      )}
+      {/* Tabs Navigation */}
+      <div className="flex border-b border-slate-200 gap-6">
+        <button
+          type="button"
+          onClick={() => handleTabChange('general')}
+          className={cn(
+            'pb-3 text-sm font-medium border-b-2 transition-colors',
+            activeTab === 'general'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+          )}
+        >
+          General
+        </button>
+        <button
+          type="button"
+          onClick={() => handleTabChange('integrations')}
+          className={cn(
+            'pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5',
+            activeTab === 'integrations'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+          )}
+        >
+          Integrations
+        </button>
+      </div>
 
-      {transferSuccess && (
-        <Alert variant="success" title="Ownership Transferred">
-          {transferSuccess}
-        </Alert>
-      )}
+      {activeTab === 'integrations' ? (
+        <IntegrationsSettingsTab
+          effectiveOrgId={effectiveOrgId || ''}
+          canEdit={canEdit}
+        />
+      ) : (
+        <>
+          {nameSuccess && (
+            <Alert variant="success" title="Success">
+              {nameSuccess}
+            </Alert>
+          )}
 
-      {/* General Settings Card */}
+          {transferSuccess && (
+            <Alert variant="success" title="Ownership Transferred">
+              {transferSuccess}
+            </Alert>
+          )}
+
+          {/* General Settings Card */}
       <Card>
         <form onSubmit={handleUpdateName}>
           <CardHeader className="p-5 pb-3">
@@ -325,6 +374,8 @@ export function OrgSettingsPage() {
           </div>
         </CardContent>
       </Card>
+      </>
+      )}
 
       {/* Step-Up Ownership Transfer Dialog (ORG-008) */}
       <Dialog

@@ -1909,4 +1909,112 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
     expect(html).toContain('data-testid="mom-action-summary"');
     expect(html).toContain('1 of 1 actionable completed · 1 cancelled');
   });
+
+  describe('Phase 1B.5 — Google Meet Sync Banners & Badges', () => {
+    it('renders pending sync banner when googleSyncStatus is pending_create', () => {
+      setupContexts();
+      const html = renderToStaticMarkup(
+        <MemoryRouter initialEntries={['/app/organisations/org-tech-corp/meetings/meet-101']}>
+          <Routes>
+            <Route
+              path="/app/organisations/:orgId/meetings/:meetingId"
+              element={
+                <MeetingDetailPage
+                  initialMeeting={{
+                    ...sampleMeeting,
+                    conferenceProvider: 'google_meet',
+                    googleSyncStatus: 'pending_create',
+                  }}
+                  initialLoading={false}
+                />
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      expect(html).toContain('data-testid="sync-pending-banner"');
+      expect(html).toContain('Generating Google Meet');
+    });
+
+    it('renders failed sync banner and retry CTA when googleSyncStatus is failed_create', () => {
+      setupContexts();
+      const html = renderToStaticMarkup(
+        <MemoryRouter initialEntries={['/app/organisations/org-tech-corp/meetings/meet-101']}>
+          <Routes>
+            <Route
+              path="/app/organisations/:orgId/meetings/:meetingId"
+              element={
+                <MeetingDetailPage
+                  initialMeeting={{
+                    ...sampleMeeting,
+                    conferenceProvider: 'google_meet',
+                    googleSyncStatus: 'failed_create',
+                  }}
+                  initialLoading={false}
+                />
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      expect(html).toContain('data-testid="sync-failed-banner"');
+      expect(html).toContain('Google Meet synchronization failed');
+      expect(html).toContain('data-testid="retry-sync-cta"');
+    });
+
+    it('renders abandoned sync banner when googleSyncStatus is abandoned', () => {
+      setupContexts();
+      const html = renderToStaticMarkup(
+        <MemoryRouter initialEntries={['/app/organisations/org-tech-corp/meetings/meet-101']}>
+          <Routes>
+            <Route
+              path="/app/organisations/:orgId/meetings/:meetingId"
+              element={
+                <MeetingDetailPage
+                  initialMeeting={{
+                    ...sampleMeeting,
+                    conferenceProvider: 'google_meet',
+                    googleSyncStatus: 'abandoned',
+                  }}
+                  initialLoading={false}
+                />
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      expect(html).toContain('data-testid="sync-abandoned-banner"');
+      expect(html).toContain('Google Workspace connection expired or revoked');
+    });
+
+    it('renders google-meet-synced-badge when conferenceProvider is google_meet and meeting has virtualUrl', () => {
+      setupContexts();
+      const html = renderToStaticMarkup(
+        <MemoryRouter initialEntries={['/app/organisations/org-tech-corp/meetings/meet-101']}>
+          <Routes>
+            <Route
+              path="/app/organisations/:orgId/meetings/:meetingId"
+              element={
+                <MeetingDetailPage
+                  initialMeeting={{
+                    ...sampleMeeting,
+                    conferenceProvider: 'google_meet',
+                    googleSyncStatus: 'synced',
+                    virtualUrl: 'https://meet.google.com/xyz-abc-def',
+                  }}
+                  initialLoading={false}
+                />
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      expect(html).toContain('data-testid="google-meet-synced-badge"');
+      expect(html).toContain('Join Google Meet');
+    });
+  });
 });

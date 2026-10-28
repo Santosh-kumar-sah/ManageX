@@ -216,6 +216,10 @@ export function MeetingDetailPage({
   const [isSendingInvites, setIsSendingInvites] = useState(false);
   const [inviteStatusMessage, setInviteStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Google Meet sync & join states (Phase 1B.5)
+  const [isJoining, setIsJoining] = useState(false);
+  const [isRetryingSync, setIsRetryingSync] = useState(false);
+
   // Organisation members for searchable member picker
   const [orgMembers, setOrgMembers] = useState<Array<{ userId: string; fullName: string; email: string; status: string }>>([]);
 
@@ -1222,6 +1226,50 @@ export function MeetingDetailPage({
     });
   };
 
+  const handleJoinMeeting = async () => {
+    if (!meeting || !effectiveOrgId) return;
+    try {
+      setIsJoining(true);
+      const res = await apiClient<{ virtualUrl: string }>(
+        `/organisations/${effectiveOrgId}/meetings/${meeting.id}/join`
+      );
+      if (res.data?.virtualUrl) {
+        window.open(res.data.virtualUrl, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setToast({ type: 'error', message: err.message });
+      } else {
+        setToast({ type: 'error', message: 'Failed to join meeting. Please try again.' });
+      }
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const handleRetrySync = async () => {
+    if (!meeting || !effectiveOrgId) return;
+    try {
+      setIsRetryingSync(true);
+      const res = await apiClient<{ meeting: MeetingItem }>(
+        `/organisations/${effectiveOrgId}/meetings/${meeting.id}/sync-google`,
+        { method: 'POST' }
+      );
+      if (res.data?.meeting) {
+        setMeeting(res.data.meeting);
+        setToast({ type: 'success', message: 'Google Meet link generated successfully.' });
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setToast({ type: 'error', message: err.message });
+      } else {
+        setToast({ type: 'error', message: 'Failed to retry Google Meet sync.' });
+      }
+    } finally {
+      setIsRetryingSync(false);
+    }
+  };
+
   // Export MOM in Markdown or PDF
   const handleExport = async (format: 'markdown' | 'pdf') => {
     if (!effectiveOrgId || !meetingId || isExporting) return;
@@ -1547,6 +1595,65 @@ export function MeetingDetailPage({
             </Alert>
           )}
 
+          {/* Google Meet Synchronization Banners (Phase 1B.5) */}
+          {meeting.conferenceProvider === 'google_meet' && (
+            <div className="space-y-2">
+              {(meeting.googleSyncStatus === 'pending_create' || meeting.googleSyncStatus === 'pending_update') && (
+                <div
+                  className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-900"
+                  data-testid="sync-pending-banner"
+                >
+                  <div className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
+                  <span>Generating Google Meet conferencing link...</span>
+                </div>
+              )}
+
+              {(meeting.googleSyncStatus === 'failed_create' || meeting.googleSyncStatus === 'failed_reschedule') && (
+                <div
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900"
+                  data-testid="sync-failed-banner"
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-semibold">Google Meet synchronization failed</p>
+                      <p className="text-amber-700 mt-0.5">
+                        {meeting.googleSyncError || 'Unable to provision Google Meet conference link with Google Calendar.'}
+                      </p>
+                    </div>
+                  </div>
+                  {canEditMeeting && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isRetryingSync}
+                      onClick={handleRetrySync}
+                      className="shrink-0 bg-white border-amber-300 text-amber-800 hover:bg-amber-100"
+                      data-testid="retry-sync-cta"
+                    >
+                      {isRetryingSync ? 'Retrying...' : 'Retry Link'}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {meeting.googleSyncStatus === 'abandoned' && (
+                <div
+                  className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900"
+                  data-testid="sync-abandoned-banner"
+                >
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Google Workspace connection expired or revoked</p>
+                    <p className="text-amber-700 mt-0.5">
+                      The organisation Google integration credentials must be re-authenticated in Settings &gt; Integrations.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Timing & Location Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-4 border-t border-slate-100 text-sm">
             <div className="space-y-1">
@@ -1583,16 +1690,31 @@ export function MeetingDetailPage({
                   )}
                   {meeting.virtualUrl && (
                     !isTerminal ? (
-                      <a
-                        href={meeting.virtualUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-brand-600 hover:underline flex items-center gap-1 mt-0.5 font-medium"
-                        data-testid="join-meeting-cta"
-                      >
-                        Join Virtual Meeting
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <a
+                          href={meeting.virtualUrl}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleJoinMeeting();
+                          }}
+                          className={`text-xs text-brand-600 hover:underline flex items-center gap-1 font-medium text-left cursor-pointer ${
+                            isJoining ? 'opacity-50 pointer-events-none' : ''
+                          }`}
+                          data-testid="join-meeting-cta"
+                        >
+                          {meeting.conferenceProvider === 'google_meet' ? 'Join Google Meet' : 'Join Virtual Meeting'}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                        {meeting.conferenceProvider === 'google_meet' && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            data-testid="google-meet-synced-badge"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Google Meet
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <div className="mt-1 space-y-0.5" data-testid="terminal-link-container">
                         <span

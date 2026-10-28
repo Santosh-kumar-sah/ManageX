@@ -62,6 +62,7 @@ import { listOrganisationAuditLogs } from '../platform/audit/auditService.js';
 import { eventsRouter } from './events.js';
 import { meetingsRouter } from './meetings.js';
 import { projectsRouter } from './projects.js';
+import { orgIntegrationsRouter } from './integrations.js';
 import { listMyTasks } from '../platform/projects/projectService.js';
 import { sendSuccess } from '../platform/common/responses.js';
 import { ValidationError } from '../platform/common/errors.js';
@@ -547,4 +548,10 @@ organisationsRouter.get(
     }
   }
 );
+
+// -----------------------------------------------------------------------------
+// 18. Integrations Router (Phase 1B.3: Google Workspace / Meet)
+// -----------------------------------------------------------------------------
+organisationsRouter.use('/:orgId/integrations', orgIntegrationsRouter);
+
 

@@ -3,6 +3,17 @@ export type MeetingLocationType = 'in_person' | 'virtual' | 'hybrid';
 export type MeetingVisibility = 'organisation' | 'attendees_only';
 export type AttendeeRole = 'organiser' | 'participant' | 'guest';
 export type RsvpStatus = 'pending' | 'accepted' | 'declined' | 'tentative';
+export type ConferenceProvider = 'manual' | 'google_meet' | 'none';
+export type GoogleSyncStatus =
+  | 'none'
+  | 'synced'
+  | 'pending_create'
+  | 'failed_create'
+  | 'pending_update'
+  | 'failed_reschedule'
+  | 'pending_delete'
+  | 'failed_cancel'
+  | 'abandoned';
 
 export interface MeetingItem {
   id: string;
@@ -25,6 +36,13 @@ export interface MeetingItem {
   organiserEmail?: string | null;
   attendeeCount?: number;
   agendaCount?: number;
+  conferenceProvider?: ConferenceProvider;
+  googleCalendarEventId?: string | null;
+  googleCalendarEtag?: string | null;
+  googleConferenceRequestId?: string | null;
+  googleSyncStatus?: GoogleSyncStatus;
+  googleSyncError?: string | null;
+  googleSyncLastAttemptAt?: string | null;
 }
 
 export interface MeetingAttendee {

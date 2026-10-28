@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Video } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -34,6 +35,45 @@ export function ScheduleMeetingDialog({
   const [location, setLocation] = useState('');
   const [virtualUrl, setVirtualUrl] = useState('');
   const [visibility, setVisibility] = useState<MeetingVisibility>('organisation');
+  const [conferenceProvider, setConferenceProvider] = useState<'google_meet' | 'manual'>('manual');
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+  const [isLoadingIntegration, setIsLoadingIntegration] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && orgId) {
+      let isMounted = true;
+      setIsLoadingIntegration(true);
+      apiClient<{ status: string; isConnected?: boolean }>(
+        `/organisations/${orgId}/integrations/google/status`
+      )
+        .then((res) => {
+          if (isMounted) {
+            const connected = res.data?.status === 'connected';
+            setIsGoogleConnected(connected);
+            if (connected) {
+              setConferenceProvider('google_meet');
+            } else {
+              setConferenceProvider('manual');
+            }
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setIsGoogleConnected(false);
+            setConferenceProvider('manual');
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsLoadingIntegration(false);
+          }
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [isOpen, orgId]);
 
   const getDefaultDates = () => {
     const tomorrow = new Date();
@@ -65,6 +105,7 @@ export function ScheduleMeetingDialog({
     setLocation('');
     setVirtualUrl('');
     setVisibility('organisation');
+    setConferenceProvider(isGoogleConnected ? 'google_meet' : 'manual');
     setDateTimes(getDefaultDates());
     setErrorMsg(null);
   };
@@ -101,13 +142,22 @@ export function ScheduleMeetingDialog({
       return;
     }
 
-    if ((locationType === 'virtual' || locationType === 'hybrid') && !virtualUrl.trim()) {
-      setErrorMsg('Virtual meeting URL is required for virtual or hybrid meetings.');
-      return;
+    if (locationType === 'virtual' || locationType === 'hybrid') {
+      if (conferenceProvider === 'manual' && !virtualUrl.trim()) {
+        setErrorMsg('Virtual meeting URL is required for manual link meetings.');
+        return;
+      }
     }
 
     try {
       setIsSubmitting(true);
+
+      let finalConferenceProvider: 'manual' | 'google_meet' | 'none' = 'none';
+      if (locationType === 'virtual' || locationType === 'hybrid') {
+        finalConferenceProvider = conferenceProvider === 'google_meet' && isGoogleConnected
+          ? 'google_meet'
+          : 'manual';
+      }
 
       const payload = {
         title: title.trim(),
@@ -117,8 +167,9 @@ export function ScheduleMeetingDialog({
         timezone,
         locationType,
         location: locationType !== 'virtual' ? location.trim() : undefined,
-        virtualUrl: locationType !== 'in_person' ? virtualUrl.trim() : undefined,
+        virtualUrl: (locationType !== 'in_person' && finalConferenceProvider === 'manual') ? virtualUrl.trim() : undefined,
         visibility,
+        conferenceProvider: finalConferenceProvider,
       };
 
       const res = await apiClient<{ meeting: MeetingItem }>(
@@ -248,7 +299,7 @@ export function ScheduleMeetingDialog({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-1">
+          <div className={(locationType === 'in_person' || locationType === 'hybrid') ? 'md:col-span-1' : 'col-span-full'}>
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Location Type <span className="text-red-500">*</span>
             </label>
@@ -276,22 +327,106 @@ export function ScheduleMeetingDialog({
               />
             </div>
           )}
-
-          {(locationType === 'virtual' || locationType === 'hybrid') && (
-            <div className={locationType === 'hybrid' ? 'col-span-full' : 'md:col-span-2'}>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Virtual Meeting URL <span className="text-red-500">*</span>
-              </label>
-              <Input
-                type="url"
-                value={virtualUrl}
-                onChange={(e) => setVirtualUrl(e.target.value)}
-                placeholder="https://meet.google.com/xyz-abc or Zoom URL"
-                required
-              />
-            </div>
-          )}
         </div>
+
+        {(locationType === 'virtual' || locationType === 'hybrid') && (
+          <div className="space-y-3 pt-1">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Conferencing Provider <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  disabled={!isGoogleConnected}
+                  onClick={() => setConferenceProvider('google_meet')}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-all ${
+                    conferenceProvider === 'google_meet' && isGoogleConnected
+                      ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600 text-slate-900'
+                      : isGoogleConnected
+                      ? 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
+                      : 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed text-slate-400'
+                  }`}
+                  data-testid="provider-google-meet-option"
+                >
+                  <Video
+                    className={`h-4 w-4 mt-0.5 shrink-0 ${
+                      conferenceProvider === 'google_meet' && isGoogleConnected
+                        ? 'text-indigo-600'
+                        : 'text-slate-400'
+                    }`}
+                  />
+                  <div>
+                    <div className="text-sm font-medium flex items-center gap-1.5">
+                      Google Meet (Automatic)
+                      {!isGoogleConnected && !isLoadingIntegration && (
+                        <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-500 bg-slate-200/70 px-1.5 py-0.5 rounded">
+                          Not connected
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {isGoogleConnected
+                        ? 'A Google Meet link will be generated automatically.'
+                        : 'Requires Google Workspace connection in Organisation Settings.'}
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConferenceProvider('manual')}
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-all ${
+                    conferenceProvider === 'manual'
+                      ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600 text-slate-900'
+                      : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
+                  }`}
+                  data-testid="provider-manual-option"
+                >
+                  <div className="h-4 w-4 mt-0.5 shrink-0 flex items-center justify-center font-bold text-xs text-slate-500">
+                    🔗
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium">Manual Link</div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Paste an existing Zoom, Microsoft Teams, or custom URL.
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {conferenceProvider === 'google_meet' && isGoogleConnected ? (
+              <div
+                className="p-3 bg-indigo-50/60 rounded-md border border-indigo-100 text-xs text-indigo-900 space-y-1"
+                data-testid="google-meet-provisioning-notice"
+              >
+                <p className="font-medium flex items-center gap-1.5">
+                  <Video className="h-3.5 w-3.5 text-indigo-600" />
+                  Automatic Meeting Provisioning
+                </p>
+                <p className="text-indigo-700">
+                  ManageX will provision a video conference container on the organisation's Google Calendar.
+                  Attendee emails are not shared with Google; participants join securely through ManageX.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Virtual Meeting URL <span className="text-red-500">*</span>
+                </label>
+                <Input
+                  type="url"
+                  value={virtualUrl}
+                  onChange={(e) => setVirtualUrl(e.target.value)}
+                  placeholder="https://meet.google.com/xyz-abc or Zoom URL"
+                  required={conferenceProvider === 'manual'}
+                  data-testid="manual-virtual-url-input"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
           <Button type="button" variant="ghost" onClick={handleClose}>
