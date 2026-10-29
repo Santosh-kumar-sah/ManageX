@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
+import { AiAgendaDraftModal } from './AiAgendaDraftModal';
+import { AiNotesSummaryModal } from './AiNotesSummaryModal';
+import { AiActionItemsModal } from './AiActionItemsModal';
 import { Card, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -133,6 +136,9 @@ export function MeetingDetailPage({
 
   // Dialog states
   const [isAddAgendaOpen, setIsAddAgendaOpen] = useState(false);
+  const [isAiAgendaOpen, setIsAiAgendaOpen] = useState(false);
+  const [isAiSummaryOpen, setIsAiSummaryOpen] = useState(false);
+  const [isAiActionsOpen, setIsAiActionsOpen] = useState(false);
   const [agendaTitle, setAgendaTitle] = useState('');
   const [agendaDescription, setAgendaDescription] = useState('');
   const [agendaDuration, setAgendaDuration] = useState<number | ''>('');
@@ -692,19 +698,19 @@ export function MeetingDetailPage({
   };
 
   // Save Confidential Minutes (MTG-005, SEC-009 Optimistic Locking)
-  const handleSaveNotes = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!effectiveOrgId || !meetingId || !notesContent.trim()) return;
+  const handleSaveNotesContent = async (newContent: string, expectedUpdatedAt?: string): Promise<boolean> => {
+    if (!effectiveOrgId || !meetingId) return false;
 
     try {
       setIsSavingNotes(true);
       setNotesMessage(null);
 
       const requestBody: { content: string; expectedUpdatedAt?: string } = {
-        content: notesContent.trim(),
+        content: newContent.trim(),
       };
-      if (notes?.updatedAt) {
-        requestBody.expectedUpdatedAt = notes.updatedAt;
+      const versionToExpect = expectedUpdatedAt !== undefined ? expectedUpdatedAt : notes?.updatedAt;
+      if (versionToExpect) {
+        requestBody.expectedUpdatedAt = versionToExpect;
       }
 
       const res = await apiClient<{ notes: MeetingNotes }>(
@@ -719,7 +725,9 @@ export function MeetingDetailPage({
         setNotes(res.data.notes);
         setNotesContent(res.data.notes.content);
         setToast({ type: 'success', message: 'Confidential minutes saved successfully.' });
+        return true;
       }
+      return false;
     } catch (err) {
       if (err instanceof ApiError && (err.statusCode === 409 || err.code === 'CONCURRENT_MODIFICATION')) {
         // Crucial: preserve user's typed unsaved draft in notesContent without discarding!
@@ -731,14 +739,26 @@ export function MeetingDetailPage({
           type: 'error',
           message: 'Conflict: Meeting notes were updated by another user. Your edits have been preserved.',
         });
+        throw err;
       } else {
         setNotesMessage({
           type: 'error',
           text: err instanceof ApiError ? err.message : 'Failed to save confidential minutes.',
         });
+        throw err;
       }
     } finally {
       setIsSavingNotes(false);
+    }
+  };
+
+  const handleSaveNotes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!effectiveOrgId || !meetingId || !notesContent.trim()) return;
+    try {
+      await handleSaveNotesContent(notesContent);
+    } catch {
+      // Error is caught and displayed by handleSaveNotesContent
     }
   };
 
@@ -1879,15 +1899,27 @@ export function MeetingDetailPage({
             </div>
 
             {canEditMeeting && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAddAgendaOpen(true)}
-                className="flex items-center gap-1.5"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Agenda Item
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAiAgendaOpen(true)}
+                  className="flex items-center gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  data-testid="open-ai-agenda-btn"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                  Generate with AI
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddAgendaOpen(true)}
+                  className="flex items-center gap-1.5"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Agenda Item
+                </Button>
+              </div>
             )}
           </div>
 
@@ -2141,6 +2173,19 @@ export function MeetingDetailPage({
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-slate-500">
+                  {canManageNotes && meeting.status !== 'cancelled' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      onClick={() => setIsAiSummaryOpen(true)}
+                      className="flex items-center gap-1.5 text-xs text-brand-700 border-brand-300 hover:bg-brand-50"
+                      data-testid="open-ai-notes-summary-btn"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+                      Summarize Notes with AI
+                    </Button>
+                  )}
                   {canManageNotes && meeting.status !== 'cancelled' ? (
                     <Badge variant="brand">Edit Mode</Badge>
                   ) : (
@@ -2456,15 +2501,27 @@ export function MeetingDetailPage({
                     </div>
 
                     {canManageActions && meeting.status !== 'cancelled' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setIsAddActionOpen(true)}
-                        className="flex items-center gap-1.5 text-xs"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Add Action Item
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsAiActionsOpen(true)}
+                          className="flex items-center gap-1.5 text-xs"
+                          data-testid="mom-ai-action-btn"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+                          Extract with AI
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsAddActionOpen(true)}
+                          className="flex items-center gap-1.5 text-xs"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Add Action Item
+                        </Button>
+                      </div>
                     )}
                   </div>
 
@@ -2571,16 +2628,31 @@ export function MeetingDetailPage({
                       </p>
                     </div>
 
-                    {notes && (
-                      <div className="text-right text-xs text-slate-500">
-                        <span>Author: <strong>{notes.authorName || notes.authorEmail || 'Organiser'}</strong></span>
-                        {notes.updatedAt && (
-                          <p className="text-slate-400">
-                            Last updated: {new Date(notes.updatedAt).toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {canManageNotes && meeting.status !== 'cancelled' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          type="button"
+                          onClick={() => setIsAiSummaryOpen(true)}
+                          className="flex items-center gap-1.5 text-xs text-brand-700 border-brand-300 hover:bg-brand-50"
+                          data-testid="open-ai-notes-summary-section4-btn"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+                          Summarize with AI
+                        </Button>
+                      )}
+                      {notes && (
+                        <div className="text-right text-xs text-slate-500">
+                          <span>Author: <strong>{notes.authorName || notes.authorEmail || 'Organiser'}</strong></span>
+                          {notes.updatedAt && (
+                            <p className="text-slate-400">
+                              Last updated: {new Date(notes.updatedAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {notesMessage && (
@@ -2640,16 +2712,28 @@ export function MeetingDetailPage({
             </p>
 
             {canManageActions && !isTerminal && actionItems.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsAddActionOpen(true)}
-                className="flex items-center gap-1.5"
-                data-testid="header-add-action-btn"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Action Item
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAiActionsOpen(true)}
+                  className="flex items-center gap-1.5"
+                  data-testid="header-ai-action-btn"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+                  Extract with AI
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddActionOpen(true)}
+                  className="flex items-center gap-1.5"
+                  data-testid="header-add-action-btn"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Action Item
+                </Button>
+              </div>
             )}
           </div>
 
@@ -2691,16 +2775,27 @@ export function MeetingDetailPage({
                   Capture post-meeting tasks, assign responsibilities to active team members, and track status.
                 </CardDescription>
                 {canManageActions && !isTerminal && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() => setIsAddActionOpen(true)}
-                    data-testid="empty-add-action-btn"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Action Item
-                  </Button>
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsAiActionsOpen(true)}
+                      className="flex items-center gap-1.5"
+                      data-testid="empty-ai-action-btn"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+                      Extract with AI
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsAddActionOpen(true)}
+                      data-testid="empty-add-action-btn"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Action Item
+                    </Button>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -2851,6 +2946,37 @@ export function MeetingDetailPage({
           )}
         </div>
       )}
+
+      {/* AI Agenda Draft Modal (Phase 02A) */}
+      <AiAgendaDraftModal
+        isOpen={isAiAgendaOpen}
+        onClose={() => setIsAiAgendaOpen(false)}
+        orgId={effectiveOrgId || ''}
+        meetingId={meetingId || ''}
+        onItemsSaved={fetchMeetingData}
+      />
+
+      {/* AI Meeting Notes Summary Modal (Phase 02B) */}
+      <AiNotesSummaryModal
+        isOpen={isAiSummaryOpen}
+        onClose={() => setIsAiSummaryOpen(false)}
+        orgId={effectiveOrgId || ''}
+        meetingId={meetingId || ''}
+        currentNotesContent={notesContent}
+        currentNotesUpdatedAt={notes?.updatedAt}
+        onNotesSaved={handleSaveNotesContent}
+      />
+
+      {/* AI Meeting Action Items Extraction Modal (Phase 02C) */}
+      <AiActionItemsModal
+        isOpen={isAiActionsOpen}
+        onClose={() => setIsAiActionsOpen(false)}
+        orgId={effectiveOrgId || ''}
+        meetingId={meetingId || ''}
+        attendees={attendees}
+        orgMembers={orgMembers}
+        onItemsSaved={fetchMeetingData}
+      />
 
       {/* Add Agenda Item Dialog */}
       <Dialog

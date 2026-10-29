@@ -109,10 +109,19 @@ export function OrgAuditLogsPage() {
           query += `&action=${encodeURIComponent(currentFilter)}`;
         }
 
-        const res = await apiClient<{ logs: AuditRecord[]; pagination: PaginationMeta }>(query);
+        const res = await apiClient<{ logs?: AuditRecord[]; auditLogs?: AuditRecord[]; pagination?: Partial<PaginationMeta> & { total?: number } }>(query);
         if (res.data) {
-          setLogs(res.data.logs || []);
-          setPagination(res.data.pagination);
+          const list = res.data.auditLogs || res.data.logs || [];
+          const rawPag = (res.meta as any)?.pagination || res.data.pagination;
+          setLogs(list);
+          if (rawPag) {
+            setPagination({
+              page: rawPag.page ?? 1,
+              limit: rawPag.limit ?? 20,
+              totalRecords: rawPag.totalRecords ?? rawPag.total ?? 0,
+              totalPages: rawPag.totalPages ?? 1,
+            });
+          }
         }
       } catch (err) {
         if (err instanceof ApiError) {
@@ -285,7 +294,7 @@ export function OrgAuditLogsPage() {
             </TableBody>
           </Table>
 
-          {pagination.totalPages > 1 && (
+          {pagination && pagination.totalPages > 1 && (
             <div className="p-4 border-t border-border">
               <Pagination
                 page={pagination.page}

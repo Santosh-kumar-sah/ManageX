@@ -509,7 +509,7 @@ organisationsRouter.get(
         limit,
       });
 
-      return sendSuccess(res, 200, { auditLogs }, { pagination });
+      return sendSuccess(res, 200, { auditLogs, logs: auditLogs, pagination }, { pagination });
     } catch (err) {
       next(err);
     }

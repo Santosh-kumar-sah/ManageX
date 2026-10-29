@@ -43,7 +43,7 @@ export function PlatformOverviewPage() {
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time operational health, tenant statistics, and platform module controls.
+            Real-time system health, organization directory statistics, and platform module controls.
           </p>
         </div>
 

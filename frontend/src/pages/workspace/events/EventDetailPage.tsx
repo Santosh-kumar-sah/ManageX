@@ -42,11 +42,14 @@ import {
   Star,
   Layers,
   Edit3,
+  Sparkles,
 } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import { useAuth } from '@/api/AuthContext';
 import { useOrg } from '@/api/OrgContext';
 import { EditEventDialog } from './EditEventDialog';
+import { AiEventContentModal } from './AiEventContentModal';
+import { AiJudgingRubricModal } from './AiJudgingRubricModal';
 import {
   EventItem,
   EventStatus,
@@ -319,6 +322,8 @@ export function EventDetailPage({
     activeDetails?.membership?.role?.slug === 'event_staff';
 
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isAiContentModalOpen, setIsAiContentModalOpen] = useState(false);
+  const [isAiRubricModalOpen, setIsAiRubricModalOpen] = useState(false);
   const canEditEvent =
     (canManageStatus ||
       activeDetails?.membership?.permissions?.includes('event.edit')) &&
@@ -1448,16 +1453,30 @@ export function EventDetailPage({
           )}
 
           {canEditEvent && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsEditOpen(true)}
-              data-testid="edit-event-button"
-              className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 border-slate-300"
-            >
-              <Edit3 className="h-3.5 w-3.5" />
-              <span>Edit Event</span>
-            </Button>
+            <>
+              {event.status !== 'cancelled' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAiContentModalOpen(true)}
+                  data-testid="ai-draft-content-button"
+                  className="flex items-center gap-1.5 text-xs text-indigo-700 hover:text-indigo-900 border-indigo-200 hover:bg-indigo-50"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>Draft Content with AI</span>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditOpen(true)}
+                data-testid="edit-event-button"
+                className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-slate-900 border-slate-300"
+              >
+                <Edit3 className="h-3.5 w-3.5" />
+                <span>Edit Event</span>
+              </Button>
+            </>
           )}
 
           {event.status === 'published' && event.visibility === 'public' && (
@@ -2743,16 +2762,30 @@ export function EventDetailPage({
                 </div>
                 <div className="flex gap-2">
                   {criteriaSubTab === 'criteria' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowAddCriterionModal(true)}
-                      className="flex items-center gap-1 text-xs"
-                      data-testid="add-criterion-button"
-                    >
-                      <PlusCircle className="h-3.5 w-3.5" />
-                      Add Criterion
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {canEditEvent && event.status !== 'cancelled' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsAiRubricModalOpen(true)}
+                          className="flex items-center gap-1.5 text-xs text-indigo-700 hover:text-indigo-900 border-indigo-200 hover:bg-indigo-50"
+                          data-testid="ai-generate-rubric-button"
+                        >
+                          <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                          <span>Generate Rubric with AI</span>
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowAddCriterionModal(true)}
+                        className="flex items-center gap-1 text-xs"
+                        data-testid="add-criterion-button"
+                      >
+                        <PlusCircle className="h-3.5 w-3.5" />
+                        Add Criterion
+                      </Button>
+                    </div>
                   )}
                   {criteriaSubTab === 'judges' && (
                     <Button
@@ -3931,6 +3964,44 @@ export function EventDetailPage({
             setEvent(updated);
             setSuccessMsg('Event details updated successfully.');
             setIsEditOpen(false);
+          }}
+        />
+      )}
+
+      {/* AI Event Content Assistant Modal (Phase 03 — Task 3.3) */}
+      {isAiContentModalOpen && effectiveOrgId && event && (
+        <AiEventContentModal
+          isOpen={isAiContentModalOpen}
+          onClose={() => setIsAiContentModalOpen(false)}
+          orgId={effectiveOrgId}
+          eventId={event.id}
+          initialEvent={{
+            title: event.title,
+            description: event.description,
+            participantInstructions: event.participantInstructions,
+            updatedAt: event.updatedAt,
+          }}
+          onEventUpdated={(updated) => {
+            setEvent(updated);
+            setSuccessMsg('Event content updated from AI draft.');
+            setIsAiContentModalOpen(false);
+          }}
+        />
+      )}
+
+      {/* AI Judging Rubric Assistant Modal (Phase 03 — Task 3.3) */}
+      {isAiRubricModalOpen && effectiveOrgId && event && (
+        <AiJudgingRubricModal
+          isOpen={isAiRubricModalOpen}
+          onClose={() => setIsAiRubricModalOpen(false)}
+          orgId={effectiveOrgId}
+          eventId={event.id}
+          roundId={selectedRoundId || null}
+          roundName={rounds.find((r) => r.id === selectedRoundId)?.name || null}
+          onCriteriaCreated={async () => {
+            await fetchJudgingData();
+            setSuccessMsg('Judging criteria successfully created from AI rubric.');
+            setIsAiRubricModalOpen(false);
           }}
         />
       )}

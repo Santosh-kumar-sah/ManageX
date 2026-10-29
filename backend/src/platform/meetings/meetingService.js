@@ -1512,7 +1512,7 @@ async function recordNotesAccessDenied({
  * - Attendee status alone does NOT grant access.
  * - Organisation Owner/Admin do not receive automatic private-notes access solely because of their role.
  */
-async function assertMeetingNotesAccess(
+export async function assertMeetingNotesAccess(
   client,
   organisationId,
   meetingId,

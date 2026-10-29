@@ -1783,7 +1783,7 @@ export function PublicEventDetailPage({
               type="email"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="e.g. participant@managex.local"
+              placeholder="e.g. teammate@example.com"
               required
               autoFocus
             />

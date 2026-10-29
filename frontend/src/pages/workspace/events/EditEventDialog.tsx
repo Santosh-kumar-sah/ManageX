@@ -319,7 +319,7 @@ export function EditEventDialog({
               type="url"
               value={virtualUrl}
               onChange={(e) => setVirtualUrl(e.target.value)}
-              placeholder="https://meet.managex.local/room/..."
+              placeholder="https://meet.google.com/abc-defg-hij"
               disabled={isSubmitting}
             />
           </div>

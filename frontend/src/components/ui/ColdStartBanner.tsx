@@ -26,7 +26,7 @@ export function ColdStartBanner() {
         className="bg-brand-50 border-b border-brand-200 text-brand-900 px-4 py-2 text-xs sm:text-sm flex items-center justify-center gap-2 sticky top-0 z-50 animate-in slide-in-from-top-1"
       >
         <Loader2 className="h-4 w-4 animate-spin text-brand-600 shrink-0" aria-hidden="true" />
-        <span className="font-medium">{message || 'ManageX service is waking up, please wait a moment...'}</span>
+        <span className="font-medium">{message || 'Connecting to secure servers, please wait a moment...'}</span>
       </div>
     );
   }

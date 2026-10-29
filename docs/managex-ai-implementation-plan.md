@@ -99,7 +99,7 @@ An exhaustive inspection of the ManageX repository established the following arc
 ### 2.4 Meeting Notes Confidentiality Invariant (MTG-005, SEC-009)
 * In [`backend/src/platform/meetings/meetingService.js`](file:///d:/manageX/backend/src/platform/meetings/meetingService.js#L1291), `assertMeetingNotesAccess()` enforces that **attendee status alone does NOT grant access to confidential notes or structured MoM editing**.
 * Only the meeting organiser or users possessing explicit permissions (`meeting.notes.read`, `meeting.notes.manage`) can view private notes. Unauthorized read attempts trigger audit event `meeting.notes_access_denied`.
-* **AI Invariant:** AI features analyzing meeting notes must strictly invoke `assertMeetingNotesAccess()` before retrieving content. Attendees without notes permissions must receive HTTP 403 `MEETING_NOTES_ACCESS_DENIED`.
+* **AI Invariant:** AI features analyzing meeting notes must strictly invoke `assertMeetingNotesAccess()` before retrieving content. Attendees without notes permissions receive HTTP 403 `FORBIDDEN_NOTES_ACCESS`. To avoid code duplication, `assertMeetingNotesAccess` will be exported or wrapped in a dedicated helper `getMeetingNotesForAi(meetingId, currentUserId, organisationId)`.
 
 ### 2.5 Audit Logging (AUD-001 through AUD-005)
 * [`recordAuditEvent()`](file:///d:/manageX/backend/src/platform/audit/auditService.js#L34) writes immutable audit logs to `audit_logs`.
@@ -165,16 +165,51 @@ ManageX AI adheres to the **Human-in-the-Loop Draft Pattern**. The system never 
    - *Input:* Meeting title, meeting description/objective, duration, attendee roster.
    - *Output:* Array of ordered agenda items with suggested topic title, duration in minutes, and discussion objective.
    - *Workflow:* Organiser reviews draft in `ScheduleMeetingDialog` or `MeetingDetailPage`, reorders/edits items, and clicks "Add to Agenda" (which invokes standard `POST /meetings/:id/agenda`).
-2. **Confidential Meeting Notes Summarizer:**
-   - *Input:* Raw meeting notes (`meeting_notes.content`) and existing structured MoM points.
-   - *Permission Boundary:* Strict `assertMeetingNotesAccess(..., 'read')`. Denied to attendees without notes permissions.
-   - *Output:* Structured summary comprising executive summary, key discussion takeaways, and consensus decisions.
-   - *Workflow:* Organiser previews summary in `MeetingDetailPage`, edits text, and saves to notes or MoM.
-3. **Action-Item Extractor:**
-   - *Input:* Meeting notes and discussion points.
-   - *Output:* Array of candidate action items containing `title`, `description`, suggested `assigneeEmail`/`assigneeName` (matched against invited attendees), suggested `priority`, and recommended `dueDate`.
-   - *Workflow:* Organiser checks/unchecks extracted items, confirms assignees from the active attendee roster, and commits them via standard `POST /meetings/:id/action-items`.
-4. **Follow-up Communication Drafter:**
+2. **Confidential Meeting Notes Summarizer (Phase 02B):**
+   - *Input:* Raw meeting notes (`meeting_notes.content`) and existing structured MoM points (`meeting_discussion_points`, `meeting_decisions`).
+   - *Data Minimization:* Only authorized notes, discussion points, decisions, meeting title, and objective description are included in the prompt. Sensitive attendee personal details (emails, phone numbers), external conferencing URLs/passwords, and system internal IDs are strictly excluded.
+   - *Input Bounds & Validation:* 
+     - Empty Source Data Rejection: If a meeting has zero notes, zero discussion points, and zero decisions, the request fails closed immediately with HTTP 422 (`EMPTY_SOURCE_NOTES`) before consuming token quota or dispatching external AI calls. The system must not silently synthesize a summary from meeting metadata alone.
+     - Maximum Note Size: Source notes are capped at the database schema limit of 50,000 characters. Payloads exceeding this limit fail closed with HTTP 422 (`SOURCE_NOTES_TOO_LARGE`).
+   - *Permission Boundary:* Mandatory server-side evaluation of `assertMeetingNotesAccess(client, organisationId, meetingId, userId, permissions, 'read')`. Invoked before querying note content or calling the provider. Attendees without explicit `meeting.notes.read` or `meeting.notes.manage` permissions receive HTTP 403 (`FORBIDDEN_NOTES_ACCESS`), and the denial is recorded in `audit_logs`. Organisers and permitted roles are granted access. Platform administrators and support agents receive no access bypass.
+   - *Lifecycle Constraints:* Summarization is allowed on `scheduled`, `in_progress`, and `completed` meetings. Cancelled meetings are rejected with HTTP 409 (`MEETING_CANCELLED`).
+   - *Output:* Structured ephemeral draft summary comprising an executive summary narrative, structured key discussion points, and consensus decisions.
+   - *Draft & Persistence Safety:* 
+     - AI output remains strictly ephemeral (`isDraft: true`). No database mutations occur automatically.
+     - The user reviews, edits, and verifies the generated summary in `AiNotesSummaryModal`.
+     - Existing notes are preserved by default:
+       - *Copy to Clipboard:* Exports formatted markdown summary directly.
+       - *Append to Meeting Notes:* Appends the approved summary to existing notes content using optimistic concurrency (`expectedUpdatedAt`) to prevent overwriting concurrent updates.
+       - *Optimistic-Locking Conflict Handling:* If `expectedUpdatedAt` does not match the current `updated_at` in PostgreSQL, the server rejects the stale write with HTTP 409 (`CONCURRENT_MODIFICATION`). The transaction aborts, preserving the latest saved notes intact. The UI preserves the user's uncommitted draft summary in memory, displays an explanatory conflict notice, and requires the user to reload the latest saved notes before retrying or merging.
+       - *Replace Meeting Notes:* Overwriting existing notes is never the default and requires explicit confirmation in the UI.
+3. **Action-Item Extractor & Candidate Assignee Matching (Phase 02C):**
+   - *Input:* Meeting title, objective, confidential notes (`meeting_notes.content`), structured discussion points (`meeting_discussion_points`), and decisions (`meeting_decisions`), along with optional `focusAreas` and `additionalInstructions`.
+   - *Data Minimization & Boundary Enforcement:* Only authorized meeting context and an active roster (user ID, full name, email) of the current organisation within tenant transaction are used. Sensitive attendee personal details (passwords, phone numbers, external conferencing URLs) and cross-tenant records are strictly excluded.
+   - *Input Bounds & Validation:* 
+     - Empty Source Data Rejection: If a meeting has zero notes, zero discussion points, and zero decisions, the request fails closed immediately with HTTP 422 (`EMPTY_SOURCE_NOTES`).
+     - Maximum Note Size: Capped at the database schema limit of 50,000 characters. Payloads exceeding this limit fail closed with HTTP 422 (`SOURCE_NOTES_TOO_LARGE`).
+   - *Permission Boundaries:* Mandatory dual authorization:
+     - Notes Read Access: `assertMeetingNotesAccess(client, organisationId, meetingId, userId, permissions, 'read')`. Attendees without `meeting.notes.read` or `meeting.notes.manage` receive HTTP 403 (`FORBIDDEN_NOTES_ACCESS`) and the event is recorded in `audit_logs`.
+     - Action Management Access: User must be meeting organiser or hold `meeting.action.manage`, `org.admin`, or `org.owner`. (`meeting.edit` does not confer action item creation authority, ensuring strict permission symmetry with `createMeetingActionItem`).
+   - *Lifecycle Constraints:* Allowed on `scheduled`, `in_progress`, and `completed` meetings. Cancelled meetings are rejected with HTTP 409 (`MEETING_CANCELLED`).
+   - *Deterministic Candidate Assignee Matching:*
+     - The AI extracts `title`, `description`, suggested `priority` (`low`, `medium`, `high`, `urgent`), `suggestedDueDate` (`YYYY-MM-DD` or empty), `rawAssigneeName`, and `rationale`.
+     - Server-side deterministic resolution runs against active organisation members (`status = 'active'`):
+       1. Case-insensitive exact full name match (`fullName.toLowerCase() === candidateName.toLowerCase()`).
+       2. Email match (`email.toLowerCase() === candidateName.toLowerCase()`).
+       3. Unique first-name match if exactly one active member possesses that first name.
+       4. Inactive members, cross-tenant users, or non-members return unresolved (`suggestedAssignee: null, isAmbiguousAssignee: false`).
+       5. Ambiguous names (multiple active members sharing identical full names or first names without exact match) return unresolved (`suggestedAssignee: null, isAmbiguousAssignee: true`).
+       6. When matched, `suggestedAssignee` includes `{ userId, fullName, email }` (with backward-compatible `name` alias).
+   - *Privacy & ZDR Controls:* OpenRouter provider routing controls `{ provider: { data_collection: "deny", zdr: true } }` fail closed if non-compliant.
+   - *Draft & Persistence Safety:* 
+     - AI output remains strictly ephemeral (`isDraft: true`). No database mutations occur automatically.
+     - The user reviews, edits, and verifies the generated candidate action items in `AiActionItemsModal`.
+     - Sequential save via standard `POST /organisations/:orgId/meetings/:meetingId/action-items` with Finding-01 retry protection (confirmed successful items are immediately removed from draft state; if a subsequent item fails, only uncommitted items remain for user review and safe retry without duplicate submissions).
+
+
+4. **Follow-up Communication Drafter (DEFERRED CANDIDATE — NOT IN PHASE 02 SCOPE):**
+   - *Status:* Unapproved candidate feature for future evaluation. Requires separate explicit stakeholder approval. Strictly out of scope for Phase 02.
    - *Input:* Completed meeting details, summary, decisions, and assigned action items.
    - *Output:* Markdown/email draft summarizing outcomes for participants.
 
@@ -247,18 +282,26 @@ backend/src/platform/ai/
 
 2. **`aiQuotaService.js` (Multi-Tenant Entitlements & Metering):**
    - Evaluates whether the organisation has AI enabled (`is_ai_enabled`).
-   - Checks remaining monthly token balance from `organisation_ai_settings`.
-   - Enforces in-memory sliding window rate limits (e.g., maximum 20 AI requests per minute per organisation).
+   - Checks remaining monthly token balance from `organisation_ai_settings` via pre-flight aggregate query.
    - Records completed token consumption (`prompt_tokens`, `completion_tokens`, `estimated_cost_usd`) into `ai_usage_records`.
+   - *Status & Deferred Roadmap:*
+     1. **Usage Quota Pre-flight Checks:** Implemented in Phase 01. Enforces monthly token quota checks before external provider I/O.
+     2. **Request Rate Limiting:** Deferred to Phase 07 (Production Hardening). The `max_requests_per_minute` column exists in `organisation_ai_settings`, but in-memory/sliding-window throttling is not active in Phase 01.
+     3. **Atomic Quota Reservation:** Deferred to Phase 07 (Production Hardening). Current Phase 01 pre-flight checks are non-atomic read-aggregates; high-concurrency requests executing simultaneously may temporarily exceed quota.
 
 3. **`contextProviders/*.js` (Data Minimization & Boundary Enforcement):**
    - Retrieves only the exact fields required for the specific prompt.
    - Executes inside [`withTenantTransaction`](file:///d:/manageX/backend/src/platform/database/transaction.js#L27) to ensure PostgreSQL RLS isolation.
    - Validates resource-level permissions (e.g., verifying `assertMeetingNotesAccess` before pulling note content).
+   - **Transaction Lifetime Invariant (Connection Pool Protection):** Database transactions must NEVER be held open while awaiting external HTTP calls to OpenRouter.
+     - *Stage 1 (DB Context Transaction):* Context retrieval, note permission validation, and monthly quota pre-check execute in a short-lived `withTenantTransaction`. Transaction commits and connection is released back to `pg.Pool`.
+     - *Stage 2 (External LLM Dispatch):* HTTP request to OpenRouter executes asynchronously with timeout handling outside any database transaction.
+     - *Stage 3 (DB Accounting Transaction):* Upon completion, a second short-lived `withTenantTransaction` records token consumption into `ai_usage_records` and logs audit events.
 
 4. **`aiService.js` (Shared Orchestrator):**
    - Combines validated context, system prompts, and formatting instructions.
    - Applies prompt injection defenses (delimiters, strict system prompt instruction).
+   - Injects OpenRouter application metadata headers (`HTTP-Referer`, `X-Title`) and specifies request-body routing controls (`provider: { data_collection: 'deny', zdr: true }`) to strictly enforce provider-side Zero Data Retention and prevent training on customer data.
    - Dispatches call to `openrouterClient.js`.
    - Validates response payload against Zod schema.
    - Deducts tokens and records audit logs (with sanitized metadata).
@@ -296,7 +339,24 @@ AI_DEFAULT_MONTHLY_TOKEN_QUOTA: z.coerce.number().default(500000),
 * **Primary Model:** `google/gemini-2.0-flash-001` (high speed, cost-efficient, 1M+ context window, strong structured JSON compliance).
 * **Fallback Model:** `openai/gpt-4o-mini` (high availability fallback for transient OpenRouter provider rate limits).
 * **Configurable Model Routing:** Features specify a model capability class (`fast`, `reasoning`, `large_context`) rather than hardcoded provider model strings. The mapping is resolved dynamically via `env.OPENROUTER_DEFAULT_MODEL`.
-* **Zero-Data-Retention (ZDR) Verification:** OpenRouter privacy policy flags (`data_collection: 'deny'`) must be verified before routing confidential meeting minutes or enterprise project tasks.
+* **Zero-Data-Retention (ZDR) & Privacy Routing:**
+  - *No Reliance on Unverified HTTP Headers:* OpenRouter privacy and retention enforcement operates via request-body provider routing preferences rather than arbitrary HTTP headers.
+  - *Request-Body Routing Controls:* All AI requests transmitting sensitive data include:
+    ```json
+    "provider": {
+      "data_collection": "deny",
+      "zdr": true
+    }
+    ```
+  - *Endpoint Retention Enforcement vs Volatile Memory:* Zero Data Retention (ZDR) is strictly defined as provider-endpoint retention enforcement—routing only to upstream provider endpoints contractually and technically committed to zero-retention policies. It does not constitute a physical architectural guarantee that data exists exclusively in volatile memory across every intermediate network hop or that network telemetry cannot transiently capture packets.
+  - *Fail-Closed Fallback Policy (Provider & Model Level):*
+    - **Provider-Level:** If no compliant provider fulfilling both `zdr: true` and `data_collection: "deny"` is available for the primary model, OpenRouter rejects the request. The backend fails closed immediately with HTTP 502/503 `AI_PROVIDER_ERROR`. Silent routing to non-compliant providers is strictly prohibited.
+    - **Model-Level Fallback:** If failover to an alternative model (e.g. `OPENROUTER_FALLBACK_MODEL`) is attempted, the exact same `provider: { data_collection: "deny", zdr: true }` routing controls must be attached. If the fallback model cannot satisfy both constraints, the request fails closed immediately. No confidential request may silently execute through a route or model that relaxes these privacy controls.
+  - *Three-Layer Privacy Architecture:*
+    1. **Provider-Endpoint Retention Enforcement (ZDR):** OpenRouter enforces that only endpoints configured for zero prompt/completion persistence are selected for inference execution.
+    2. **Provider Data Collection Restrictions (`data_collection: "deny"`):** The intermediary and upstream provider endpoints are legally and contractually restricted from using customer inputs/outputs for training, fine-tuning, or human evaluation.
+    3. **Application-Side Logging & Audit Redaction (ManageX Invariant):** ManageX HTTP logger (`httpLoggerMiddleware`) and audit service (`recordAuditEvent`) strictly redact and exclude raw notes, prompts, and completions from application logs, recording only operational token counts, duration, and status.
+  - *Shared Gateway Compatibility & Regression:* Because `openrouterClient.js` is shared across all platform modules, passing `provider: { data_collection: 'deny', zdr: true }` applies to all current and future AI features (including Phase 02A Agenda Generation). Comprehensive test suites must verify that all existing mock fixtures and live payloads maintain 100% compatibility.
 
 ---
 
@@ -312,9 +372,9 @@ AI_DEFAULT_MONTHLY_TOKEN_QUOTA: z.coerce.number().default(500000),
 | AI Capability | Route | Required Scopes / Permissions | Special Resource Checks |
 | :--- | :--- | :--- | :--- |
 | **Meeting Agenda Draft** | `POST .../meetings/:id/ai/agenda` | `meeting.edit` or Organiser | Meeting must not be in terminal state (`completed`, `cancelled`, `missed`) |
-| **Meeting Notes Summary** | `POST .../meetings/:id/ai/summarize` | `meeting.notes.read` or Organiser | **Mandatory:** `assertMeetingNotesAccess()` verified before note retrieval |
+| **Meeting Notes Summary** | `POST .../meetings/:id/ai/summarize` | `meeting.notes.read` or Organiser | **Mandatory:** `assertMeetingNotesAccess()` verified before note retrieval. Rejects cancelled meetings (HTTP 409) and empty notes (HTTP 422). |
 | **Action Items Extraction**| `POST .../meetings/:id/ai/action-items`| `meeting.notes.read` + `meeting.edit` or Organiser | Extracted assignees validated against active organisation members |
-| **Meeting Follow-up Draft**| `POST .../meetings/:id/ai/follow-up` | `meeting.view` + `meeting.notes.read` or Organiser | Meeting must be `completed` |
+| **Meeting Follow-up Draft (Deferred)**| `POST .../meetings/:id/ai/follow-up` | `meeting.view` + `meeting.notes.read` or Organiser | *Deferred / Unapproved candidate*: Not in Phase 02 scope. Meeting must be `completed` if authorized later. |
 | **Event Content Draft** | `POST .../events/:id/ai/content` | `event.edit` or Org Admin | Event must be in `draft` or `published` state |
 | **Event Rubric Generator** | `POST .../events/:id/ai/rubrics` | `event.edit` or Org Admin | Evaluation criteria must not be modified if judging has commenced |
 | **Project Task Breakdown** | `POST .../projects/:id/ai/breakdown` | `project.edit` or Project Manager | Project must be in `planning` or `active` state |
@@ -332,12 +392,12 @@ AI_DEFAULT_MONTHLY_TOKEN_QUOTA: z.coerce.number().default(500000),
 
 ## 8. Proposed Database Schema & Quota Design
 
-### 8.1 Database Migration: `20261017000041_ai_foundation.sql`
-In accordance with ManageX migration naming conventions, forward-only SQL migration `20261017000041_ai_foundation.sql` introduces two minimal, high-leverage tables:
+### 8.1 Database Migration: `20261017000042_ai_foundation.sql`
+In accordance with ManageX migration naming conventions, forward-only SQL migration `20261017000042_ai_foundation.sql` (sequenced after `20261017000041_google_integrations.sql`) introduces two minimal, high-leverage tables:
 
 ```sql
 -- 1. Organisation AI Configuration & Quota Settings
-CREATE TABLE organisation_ai_settings (
+CREATE TABLE IF NOT EXISTS organisation_ai_settings (
     organisation_id UUID PRIMARY KEY REFERENCES organisations(id) ON DELETE CASCADE,
     is_ai_enabled BOOLEAN NOT NULL DEFAULT true,
     monthly_token_quota BIGINT NOT NULL DEFAULT 500000,
@@ -348,10 +408,11 @@ CREATE TABLE organisation_ai_settings (
 );
 
 -- 2. Immutable AI Usage Records (Metering & Audit)
-CREATE TABLE ai_usage_records (
+-- user_id is nullable (ON DELETE SET NULL), ensuring deletion semantics match column nullability.
+CREATE TABLE IF NOT EXISTS ai_usage_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     module_slug VARCHAR(50) NOT NULL,
     feature VARCHAR(100) NOT NULL,
     provider VARCHAR(50) NOT NULL DEFAULT 'openrouter',
@@ -366,10 +427,9 @@ CREATE TABLE ai_usage_records (
 );
 
 -- Indexes for performance & quota aggregation
-CREATE INDEX idx_ai_usage_org_created ON ai_usage_records(organisation_id, created_at DESC);
-CREATE INDEX idx_ai_usage_org_monthly ON ai_usage_records(organisation_id, created_at) 
-    WHERE created_at >= date_trunc('month', NOW());
-CREATE INDEX idx_ai_usage_user ON ai_usage_records(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_org_created ON ai_usage_records(organisation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_org_status_created ON ai_usage_records(organisation_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_user ON ai_usage_records(user_id, created_at DESC);
 
 -- Enable Row-Level Security
 ALTER TABLE organisation_ai_settings ENABLE ROW LEVEL SECURITY;
@@ -393,9 +453,9 @@ CREATE POLICY ai_usage_tenant_insert ON ai_usage_records
     WITH CHECK (organisation_id = NULLIF(current_setting('app.current_organisation_id', true), '')::uuid);
 ```
 
-### 8.2 Quota Enforcement Algorithm
+### 8.2 Quota Enforcement Algorithm & Documented Limitations
 1. **Monthly Token Window:** Evaluated against `date_trunc('month', NOW())`.
-2. **Atomic Balance Query:**
+2. **Pre-flight Balance Query:**
    ```sql
    SELECT 
        s.monthly_token_quota,
@@ -410,6 +470,10 @@ CREATE POLICY ai_usage_tenant_insert ON ai_usage_records
    ```
 3. **Threshold Guard:** If `tokens_used >= monthly_token_quota`, reject request immediately with HTTP 429 `AI_QUOTA_EXCEEDED` before dispatching any call to OpenRouter.
 4. **Estimated Cost Tracking:** Uses standard provider price tables stored in application constants (e.g. Gemini 2.0 Flash: \$0.10 / 1M prompt tokens, \$0.40 / 1M completion tokens).
+5. **Phase 01 Acceptance Audit Limitations (Accepted With Documented Limitations):**
+   - *Soft-Quota Window Under Concurrency:* The pre-flight quota check is a non-atomic read-aggregate. Under simultaneous concurrent requests, multiple calls may pass before any call records its usage, temporarily exceeding quota. Hard atomic reservations are planned for Phase 07.
+   - *Usage-Ledger Failure Resiliency:* If a database error occurs during post-completion usage-ledger recording, the error is logged and the LLM response is returned to the user, meaning token consumption could remain unrecorded.
+   - *Fallback Model Status:* `OPENROUTER_FALLBACK_MODEL` is declared and validated in `env.js`, but automated failover upon primary model failure is not active; retries target the primary model. Full model fallback chains are scheduled for Phase 07.
 
 ---
 
@@ -428,6 +492,7 @@ All AI routes are mounted under the standard `/api/v1` namespace and return stan
     "additionalContext": "Ensure 15 minutes is reserved for team Q&A."
   }
   ```
+
 * **Response (HTTP 200 OK — Draft Payload):**
   ```json
   {
@@ -468,38 +533,122 @@ All AI routes are mounted under the standard `/api/v1` namespace and return stan
   }
   ```
 
-### 9.2 Meetings AI: Action Items Extraction
-* **Endpoint:** `POST /api/v1/organisations/:orgId/meetings/:meetingId/ai/action-items`
-* **Auth & Scopes:** `requireAuth`, `requireOrgMembership`, `requireOrgPermission('meeting.notes.read')`, `requireOrgPermission('meeting.edit')`.
-* **Security Verification:** Evaluates `assertMeetingNotesAccess(..., 'read')`.
-* **Response (HTTP 200 OK — Draft Payload):**
+### 9.2 Meetings AI: Confidential Meeting Notes Summarizer (Phase 02B)
+* **Endpoint:** `POST /api/v1/organisations/:orgId/meetings/:meetingId/ai/summarize`
+* **Auth & Scopes:** `requireAuth`, `requireVerifiedUser`, `requireOrgMembership`, `requireModuleEntitlement('meetings')`, `requireOrgPermission('meeting.view')`.
+* **Security Verification:** Evaluates `assertMeetingNotesAccess(client, orgId, meetingId, userId, permissions, 'read')` inside a tenant transaction before reading notes or dispatching AI calls. If unauthorized, emits `meeting.notes_access_denied` audit event and throws HTTP 403 `FORBIDDEN_NOTES_ACCESS`.
+* **Input Validation & Pre-checks:**
+  - Evaluates meeting lifecycle: rejects `cancelled` meetings with HTTP 409 `MEETING_CANCELLED`.
+  - Rejects empty source data: if meeting has no notes, discussion points, or decisions, throws HTTP 422 `EMPTY_SOURCE_NOTES`.
+  - Enforces length caps: source notes exceeding 50,000 characters throw HTTP 422 `SOURCE_NOTES_TOO_LARGE`.
+* **Request Body (`summarizeNotesInputSchema`):**
+  ```json
+  {
+    "focusAreas": ["Key architectural decisions", "Migration risks"],
+    "additionalContext": "Emphasize database schema constraints and backward compatibility."
+  }
+  ```
+* **Response (HTTP 200 OK — Ephemeral Draft Payload):**
   ```json
   {
     "success": true,
     "data": {
       "isDraft": true,
-      "candidateActionItems": [
-        {
-          "title": "Deploy database migration 41 to staging",
-          "description": "Execute forward migration on Neon test branch and verify RLS isolation.",
-          "priority": "high",
-          "suggestedDueDate": "2026-10-30",
-          "suggestedAssignee": {
-            "userId": "d3b07384-d113-4c4f-a982-1d5d34208a01",
-            "name": "Sarah Connor",
-            "email": "sarah@managex.local"
+      "meetingId": "e3b0c442-98fc-1c14-9af0-2a3b4c5d6e7f",
+      "summary": {
+        "executiveSummary": "The engineering team reviewed Q4 milestone delivery and infrastructure migration schedules. Database migration 42 was confirmed ready, and staging deployment was scheduled for Friday.",
+        "keyDiscussionPoints": [
+          {
+            "topic": "PostgreSQL Migration Sequencing",
+            "summary": "Agreed that migration 42 must sequence after migration 41 to preserve dependency ordering."
           }
-        }
-      ],
+        ],
+        "decisions": [
+          {
+            "decision": "Deploy migration 42 to staging on October 31",
+            "rationale": "Requires clean automated test run and verification on staging Neon branch."
+          }
+        ]
+      },
       "usage": {
-        "totalTokens": 680,
-        "estimatedCostUsd": 0.000136
+        "totalTokens": 840,
+        "estimatedCostUsd": 0.000168
       }
     }
   }
   ```
+* **Error Responses:**
+  - HTTP 401 `UNAUTHORIZED`: Unauthenticated session.
+  - HTTP 403 `FORBIDDEN_NOTES_ACCESS`: User lacks organiser status or explicit `meeting.notes.read` / `meeting.notes.manage` permission.
+  - HTTP 404 `MEETING_NOT_FOUND`: Meeting does not exist or belongs to another organisation.
+  - HTTP 409 `MEETING_CANCELLED`: Cannot summarize notes of a cancelled meeting.
+  - HTTP 409 `CONCURRENT_MODIFICATION`: Stale write rejected during summary persistence (when `expectedUpdatedAt` does not match database state). Database notes remain unchanged; client is required to reload latest notes before retrying.
+  - HTTP 422 `EMPTY_SOURCE_NOTES`: Meeting has no notes, discussion points, or decisions to summarize.
+  - HTTP 422 `SOURCE_NOTES_TOO_LARGE`: Source notes exceed 50,000 characters.
+  - HTTP 429 `AI_QUOTA_EXCEEDED`: Monthly token quota exhausted.
+  - HTTP 502/503 `AI_PROVIDER_ERROR`: OpenRouter connection error, timeout, or compliant ZDR routing unfulfillable (fails closed at both provider and model fallback levels).
 
-### 9.3 Ask ManageX Query (Phase 05)
+### 9.3 Meetings AI: Action Items Extraction (Phase 02C)
+* **Endpoint:** `POST /api/v1/organisations/:orgId/meetings/:meetingId/ai/action-items`
+* **Auth & Scopes:** `requireAuth`, `requireOrgMembership`, `requireModuleEntitlement('meetings')`, `requireOrgPermission('meeting.view')`.
+* **Security Verification:**
+  - Mandatory source note access check: `assertMeetingNotesAccess(client, orgId, meetingId, userId, permissions, 'read')`. Attendees lacking `meeting.notes.read` or `meeting.notes.manage` receive HTTP 403 `FORBIDDEN_NOTES_ACCESS` (logged to `audit_logs`).
+  - Action management check: User must be meeting organiser or hold `meeting.action.manage`, `org.admin`, or `org.owner`. (`meeting.edit` is excluded).
+* **Request Body:**
+  ```json
+  {
+    "focusAreas": ["Database migration deliverables", "Frontend modal updates"],
+    "additionalInstructions": "Prioritize Sarah Connor for database tasks"
+  }
+  ```
+* **Response (HTTP 200 OK — Ephemeral Draft):**
+  ```json
+  {
+    "success": true,
+    "data": {
+      "meetingId": "11111111-2222-3333-4444-555555555555",
+      "candidateActionItems": [
+        {
+          "title": "Deploy database migration 41 to staging",
+          "description": "Execute forward migration on test branch and verify RLS isolation.",
+          "priority": "high",
+          "suggestedDueDate": "2026-10-31",
+          "rawAssigneeName": "Sarah Connor",
+          "suggestedAssignee": {
+            "userId": "d3b07384-d113-4c4f-a982-1d5d34208a01",
+            "fullName": "Sarah Connor",
+            "name": "Sarah Connor",
+            "email": "sarah@managex.local"
+          },
+          "isAmbiguousAssignee": false,
+          "rationale": "Sarah was assigned testing database migrations in discussion points"
+        }
+      ],
+      "usage": {
+        "promptTokens": 450,
+        "completionTokens": 180,
+        "totalTokens": 630
+      },
+      "isDraft": true
+    }
+  }
+  ```
+* **Error Responses:**
+  - HTTP 400 `VALIDATION_ERROR`: Invalid request payload.
+  - HTTP 401 `AUTHENTICATION_ERROR`: Missing or invalid session token.
+  - HTTP 403 `MODULE_NOT_ENTITLED`: Organisation does not have the `meetings` module active.
+  - HTTP 403 `FORBIDDEN_NOTES_ACCESS`: User lacks organiser status or explicit `meeting.notes.read` / `meeting.notes.manage` permission.
+  - HTTP 403 `FORBIDDEN`: User lacks `meeting.action.manage` or organiser status.
+  - HTTP 404 `MEETING_NOT_FOUND`: Meeting does not exist or belongs to another organisation.
+  - HTTP 409 `MEETING_CANCELLED`: Cannot extract action items for a cancelled meeting.
+  - HTTP 422 `EMPTY_SOURCE_NOTES`: Meeting has no notes, discussion points, or decisions.
+  - HTTP 422 `SOURCE_NOTES_TOO_LARGE`: Source notes exceed 50,000 characters.
+  - HTTP 429 `AI_QUOTA_EXCEEDED`: Monthly token quota exhausted.
+  - HTTP 502/503 `AI_PROVIDER_ERROR`: OpenRouter connection error, timeout, or compliant ZDR routing unfulfillable (fails closed at both provider and model fallback levels).
+
+
+
+### 9.4 Ask ManageX Query (Phase 05)
 * **Endpoint:** `POST /api/v1/organisations/:orgId/ai/ask`
 * **Auth & Scopes:** `requireAuth`, `requireOrgMembership`.
 * **Request Body:**
@@ -530,7 +679,7 @@ All AI routes are mounted under the standard `/api/v1` namespace and return stan
   }
   ```
 
-### 9.4 Organisation AI Usage Summary
+### 9.5 Organisation AI Usage Summary
 * **Endpoint:** `GET /api/v1/organisations/:orgId/ai/usage`
 * **Auth & Scopes:** `requireAuth`, `requireOrgMembership`, `requireOrgPermission('org.admin')`.
 * **Response (HTTP 200 OK):**
@@ -601,7 +750,7 @@ All AI routes are mounted under the standard `/api/v1` namespace and return stan
 ### Phase 01 — Shared AI Foundation
 * **Scope:** Core shared service, database migration, quota management, and tests.
 * **Deliverables:**
-  - Migration `20261017000041_ai_foundation.sql`.
+  - Migration `20261017000042_ai_foundation.sql`.
   - `backend/src/platform/ai/openrouterClient.js` with timeout and retry logic.
   - `backend/src/platform/ai/aiQuotaService.js` and `aiService.js`.
   - Unit tests with mocked OpenRouter responses.

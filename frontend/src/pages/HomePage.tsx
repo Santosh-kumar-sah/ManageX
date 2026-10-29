@@ -29,13 +29,13 @@ export function HomePage() {
     {
       title: 'Events & Hackathons',
       badge: 'Events & Challenges',
-      description: 'End-to-end event and challenge management. Enable participant registrations, team formation, project link submissions, and blind scoring with verified leaderboards.',
+      description: 'End-to-end event and challenge orchestration. Manage participant registrations, team formation, project link submissions, and blind scoring with verified leaderboards.',
       icon: Calendar,
       features: [
-        'Team formation with custom member limits',
+        'Custom team formation with flexible member limits',
         'Structured submission links (GitHub, live demo, slides)',
-        'Independent judge scoring with custom evaluation criteria',
-        'Leaderboard rankings and winner announcements',
+        'Independent judge scoring with custom evaluation rubrics',
+        'Automated leaderboard rankings and verified results',
       ],
       route: '/modules',
     },
@@ -48,7 +48,7 @@ export function HomePage() {
         'Timezone-aware scheduling & notifications',
         'Real-time RSVP and attendee tracking',
         'Confidential minutes with role-based access',
-        'Action items with direct owner assignments & due dates',
+        'Tracked action items with assignees and due dates',
       ],
       route: '/modules',
     },
@@ -60,8 +60,8 @@ export function HomePage() {
       features: [
         'Interactive Drag & Drop Kanban & List views',
         'Priority tagging (Urgent, High, Medium, Low)',
-        'Structured task lifecycles with deadlines & priorities',
-        'Team assignments with activity tracking',
+        'Structured task workflows with deadlines',
+        'Team assignments with delivery activity tracking',
       ],
       route: '/modules',
     },
@@ -71,13 +71,13 @@ export function HomePage() {
     {
       step: '01',
       title: 'Create Your Workspace',
-      description: 'Register your organization or institution in seconds. Get an isolated workspace with custom settings and dedicated access controls.',
+      description: 'Set up your organization or institution in seconds with dedicated access controls and customizable workspace settings.',
       icon: Building2,
     },
     {
       step: '02',
       title: 'Enable Your Modules',
-      description: 'Choose only the modules your teams need today. Whether you run hackathons, corporate meetings, or engineering projects, activate modules on demand.',
+      description: 'Choose only the modules your teams need. Whether hosting hackathons, coordinating meetings, or managing engineering sprints, activate modules on demand.',
       icon: Layers,
     },
     {
@@ -88,8 +88,8 @@ export function HomePage() {
     },
     {
       step: '04',
-      title: 'Operate with Confidence',
-      description: 'Collect submissions, run structured agendas, and deliver projects with enterprise data privacy and complete audit trails.',
+      title: 'Collaborate with Confidence',
+      description: 'Collect project submissions, run structured agendas, and deliver projects with enterprise-grade data protection and complete audit trails.',
       icon: ShieldCheck,
     },
   ];
@@ -122,11 +122,11 @@ export function HomePage() {
       {/* Hero Section */}
       <section className="text-center space-y-6 max-w-4xl mx-auto pt-6">
         <h1 className="text-4xl sm:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.15]">
-          One unified platform. One account. <br />
-          <span className="text-brand-600">Total operational clarity.</span>
+          The modern operations platform for <br />
+          <span className="text-brand-600">Hackathons, Meetings & Projects.</span>
         </h1>
         <p className="text-lg sm:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto">
-          ManageX delivers unified management for Hackathons & Events, Structured Meetings, and Agile Projects—with dedicated workspace privacy and role-based security.
+          ManageX gives universities, tech communities, and growing teams a unified workspace to host competitive events, run productive meetings, and deliver agile projects.
         </p>
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
@@ -151,10 +151,10 @@ export function HomePage() {
             Modular Workspace
           </Badge>
           <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
-            Switch on only what your team needs
+            Modular tools built to adapt to your organization
           </h2>
           <p className="text-base text-slate-500 max-w-2xl mx-auto">
-            Each module is fully integrated yet independently enabled, ensuring a clutter-free experience tailored to your exact operational requirements.
+            Enable only the capabilities your teams need today—from campus-wide hackathons to leadership syncs and sprint tracking.
           </p>
         </div>
 

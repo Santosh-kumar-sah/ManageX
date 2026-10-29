@@ -18,10 +18,14 @@ let poolInstance = null;
 export function getPool() {
   if (!poolInstance) {
     const isProduction = env.NODE_ENV === 'production';
-    const isNeonOrCloud = env.DATABASE_URL.includes('neon.tech') || env.DATABASE_URL.includes('render.com') || env.DATABASE_URL.includes('sslmode=require');
+    let connStr = process.env.DATABASE_URL || env.DATABASE_URL;
+    if (env.NODE_ENV === 'test' && connStr.endsWith('/managex')) {
+      connStr = connStr.replace(/\/managex$/, '/managex_test');
+    }
+    const isNeonOrCloud = connStr.includes('neon.tech') || connStr.includes('render.com') || connStr.includes('sslmode=require');
 
     poolInstance = new Pool({
-      connectionString: env.DATABASE_URL,
+      connectionString: connStr,
       max: isProduction ? 20 : 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,

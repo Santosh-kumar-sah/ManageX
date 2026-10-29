@@ -61,7 +61,7 @@ export function OrganisationsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Your Organisations</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Manage your tenant workspaces, switch between organisations, or create a new organisation.
+            Manage your organization workspaces, switch between teams, or create a new organisation.
           </p>
         </div>
         <Button
@@ -161,7 +161,7 @@ export function OrganisationsPage() {
         isOpen={isCreateOpen}
         onClose={() => !isSubmitting && setIsCreateOpen(false)}
         title="Create New Organisation"
-        description="Set up a new tenant workspace. You will automatically be designated as the Organisation Owner."
+        description="Set up a new organization workspace. You will automatically be designated as the Organisation Owner."
       >
         <form onSubmit={handleCreate} className="space-y-4 mt-2">
           {errorMsg && (

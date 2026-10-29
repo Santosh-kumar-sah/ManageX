@@ -14,7 +14,15 @@ $$;
 
 -- 2. Strictly enforce least-privilege constraints on managex_app
 -- Must NOT be superuser, must NOT create databases/roles, and must NOT bypass RLS
-ALTER ROLE managex_app NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND rolsuper = true) THEN
+    EXECUTE 'ALTER ROLE managex_app NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS';
+  ELSE
+    EXECUTE 'ALTER ROLE managex_app NOCREATEDB NOCREATEROLE NOBYPASSRLS';
+  END IF;
+END
+$$;
 
 -- 3. Grant basic connection and schema usage
 GRANT CONNECT ON DATABASE managex TO managex_app;

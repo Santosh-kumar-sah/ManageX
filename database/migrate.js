@@ -75,7 +75,12 @@ export async function runMigrations(customDatabaseUrl) {
 
       if (appliedMap.has(version)) {
         const previousChecksum = appliedMap.get(version);
-        if (previousChecksum !== checksum) {
+        const matches =
+          previousChecksum === checksum ||
+          previousChecksum === computeChecksum(sqlContent.replace(/\r\n/g, '\n')) ||
+          previousChecksum === computeChecksum(sqlContent.replace(/\r?\n/g, '\r\n'));
+
+        if (!matches) {
           if (process.env.RECALCULATE_CHECKSUM === version) {
             console.log(`[Migrations] Updating checksum for ${file}...`);
             await client.query('UPDATE schema_migrations SET checksum = $1 WHERE version = $2', [checksum, version]);

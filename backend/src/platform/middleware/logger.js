@@ -7,6 +7,13 @@ const SENSITIVE_KEY_PATTERNS = [
   /session/i,
   /key/i,
   /credentials/i,
+  /encrypted_refresh_token/i,
+  /token_iv/i,
+  /token_auth_tag/i,
+  /ciphertext/i,
+  /^iv$/i,
+  /^tag$/i,
+  /^auth_tag$/i,
 ];
 
 /**

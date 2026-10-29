@@ -6,6 +6,7 @@ import { organisationsRouter } from './organisations.js';
 import { invitationsRouter } from './invitations.js';
 import { publicEventsRouter } from './events.js';
 import { platformRouter } from './platform.js';
+import { globalIntegrationsRouter } from './integrations.js';
 
 export const apiV1Router = Router();
 
@@ -16,3 +17,4 @@ apiV1Router.use('/organisations', organisationsRouter);
 apiV1Router.use('/invitations', invitationsRouter);
 apiV1Router.use('/events', publicEventsRouter);
 apiV1Router.use('/platform', platformRouter);
+apiV1Router.use('/integrations', globalIntegrationsRouter);

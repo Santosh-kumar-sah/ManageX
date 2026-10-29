@@ -30,33 +30,33 @@ export function ModulesPage() {
                   <Calendar className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">1. Events & Hackathons Management</CardTitle>
-                  <p className="text-xs text-slate-500">Module Key: <code className="bg-slate-100 px-1 py-0.5 rounded">events</code> • Phase 6</p>
+                  <CardTitle className="text-lg">Events & Hackathons Management</CardTitle>
+                  <p className="text-xs text-slate-500">End-to-end competition, registration, and blind evaluation workflows</p>
                 </div>
               </div>
-              <Badge variant="brand">Core MVP Module</Badge>
+              <Badge variant="brand">Included in Workspace</Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-slate-600 border-t border-border pt-4">
             <p>
-              Provides end-to-end lifecycle orchestration for corporate events, workshops, and hackathons.
+              Provides end-to-end orchestration for conferences, campus competitions, and community hackathons.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
                 <strong className="block font-semibold text-slate-800 mb-1">Registration & Capacity:</strong>
-                Supports verified external participants without granting general organisation membership. Enforces strict transactional concurrency locks on capacity.
+                Supports verified external participants and guests with automated capacity tracking to guarantee smooth onboarding.
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <strong className="block font-semibold text-slate-800 mb-1">Teams & URL Submissions:</strong>
-                Hackathon team creation (1 to 100 members) and URL-only project submissions. Zero file-upload risks in MVP.
+                <strong className="block font-semibold text-slate-800 mb-1">Teams & Project Submissions:</strong>
+                Flexible team creation with member limits and direct project links (GitHub repositories, live demo URLs, and presentation slides).
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <strong className="block font-semibold text-slate-800 mb-1">Assigned Judging:</strong>
-                Judges can evaluate only explicitly assigned submissions. Unpublished scores and criteria comments remain strictly private.
+                <strong className="block font-semibold text-slate-800 mb-1">Independent Judging:</strong>
+                Assign designated evaluators to specific submissions. Private scoring rubrics and judge comments remain confidential until results are published.
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <strong className="block font-semibold text-slate-800 mb-1">Straight-Sum Results:</strong>
-                Transparent result calculation with shared ranks for tied totals; controlled audit-logged publication by authorized managers.
+                <strong className="block font-semibold text-slate-800 mb-1">Automated Leaderboards:</strong>
+                Transparent result aggregation with verified tie-handling and instant publication controls for event organizers.
               </div>
             </div>
           </CardContent>
@@ -71,33 +71,33 @@ export function ModulesPage() {
                   <Video className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">2. Meetings Management</CardTitle>
-                  <p className="text-xs text-slate-500">Module Key: <code className="bg-slate-100 px-1 py-0.5 rounded">meetings</code> • Phase 7</p>
+                  <CardTitle className="text-lg">Meetings & Minutes Management</CardTitle>
+                  <p className="text-xs text-slate-500">Structured agendas, confidential minutes, and tracked action items</p>
                 </div>
               </div>
-              <Badge variant="brand">Core MVP Module</Badge>
+              <Badge variant="brand">Included in Workspace</Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-slate-600 border-t border-border pt-4">
             <p>
-              Structured meeting governance with timezone support, attendee management, and confidential note scoping.
+              Professional meeting coordination with timezone intelligence, RSVP attendee tracking, and role-based notes privacy.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
                 <strong className="block font-semibold text-slate-800 mb-1">Scheduling & Timezones:</strong>
-                Maintains UTC instants and IANA timezone identifiers. Canonical lifecycle: Scheduled, In Progress, Completed, Cancelled.
+                Automated timezone conversion across attendees, ensuring seamless collaboration for distributed and hybrid teams.
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
                 <strong className="block font-semibold text-slate-800 mb-1">Ordered Agenda Items:</strong>
-                Sequenced agenda topics with optional time allocations, editable and reorderable by authorized organisers.
+                Structured, reorderable agenda topics with time allocations to keep every discussion efficient and on schedule.
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
                 <strong className="block font-semibold text-slate-800 mb-1">Confidential Minutes:</strong>
-                Meeting minutes are restricted to organisers and explicit permission holders by default. Attendees cannot read minutes automatically.
+                Document meeting minutes with fine-grained confidentiality controls, restricting executive discussions to authorized stakeholders.
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <strong className="block font-semibold text-slate-800 mb-1">Action Items:</strong>
-                Trackable deliverables assigned to eligible organisation members with priority, due date, and status guards.
+                <strong className="block font-semibold text-slate-800 mb-1">Tracked Action Items:</strong>
+                Assign deliverables directly to team members with priorities, due dates, and real-time status updates.
               </div>
             </div>
           </CardContent>
@@ -112,33 +112,33 @@ export function ModulesPage() {
                   <CheckSquare className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">3. Projects & Tasks Management</CardTitle>
-                  <p className="text-xs text-slate-500">Module Key: <code className="bg-slate-100 px-1 py-0.5 rounded">projects</code> • Phase 8</p>
+                  <CardTitle className="text-lg">Projects & Agile Tasks</CardTitle>
+                  <p className="text-xs text-slate-500">High-velocity delivery with interactive Kanban boards and task lists</p>
                 </div>
               </div>
-              <Badge variant="brand">Core MVP Module</Badge>
+              <Badge variant="brand">Included in Workspace</Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-slate-600 border-t border-border pt-4">
             <p>
-              Project workspaces with membership scoping, task status lifecycles, and synchronized List & Kanban views.
+              Agile project workspaces with team rosters, priority tracking, and synchronized List and Kanban task boards.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <strong className="block font-semibold text-slate-800 mb-1">Project Membership:</strong>
-                Resource-scoped access. Organisation membership alone does not grant access to all projects.
+                <strong className="block font-semibold text-slate-800 mb-1">Project Workspaces:</strong>
+                Organize projects by team, initiative, or client with dedicated contributor access controls.
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <strong className="block font-semibold text-slate-800 mb-1">Task Status Lifecycle:</strong>
-                Canonical statuses: Backlog, To Do, In Progress, Blocked, Done. Server-validated status state machine.
+                <strong className="block font-semibold text-slate-800 mb-1">Task Workflows:</strong>
+                Streamlined task states from Backlog through In Progress, Review, and Completed with urgency tags.
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <strong className="block font-semibold text-slate-800 mb-1">List & Kanban Views:</strong>
-                Dual synchronized views with server-confirmed status changes, keyboard accessibility, and optimistic reconciliation.
+                <strong className="block font-semibold text-slate-800 mb-1">Dual Kanban & List Views:</strong>
+                Seamlessly toggle between visual drag-and-drop Kanban boards and structured table views.
               </div>
               <div className="p-3 bg-slate-50 rounded-md border border-slate-200">
-                <strong className="block font-semibold text-slate-800 mb-1">Assignment Protection:</strong>
-                Removing a project member with active tasks is blocked until tasks are reassigned. Soft delete preserves history.
+                <strong className="block font-semibold text-slate-800 mb-1">Delivery Accountability:</strong>
+                Clear task ownership, due date reminders, and activity history to keep projects on track.
               </div>
             </div>
           </CardContent>

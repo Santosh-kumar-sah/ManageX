@@ -137,7 +137,7 @@ export function OrgModulesPage() {
           <Layers className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
           <div>
             <span className="font-semibold block mb-0.5">Independent Activation</span>
-            All core MVP modules operate independently with zero subscription, payment, or external billing gateway requirements.
+            All standard modules are included with your workspace and can be activated or deactivated at any time.
           </div>
         </div>
       </div>

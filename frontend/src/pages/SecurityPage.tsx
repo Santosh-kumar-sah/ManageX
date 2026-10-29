@@ -59,12 +59,12 @@ export function SecurityPage() {
     {
       title: 'Strict Workspace Isolation',
       icon: Server,
-      description: 'Every organization operates within an isolated tenant boundary at the database level. Data from one organization can never be queried or viewed by another.',
+      description: 'Every organization operates within a dedicated workspace boundary. Data from one organization can never be queried or accessed by another.',
     },
     {
-      title: 'Participant Boundary Firewall',
+      title: 'Participant Boundary Protection',
       icon: EyeOff,
-      description: 'Students and external participants registering for events get participant-only access. They cannot view internal members, private meetings, or other modules.',
+      description: 'Students and external participants registering for events get participant-only access, ensuring internal discussions and organization files remain private.',
     },
     {
       title: 'Confidential Minutes & Blind Scoring',
@@ -82,9 +82,9 @@ export function SecurityPage() {
       description: 'All sensitive administrative actions, score submissions, and status changes are permanently logged with verified timestamps and actor identities.',
     },
     {
-      title: 'Zero-Trust Least Privilege',
+      title: 'Least Privilege Access',
       icon: KeyRound,
-      description: 'Runtime application services operate under strictly constrained privileges with zero superuser backdoors, enforcing defense-in-depth across all requests.',
+      description: 'Runtime application services operate under strictly constrained privileges with rigorous multi-factor defense across all requests.',
     },
   ];
 
@@ -92,7 +92,7 @@ export function SecurityPage() {
     {
       step: '1',
       title: 'Identity Verification',
-      desc: 'Cryptographically verified session authentication with automated expiry.',
+      desc: 'Encrypted, high-security session authentication with automated expiry.',
     },
     {
       step: '2',
@@ -111,8 +111,8 @@ export function SecurityPage() {
     },
     {
       step: '5',
-      title: 'Engine-Level Isolation',
-      desc: 'Database Row-Level Security automatically confines results to the active tenant.',
+      title: 'Multi-Layered Data Protection',
+      desc: 'Automated server-side security policies confine all queries strictly to the active workspace.',
     },
   ];
 

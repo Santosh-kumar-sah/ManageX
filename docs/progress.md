@@ -4,6 +4,224 @@ This document tracks progress across implementation phases, completed requiremen
 
 ---
 
+## Phase 1B.5 (Google Meet Integration): Meetings UI & Join Gateway Integration
+
+- **Objective & Status:**
+  - Implemented the authenticated Join Gateway backend endpoint and frontend conferencing provider integration under the governing canonical specification `docs/google-meet-integration-plan.md` (Revision 2.5, Sections 10.2, 10.3, 11.3, 12).
+  - Securely encapsulated meeting links behind the authenticated gateway `GET /api/v1/organisations/:orgId/meetings/:meetingId/join`.
+  - Implemented terminal state lockdown (`completed`, `cancelled`, `missed` reject join requests with HTTP 409 `MEETING_TERMINAL_STATE`).
+  - Enforced status invariance (joining a meeting never mutates `scheduled` or `in_progress` status).
+  - Enforced strict URL scheme safety (`http:` / `https:` allowed; blocks `javascript:`, `data:`, `vbscript:`, protocol-relative `//` URLs with HTTP 422 `INVALID_URL_SCHEME`).
+  - Emitted immutable audit event `meeting.joined` upon every successful join request.
+  - Extended frontend UI with conferencing provider selector ("Google Meet (Automatic)" vs "Manual Link") in `ScheduleMeetingDialog.tsx` with dynamic Google Workspace connection status checks.
+  - Implemented Google Meet sync status alert banners (`pending_create`, `failed_create` with "Retry Link" CTA button, `abandoned`) and synced badges in `MeetingDetailPage.tsx`.
+  - Fully verified all backend join integration tests (8/8 pass), orchestration tests (15/15 pass), meetings suite (41/41 pass), frontend typecheck (0 errors), and frontend unit tests (184/184 pass across 19 test files).
+
+- **Backend Components Implemented:**
+  - `backend/src/platform/meetings/meetingService.js`:
+    - `getMeetingJoinUrl(orgId, meetingId, actorId)`: Fetches meeting within tenant transaction, verifies active membership & module entitlement, enforces `attendees_only` access check, blocks terminal states with 409 `MEETING_TERMINAL_STATE`, validates sanitized URL scheme with 422 `INVALID_URL_SCHEME`, preserves status invariance, logs `meeting.joined` audit event, and returns `{ joinUrl, conferenceProvider, meetingId }`.
+  - `backend/src/routes/meetings.js`:
+    - Mounted `GET /:meetingId/join` under the meetings router with `requireOrgMembership` and `requireModuleEntitlement('meetings')`.
+  - `backend/src/platform/meetings/meetings_join.integration.test.js`:
+    - Comprehensive test suite covering 8 test scenarios:
+      1. Valid 200 response with Google Meet URL for organisation-visible meeting.
+      2. 401 unauthenticated rejection.
+      3. `attendees_only` visibility enforcement (non-attendee receives 403, attendee receives 200).
+      4. Terminal state lockdown: completed, cancelled, missed return 409 `MEETING_TERMINAL_STATE`.
+      5. Status invariance: joining never mutates meeting status.
+      6. Scheme safety: blocks dangerous schemes (`javascript:`, `data:`, relative URLs).
+      7. 404 `MEETING_LINK_NOT_FOUND` when link is missing or empty.
+      8. Immutable `meeting.joined` audit log emission.
+
+- **Frontend Components Implemented & Extended:**
+  - `frontend/src/types/meetings.ts`:
+    - Extended `MeetingItem` with `conferenceProvider?: ConferenceProvider`, `googleEventId?: string | null`, `googleSyncStatus?: GoogleSyncStatus`, `googleSyncError?: string | null`, `googleSyncAttempts?: number`.
+    - Added `ConferenceProvider` and `GoogleSyncStatus` union types.
+  - `frontend/src/pages/workspace/meetings/ScheduleMeetingDialog.tsx`:
+    - Fetches Google Workspace integration status (`/integrations/google/status`).
+    - Renders Conferencing Provider selector with "Google Meet (Automatic)" (disabled when not connected with warning) and "Manual Link".
+    - Omits manual URL input requirement when "Google Meet (Automatic)" is selected; submits `conferenceProvider: 'google_meet'` in payload.
+  - `frontend/src/pages/workspace/meetings/MeetingDetailPage.tsx`:
+    - Banners rendered based on `meeting.googleSyncStatus`:
+      - `pending_create` / `pending_update`: In-progress pulsing banner "Generating Google Meet conferencing link...".
+      - `failed_create` / `failed_reschedule`: Warning banner with error details and "Retry Link" CTA button wired to `POST /meetings/:meetingId/sync-google`.
+      - `abandoned`: Revocation / expiry banner directing administrators to reconnect in Settings.
+    - Synced badge rendered for active Google Meet meetings.
+    - Join CTA wired through authenticated backend join gateway `handleJoinMeeting` with popup launch upon verification.
+  - `frontend/src/pages/workspace/meetings/ScheduleMeetingDialog.test.tsx`:
+    - Verified dialog rendering, provider options, disabled state when disconnected, and modal close behavior.
+  - `frontend/src/pages/workspace/meetings/MeetingDetailPage.test.tsx`:
+    - Added tests for `pending_create`, `failed_create` with retry CTA, `abandoned`, and `synced` badges.
+
+- **Verification Results:**
+  - `backend/src/platform/meetings/meetings_join.integration.test.js`: **8/8 tests passed** on `managex_test`.
+  - `backend/src/platform/integrations/googleMeet.test.js`: **15/15 tests passed** on `managex_test`.
+  - `backend/src/platform/database/google_integrations_rls.integration.test.js`: **18/18 tests passed** on `managex_test`.
+  - `backend/src/platform/common/crypto.test.js`: **42/42 tests passed**.
+  - `backend/src/platform/meetings/meetings.integration.test.js`: **41/41 tests passed** on `managex_test`.
+  - `npm run typecheck:frontend`: **0 errors (clean pass)**.
+  - `npm run test:frontend`: **184/184 tests passed across all 19 test files**.
+
+- **Verdict & Gate:** **PHASE 1B.5 COMPLETE**. Awaiting explicit authorization before starting Phase 1B.6 (Full Regression & Security Audit).
+
+---
+
+## Phase 1B.4 (Google Meet Integration): Google Calendar Client & Meet Orchestration Service
+
+- **Objective & Status:**
+  - Implemented the Google Calendar API v3 HTTPS gateway client and Google Meet orchestration engine under the governing canonical specification `docs/google-meet-integration-plan.md` (Revision 2.5, Sections 3.2 #3 & #4, 5, 6, 7.2, 11.3).
+  - Enforced strict Option A Pure Conferencing Container guarantees (`attendees: []`, `sendUpdates=none`).
+  - Implemented the Two-Stage Decoupled Pattern (zero open database transactions across external HTTP calls) with 45-second atomic lease claims (`google_sync_claim_token`).
+  - Implemented deterministic Base32hex event ID derivation (`meet{cleanUuid}`) with conflict reconciliation probing on 409 and retry.
+  - Implemented in-flight cancellation compensation (`events.delete`), optimistic concurrency via `If-Match: etag`, and graceful abandonment on revoked credentials.
+  - Successfully verified all unit, RLS, OAuth, meetings integration, and frontend test suites with 100% pass rate.
+- **Backend Components Implemented:**
+  - `backend/src/platform/integrations/googleCalendarClient.js`:
+    - `createCalendarEvent`: Dispatches `POST /calendars/primary/events?conferenceDataVersion=1&sendUpdates=none` with deterministic `id` and Option A payload. Enforces 8s timeout, bounded 1-retry backoff for 429/503, and extracts `hangoutLink` or video `entryPoints`.
+    - `getCalendarEvent`: Dispatches `GET /calendars/primary/events/:eventId` returning parsed event or `null` on 404/410.
+    - `patchCalendarEvent`: Dispatches `PATCH /calendars/primary/events/:eventId?sendUpdates=none` with `If-Match: etag`.
+    - `deleteCalendarEvent`: Dispatches `DELETE /calendars/primary/events/:eventId?sendUpdates=none`, idempotently treating 200, 204, 404, and 410 as successful deletion.
+  - `backend/src/platform/integrations/googleMeetService.js`:
+    - `deriveGoogleEventId`: Converts meeting UUID to 36-char Base32hex ID (`meet[0-9a-f]{32}`).
+    - `acquireMeetingSyncLease`: Atomically acquires 45-second claim lease with single-transaction lock.
+    - `syncMeetingWithGoogle`: Two-Stage Decoupled sync orchestrator handling `pending_create`, `pending_update`, and `pending_delete` lifecycle states with lease renewal and reconciliation.
+    - In-flight cancellation compensation: Detects status mutations to `cancelled` while external HTTP calls were in progress and dispatches compensation `deleteCalendarEvent`.
+    - Upstream revocation handling: Marks sync state `abandoned` when credentials have been revoked, preventing infinite retry loops.
+  - `backend/src/platform/meetings/meetingService.js`:
+    - Updated `formatMeetingRow`: Added `conferenceProvider`, `googleCalendarEventId`, `googleCalendarEtag`, `googleConferenceRequestId`, `googleSyncStatus`, `googleSyncError`, and `googleSyncLastAttemptAt`.
+    - Updated `createMeeting`: Accepts `conferenceProvider` (`'manual'`, `'google_meet'`, `'none'`), sets initial `google_sync_status = 'pending_create'`, and fires asynchronous post-commit sync dispatch.
+    - Updated `updateMeeting`: Detects rescheduling of start/end/timezone/title, marks `pending_update`, and fires post-commit sync dispatch.
+    - Updated `transitionMeetingStatus`: When transitioning to `cancelled`, marks `pending_delete` and dispatches post-commit calendar deletion.
+  - `backend/src/routes/meetings.js`:
+    - Updated `createMeetingSchema`: Added `conferenceProvider` enum validation.
+    - Added route `POST /api/v1/organisations/:orgId/meetings/:meetingId/sync-google`: On-demand retry endpoint protected by `requireOrgMembership`, `requireModuleEntitlement('meetings')`, and fail-closed permission check (`meeting.edit` permission or meeting organiser).
+- **Test & Verification Results:**
+  - `backend/src/platform/integrations/googleMeet.test.js`: **15/15 passing tests** (5 Calendar API gateway tests, 8 sync engine and lifecycle integration tests on `managex_test`, 2 Express sync route authorization tests).
+  - `backend/src/platform/common/crypto.test.js`: **37/37 passing tests**.
+  - `backend/src/platform/database/google_integrations_rls.integration.test.js`: **18/18 passing tests**.
+  - `backend/src/platform/integrations/googleOAuth.test.js`: **23/23 passing tests**.
+  - `backend/src/platform/meetings/meetings.integration.test.js`: **41/41 passing tests**.
+  - `npm run typecheck:frontend`: **0 errors (passed cleanly)**.
+  - `npm run test:frontend`: **177/177 passing tests across all 18 test files**.
+- **Verdict & Gate:** **PHASE 1B.4 COMPLETE**. Awaiting explicit authorization before starting Phase 1B.5.
+
+---
+
+- **Objective & Status:**
+  - Implemented the Google OAuth 2.0 authorization, callback, token exchange, encrypted persistence, and disconnect lifecycle under the governing specification `docs/google-meet-integration-plan.md` (Revision 2.5).
+  - Implemented the Clean Enterprise frontend workspace settings UI tab for managing Google Workspace integration status.
+  - Successfully verified all unit and integration tests across crypto, RLS, and OAuth routes with 100% pass rate.
+- **Backend Components Implemented:**
+  - `backend/src/platform/integrations/googleOAuthService.js`:
+    - `cryptoEnvelopeToRow` and `rowToCryptoEnvelope`: Bidirectional adapter functions mapping camelCase crypto envelopes to PostgreSQL snake_case columns (`encrypted_refresh_token`, `token_iv`, `token_auth_tag`, `key_version`).
+    - `generateOAuthState`: Generates cryptographically secure 32-byte state tokens and cookie nonces, hashes tokens with SHA-256, and stores single-use state in `oauth_states` under user-isolated RLS.
+    - `buildAuthorizationUrl`: Constructs Google OAuth authorization URL enforcing `access_type=offline`, `prompt=consent`, and `https://www.googleapis.com/auth/calendar.events` scope.
+    - `consumeOAuthStateAndVerifyPermission`: Validates anti-CSRF double-submit cookie nonce, atomically consumes single-use state token, executes safe two-phase context transition (user-context state query -> tenant-context membership and permission check under `managex_app` with `NOBYPASSRLS`), and burns state token on permission failure to prevent state re-use.
+    - `exchangeCodeForTokens`: Exchanges authorization code via Google OAuth token endpoint with robust error mapping.
+    - `getGoogleUserInfo`: Retrieves authenticated user's email address from Google UserInfo endpoint.
+    - `saveGoogleCredentials`: Encrypts refresh tokens with AES-256-GCM via `crypto.encrypt()`, preserves existing refresh tokens on re-authorization if Google omits the token, upserts into `organisation_integrations`, and records audit event `integration.connected`.
+    - `getGoogleIntegrationStatus`: Queries integration status with zero secret column exposure.
+    - `disconnectGoogleIntegration`: Invokes Google token revocation endpoint, sets local credentials to `NULL` (erasing encrypted tokens, IVs, tags), marks status `revoked`, and logs `integration.disconnected`.
+    - `refreshAccessToken`: Decrypts refresh token, requests fresh access token, and gracefully handles `invalid_grant` revocation errors.
+  - `backend/src/routes/integrations.js`:
+    - `orgIntegrationsRouter`: Mounted at `/api/v1/organisations/:orgId/integrations`. Endpoints:
+      - `GET /google/authorize`: Requires active org membership and `org.update` permission. Issues state token and sets HttpOnly `managex_oauth_nonce` cookie.
+      - `GET /google/status`: Requires active org membership (`org.read`). Returns safe status payload with zero secrets exposed.
+      - `POST /google/disconnect`: Requires active org membership and `org.update` permission, CSRF protected. Erases credentials and revokes tokens.
+    - `globalIntegrationsRouter`: Mounted at `/api/v1/integrations`. Endpoints:
+      - `GET /google/callback`: Validates double-submit nonce cookie, verifies caller permission, exchanges authorization code, encrypts and stores credentials, clears nonce cookie, and redirects user to frontend settings tab with success/error parameters.
+  - `backend/src/platform/middleware/logger.js`:
+    - Extended sensitive key redaction patterns to redact `token_iv`, `token_auth_tag`, `encrypted_refresh_token`, `ciphertext`, `iv`, `tag`, and `encryptedToken`.
+- **Frontend Components Implemented:**
+  - `frontend/src/pages/workspace/settings/IntegrationsSettingsTab.tsx`:
+    - Clean Enterprise light UI matching ManageX design guidelines.
+    - Integration card with Google logo, connected email, connection timestamp, and Option A Privacy Notice badge ("Option A Privacy: ManageX only requests calendar.events scope. ManageX never accesses, reads, or syncs your personal emails, Google Drive, or contacts.").
+    - Interactive "Connect Google Workspace" button with redirect and loading states.
+    - Disconnect confirmation dialog preventing accidental disconnects.
+    - Tab-level success/error alert banners reacting to callback URL parameters (`?tab=integrations&google_success=true` or `&google_error=...`).
+  - `frontend/src/pages/workspace/OrgSettingsPage.tsx`:
+    - Added tab bar navigation ("General" and "Integrations") supporting `?tab=integrations` URL query parameter.
+- **Verification & Test Results:**
+  - `backend/src/platform/integrations/googleOAuth.test.js`: **23/23 tests passed cleanly (100%)** on `managex_test`:
+    - Section 1: Crypto Envelope <-> Database Row Adapter (4/4 tests).
+    - Section 2: Authorization URL Builder (1/1 test).
+    - Section 3: External HTTP Gateway Token Exchange & Revocation (4/4 tests).
+    - Section 4: Database RLS, State Lifecycle & Tenant Elevation (8/8 tests).
+    - Section 5: Express Integration Routes & Authorization Guards (6/6 tests).
+  - `backend/src/platform/common/crypto.test.js`: **37/37 tests passed**.
+  - `backend/src/platform/database/google_integrations_rls.integration.test.js`: **18/18 tests passed**.
+  - `npm run typecheck:frontend`: **0 errors (passed cleanly)**.
+  - `npm run test:frontend`: **177/177 tests passed across all 18 test files**.
+- **Verdict & Gate:** **PHASE 1B.3 COMPLETE**. Awaiting explicit authorization before starting Phase 1B.4.
+
+---
+
+## Phase 1B.2 (Google Meet Integration): Database Migration & RLS Isolation
+
+- **Objective & Status:**
+  - Implemented database migration `database/migrations/20261017000041_google_integrations.sql` establishing the foundation for Google Calendar/Meet integration, OAuth state management, and meeting synchronization.
+  - Successfully verified and applied migration 041 across BOTH local databases: `managex` (development) and `managex_test` (test). Production and Neon were completely untouched.
+- **Pre-Implementation Compatibility Audit:**
+  - Audited `backend/src/platform/common/crypto.js` against database column representations.
+  - Mapped envelope `version` (int) to `envelope_version INT DEFAULT 1`.
+  - Mapped `keyVersion` (string) to `key_version VARCHAR(64) DEFAULT '1'` (supporting string keys like `'1'`, `'v1'`).
+  - Mapped 12-byte IV (24 hex characters) and 16-byte GCM tag (32 hex characters) to `token_iv VARCHAR(64)` and `token_auth_tag VARCHAR(64)`.
+  - Mapped ciphertext hex to `encrypted_refresh_token TEXT`.
+- **Database Schema & Constraints Implemented:**
+  - `oauth_states`: Stores ephemeral, single-use state tokens bound to initiating user and organisation with unique `token_hash`, indexed on lookup and expiry. Forced RLS with `oauth_states_user_isolation` policy under `managex_app`.
+  - `organisation_integrations`: Stores tenant credentials with unique `(organisation_id, provider)`. Check constraint `chk_credentials_status` ensures active `'connected'` integrations require complete cryptographic credentials (`encrypted_refresh_token`, `token_iv`, `token_auth_tag`), while allowing NULL credentials on `'revoked'` and `'error'` states. Forced RLS with `org_integrations_tenant_isolation` policy under `managex_app`.
+  - `meetings` Google Sync Columns: Extended with `conference_provider VARCHAR(32)` (`'manual'`, `'google_meet'`, `'none'`), `google_calendar_event_id`, `google_calendar_etag`, `google_conference_request_id`, `google_sync_status VARCHAR(32)` (9 states: `'none'`, `'synced'`, `'pending_create'`, `'failed_create'`, `'pending_update'`, `'failed_reschedule'`, `'pending_delete'`, `'failed_cancel'`, `'abandoned'`), `google_sync_error`, `google_sync_last_attempt_at`, `google_sync_claimed_at`, and `google_sync_claim_token UUID`.
+- **Historical Meeting Backfill Results:**
+  - Verified canonical backfill on both local databases:
+    - `managex`: 179 in_person meetings set to `conference_provider = 'none'`; 76 virtual and 49 hybrid meetings set to `conference_provider = 'manual'`; all with `google_sync_status = 'none'`.
+    - `managex_test`: 289 in_person meetings set to `'none'`; 67 virtual and 26 hybrid meetings set to `'manual'`; all with `google_sync_status = 'none'`.
+- **Automated Verification & Test Results:**
+  - Added dedicated integration test suite `backend/src/platform/database/google_integrations_rls.integration.test.js` targeting isolated `managex_test` database:
+    - **18/18 tests passed cleanly (100% pass rate)**.
+    - Verified `managex_app` lacks SUPERUSER and BYPASSRLS (`rolsuper=false`, `rolbypassrls=false`).
+    - Verified user-level isolation on `oauth_states` (cross-user read/update/delete blocked, missing context fails closed, cross-user insert rejected by RLS WITH CHECK).
+    - Verified tenant-level isolation on `organisation_integrations` (cross-tenant read/update/delete blocked, missing tenant context fails closed, cross-tenant insert rejected by RLS WITH CHECK).
+    - Verified multi-column check constraint `chk_credentials_status` and unique constraint `uq_organisation_integrations_provider`.
+    - Verified check constraints on `meetings.conference_provider` and `meetings.google_sync_status`.
+    - Verified tenant isolation on `meetings` Google sync fields.
+    - Verified historical backfill integrity across all pre-existing records.
+  - ESLint verified with **0 errors, 0 warnings** across all Phase 1B files.
+- **Verdict & Gate:** **PHASE 1B.2 COMPLETE**. Awaiting explicit approval before starting Phase 1B.3.
+
+---
+
+## Phase 1B.1 (Google Meet Integration): Cryptography, Token Security & Environment Configuration
+
+- **Objective & Status:**
+  - Implemented production-conscious cryptographic infrastructure for AES-256-GCM authenticated encryption and decryption of Google OAuth refresh tokens.
+- **Implemented Components:**
+  - `backend/src/platform/common/crypto.js`: AES-256-GCM encryption/decryption with key versioning, metadata binding via Additional Authenticated Data (AAD), randomized 12-byte IVs, 16-byte authentication tags, and tamper-resistant envelope serialization/deserialization.
+  - `backend/src/config/env.js`: Zod environment validation for `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`, `TOKEN_ENCRYPTION_KEY` (64 hex characters), `TOKEN_ENCRYPTION_KEY_VERSION`, and `TOKEN_ENCRYPTION_KEYRING` (JSON map).
+  - `backend/src/platform/common/crypto.test.js`: **37/37 tests passed**.
+- **Verdict & Gate:** **PHASE 1B.1 COMPLETE**.
+
+---
+
+## Phase 00 (AI Implementation Plan): AI Readiness & Architecture Audit
+
+- **Audit Objective & Scope:**
+  - Evaluated repository readiness for the ManageX Canonical AI Architecture (`docs/managex-ai-implementation-plan.md`).
+  - Read-only verification of authentication, organisation membership, module entitlement, PostgreSQL RLS, meeting-notes confidentiality, audit logging, OpenRouter client architecture, and quota enforcement.
+  - Zero code modifications or destructive database operations; zero external LLM API calls executed during audit.
+- **Key Verifications & Architectural Invariants:**
+  - **Meeting Notes Confidentiality:** Verified private `assertMeetingNotesAccess` helper in `backend/src/platform/meetings/meetingService.js` (lines 1291–1340). Throws `AuthorizationError` with code `FORBIDDEN_NOTES_ACCESS`. Updated canonical plan to document this exact code and specify the shared service wrapper `getMeetingNotesForAi(meetingId, currentUserId, organisationId)`.
+  - **Transaction Lifetime & Connection Pool Decoupling:** Identified critical pool starvation risk if database transactions were held open across external OpenRouter network I/O (pool size = 10 in dev/test, 20 in prod). Formalized the **Three-Stage Decoupled Transaction Pattern**:
+    1. Short-lived DB transaction: Context retrieval, notes authorization, quota pre-check (releases connection immediately).
+    2. Out-of-transaction asynchronous external HTTP dispatch to OpenRouter.
+    3. Short-lived DB transaction: Accounting record insertion into `ai_usage_records` and audit logging.
+  - **OpenRouter Gateway & Model Fallbacks:** Verified primary model (`google/gemini-2.0-flash-001`) and fallback (`openai/gpt-4o-mini`). Mandated env-driven model routing (`OPENROUTER_DEFAULT_MODEL`, `OPENROUTER_FALLBACK_MODEL`) and automated model catalog probe.
+  - **Zero-Data-Retention (ZDR) Privacy:** Mandated `X-Data-Collection: deny` request header on OpenRouter calls to prevent upstream model training on confidential meeting minutes.
+  - **Database Migration Alignment:** Confirmed forward migration `20261017000042_ai_foundation.sql` (sequenced after `20261017000041_google_integrations.sql`) creates `organisation_ai_settings` and `ai_usage_records` with zero numbering collision. Confirmed no duplication with existing `organisation_module_entitlements` or `audit_logs`.
+  - **Concurrency & Quota Enforcement:** Paired monthly PostgreSQL quota aggregation with an in-memory sliding-window concurrency limiter in `aiQuotaService.js`.
+- **Verdict:** **READY WITH DOCUMENTED SAFEGUARDS**. Awaiting explicit user approval before beginning Phase 01.
+
+---
+
 ## Phase E (Meetings Improvement Plan): Analytics Date Semantics, Metric Labels & Final Regression
 
 - **Correct Analytics Date Semantics (`meetingService.js`, `meetings_phase4.integration.test.js`):**
@@ -1709,3 +1927,340 @@ Created and executed 24 comprehensive automated integration tests against live P
 
 ### 4. Exact Next Phase
 - **Phase 2B:** Evaluation Service, Scheduling Algorithms, and Sync Projection.
+
+
+---
+
+## ManageX AI — Phase 02B: Confidential Meeting Notes Summarizer Completion Report
+
+### 1. Requirements Implemented
+- **OpenRouter Privacy Routing Controls (§5.1, §6):**
+  - Configured openrouterClient.js default provider controls: provider: { data_collection: 'deny', zdr: true }.
+  - Ensures compliance with OpenRouter provider-level Zero Data Retention and data collection restrictions.
+  - Fail-closed behavior on primary route and model fallbacks.
+- **Access Authorization & Confidentiality Enforcement (MTG-005, SEC-009, §2.4):**
+  - Exported and reused assertMeetingNotesAccess(client, orgId, meetingId, actorId, 'read') in meetingsAiService.js.
+  - Allowed roles: Organiser, Organisation Owner, Organisation Admin, or holders of explicit meeting.notes.read / meeting.notes.edit / meeting.notes.manage permissions.
+  - Attendees lacking notes read permission are rejected with HTTP 403 FORBIDDEN_NOTES_ACCESS and audited via meeting.notes_access_denied.
+- **Source Minimization & Security Hardening:**
+  - Excluded attendee emails, external links, and internal database IDs from AI context.
+  - Wrapped notes in strict <confidential_meeting_notes> delimiters with closing-tag breakout sanitization.
+  - Pre-inference guards: HTTP 422 EMPTY_SOURCE_NOTES before quota check or external API invocation; 50,000 char source notes length cap.
+  - Terminal state validation: Cancelled meetings rejected with HTTP 409 MEETING_CANCELLED.
+- **Canonical API Endpoint (§9.2):**
+  - Mounted POST /api/v1/organisations/:orgId/meetings/:meetingId/ai/summarize in backend/src/routes/meetings.js.
+  - Enforced middleware pipeline: authenticateToken, requireOrgMembership, requireModuleEntitlement('meetings').
+  - Output is strictly ephemeral: database meeting_notes is NOT mutated upon generation.
+- **Frontend MOM Integration & Human-in-the-Loop Review UI:**
+  - Created frontend/src/pages/workspace/meetings/AiNotesSummaryModal.tsx and connected it in MeetingDetailPage.tsx.
+  - "Summarize Notes with AI" button in Tab 3 MOM header card and Section 4 header.
+  - Review modal supports focus areas, additional instructions, live draft editing, markdown clipboard copy, safe append, and confirmed replacement.
+  - Optimistic concurrency control: passes currentNotesUpdatedAt as expectedUpdatedAt; handles HTTP 409 CONCURRENT_MODIFICATION conflicts cleanly by alerting user while preserving unsaved draft in memory.
+
+### 2. Files Created or Changed
+- backend/src/platform/ai/openrouterClient.js
+- backend/src/platform/ai/openrouterClient.test.js
+- backend/src/platform/meetings/meetingService.js
+- backend/src/platform/ai/schemas/meetingsAiSchemas.js
+- backend/src/platform/ai/meetingsAiService.js
+- backend/src/routes/meetings.js
+- backend/src/platform/ai/meetingsAi.test.js
+- backend/src/platform/ai/meetings_summary_ai.integration.test.js
+- frontend/src/pages/workspace/meetings/AiNotesSummaryModal.tsx
+- frontend/src/pages/workspace/meetings/AiNotesSummaryModal.test.tsx
+- frontend/src/pages/workspace/meetings/MeetingDetailPage.tsx
+- docs/managex-ai-implementation-plan.md
+- docs/requirements-traceability.md
+- docs/progress.md
+
+### 3. Verification & Test Results
+- Backend unit tests (meetingsAi.test.js, openrouterClient.test.js): 18/18 passed (100%).
+- Backend integration tests (meetings_summary_ai.integration.test.js, meetings_agenda_ai.integration.test.js): 12/12 passed (100%).
+- Frontend modal tests (AiNotesSummaryModal.test.tsx, AiAgendaDraftModal.test.tsx): 13/13 passed (100%).
+- Frontend meeting detail tests (MeetingDetailPage.test.tsx): 47/47 passed (100%).
+- Frontend TypeScript & production build: 0 errors, build successful.
+
+### 4. Database Migrations Added
+- Zero migrations: Used existing schema (meeting_notes, meeting_discussion_points, meeting_decisions, organisation_ai_settings, ai_usage_records). No new migration created or needed.
+
+### 5. Next Phase
+- Phase 02C: Action Items Extraction with Candidate Assignee Matching (upon explicit authorization).
+
+---
+
+## Phase 02C Completion Report — Action Items Extraction with Candidate Assignee Matching
+
+### 1. Requirements Implemented
+- **Action Items Extraction Schema & Service (`AI-REQ-06`, PRD §8.2 MTG-005/MTG-006, Plan §4.1, §9.3):**
+  - Added and exported `extractActionItemsInputSchema`, `extractedCandidateActionItemSchema`, and `extractActionItemsOutputSchema` in `backend/src/platform/ai/schemas/meetingsAiSchemas.js`.
+  - Implemented `ACTION_ITEMS_EXTRACTOR_SYSTEM_PROMPT` instructing the model to extract concrete action items with priority and due date, along with extracted `candidateAssigneeName`.
+  - Implemented `buildActionItemsExtractorPrompt(...)` with `<confidential_meeting_notes>` and `<organisation_roster>` delimiters, plus closing-tag breakout sanitization (`replace(/<\/confidential_meeting_notes>/gi, '[closing tag removed]')`).
+  - Implemented `extractMeetingActionItems(...)` in `backend/src/platform/ai/meetingsAiService.js` with:
+    - Pre-inference empty source guard: HTTP 422 `EMPTY_SOURCE_NOTES` if meeting has zero notes, zero discussion points, and zero decisions.
+    - Pre-inference note size limit: HTTP 422 `SOURCE_NOTES_TOO_LARGE` if source notes exceed 50,000 characters.
+    - Lifecycle status check: HTTP 409 `MEETING_CANCELLED` if meeting status is cancelled.
+    - Mandatory read authorization check: `assertMeetingNotesAccess(client, orgId, meetingId, actorUserId, actorPermissions, 'read')` — unauthorized attendees receive HTTP 403 `FORBIDDEN_NOTES_ACCESS` and the event is logged to `audit_logs` as `meeting.notes_access_denied`.
+    - Action item permission check: Requires meeting organiser status or `meeting.action.manage`, `meeting.edit`, `org.admin`, or `org.owner` (HTTP 403 `FORBIDDEN`).
+    - OpenRouter provider routing controls `{ provider: { data_collection: 'deny', zdr: true } }` with fail-closed enforcement.
+    - Ephemeral draft response (`isDraft: true`): Zero automatic database writes on extraction.
+- **Deterministic Server-Side Candidate Assignee Matching:**
+  - Queries active organisation members (`organisation_memberships.status = 'active'`) within the tenant transaction.
+  - Implemented `matchAssigneeCandidate(candidateName, activeMembers)`:
+    - Case-insensitive exact full name match (`fullName.toLowerCase() === candidateName.toLowerCase()`).
+    - Exact email match.
+    - Unique first-name match if exactly one active member possesses that first name.
+    - Multiple active members sharing the same first name or identical full names return unresolved with `suggestedAssignee: null, isAmbiguousAssignee: true`.
+    - Inactive members, cross-tenant users, or non-members return unresolved with `suggestedAssignee: null, isAmbiguousAssignee: false`.
+- **API Endpoint Mounting (`routes/meetings.js`):**
+  - Mounted canonical endpoint `POST /api/v1/organisations/:orgId/meetings/:meetingId/ai/action-items`.
+  - Protected with `authenticateToken`, `requireOrgMembership`, `requireModuleEntitlement('meetings')`, and `requireOrgPermission('meeting.view')`.
+- **Frontend Integration & Finding-01 Safe Retry Modal (`AiActionItemsModal.tsx` & `MeetingDetailPage.tsx`):**
+  - Created `frontend/src/pages/workspace/meetings/AiActionItemsModal.tsx` following ManageX Clean Enterprise light theme.
+  - Wired trigger buttons in `MeetingDetailPage.tsx`:
+    - Tab 4 Header: "Extract with AI" button next to "Add Action Item".
+    - Tab 4 Empty State: "Extract with AI" button next to "Add Action Item".
+    - Tab 3 Section 3 (Integrated MOM View): "Extract with AI" button.
+  - Features of `AiActionItemsModal`:
+    - Optional Focus Areas and Additional Instructions.
+    - Candidate list with selection checkboxes, title input, description input, priority selector, due date picker, and active member assignee selector.
+    - Status badges for matched assignees (`Matched: {name}`), ambiguous matches (`Ambiguous: multiple matches`), and unresolved candidates (`Candidate not in organisation`).
+    - Add item manually and remove item controls.
+    - Validation on save: requires non-empty title and valid active assignee for all selected items.
+    - Sequential save via standard endpoint `POST /organisations/:orgId/meetings/:meetingId/action-items` with Finding-01 retry protection (confirmed successful items are immediately removed from draft state; if a subsequent item fails, only uncommitted items remain for user review and safe retry without duplicate submissions).
+
+### 2. Files Created or Changed
+- `backend/src/platform/ai/schemas/meetingsAiSchemas.js` (Added action item schemas)
+- `backend/src/platform/ai/meetingsAiService.js` (Implemented extraction and candidate matching)
+- `backend/src/routes/meetings.js` (Mounted POST `/:meetingId/ai/action-items`)
+- `backend/src/platform/ai/meetingsAi.test.js` (Added 12 unit tests for schema, prompt, and candidate matching)
+- `backend/src/platform/ai/meetings_actions_ai.integration.test.js` (Created 10 comprehensive integration tests)
+- `frontend/src/pages/workspace/meetings/AiActionItemsModal.tsx` (Created review modal with safe retry)
+- `frontend/src/pages/workspace/meetings/AiActionItemsModal.test.tsx` (Created 5 frontend unit/SSR tests)
+- `frontend/src/pages/workspace/meetings/MeetingDetailPage.tsx` (Wired modal and triggers)
+- `docs/managex-ai-implementation-plan.md` (Updated §4.1 and §9.3)
+- `docs/requirements-traceability.md` (Updated `AI-REQ-06` to VERIFIED)
+- `docs/progress.md` (Appended Phase 02C report)
+
+### 3. Verification & Test Results
+- **AI Unit Tests (`meetingsAi.test.js`, `openrouterClient.test.js`):** 30/30 passed (100%).
+- **AI Integration Tests Suite (`meetings_actions_ai`, `meetings_agenda_ai`, `meetings_summary_ai`):** 22/22 passed (100%) against `managex_test`.
+- **Frontend Meetings AI Tests (`AiActionItemsModal.test.tsx`, `AiNotesSummaryModal.test.tsx`, `AiAgendaDraftModal.test.tsx`):** 18/18 passed (100%).
+- **Frontend Meeting Detail Page Tests (`MeetingDetailPage.test.tsx`):** 47/47 passed (100%).
+- **Frontend Production Build (`tsc && vite build`):** 0 errors, build successful.
+
+### 4. Database Migrations Added
+- Zero migrations: Used existing schema (`meetings`, `meeting_notes`, `meeting_discussion_points`, `meeting_decisions`, `meeting_action_items`, `organisation_memberships`, `organisation_ai_settings`, `ai_usage_records`). No new migration created or needed.
+
+### 5. Next Phase
+- Phase 02C Targeted Audit Remediation (Findings 01, 02, 03).
+
+---
+
+## Phase 02C Remediation Report — Targeted Audit Remediation (Findings 01, 02, 03)
+
+### 1. Requirements Remediated
+- **Finding 01 Remediation (Contract Alignment between Backend and Frontend Modal):**
+  - Aligned frontend `AiActionItemsModal.tsx` directly with canonical backend response schema:
+    - Root response property `candidateActionItems` (replaces previous client expectation of `actionItems`).
+    - Extracted due date property `suggestedDueDate` mapped to `dueDate` (replaces `dueDate`).
+    - Extracted raw candidate name `rawAssigneeName` mapped to `candidateAssigneeName`.
+    - Suggested assignee object `suggestedAssignee` includes `{ userId, fullName, name, email }`. Badge display renders `Matched: {item.suggestedAssignee.fullName}`.
+  - Aligned `backend/src/platform/ai/meetingsAiService.js` `matchAssigneeCandidate`:
+    - Now returns `suggestedAssignee: { userId: m.user_id, fullName: m.full_name, name: m.full_name, email: m.email }` preserving backward compatibility while strictly supplying `fullName`.
+  - Added dedicated contract compatibility tests in `AiActionItemsModal.test.tsx` verifying:
+    - Canonical `candidateActionItems` shape parsing.
+    - Multiple candidate items with all priorities.
+    - Missing optional due dates safely defaulting to empty string.
+    - Unresolved candidates when assignee is not in active member roster.
+    - Empty candidate list handling.
+- **Finding 02 Remediation (Permission Symmetry for Action Item Management):**
+  - Identified permission asymmetric discrepancy: `extractMeetingActionItems` permitted `meeting.edit`, whereas the underlying persistence endpoint `createMeetingActionItem` strictly requires `meeting.action.manage`, `org.admin`, `org.owner`, or being the meeting organiser.
+  - Removed `meeting.edit` from `canManageActions` in `backend/src/platform/ai/meetingsAiService.js`:
+    ```javascript
+    const canManageActions =
+      isOrganiser ||
+      hasPermission(userPermissions, 'meeting.action.manage') ||
+      hasPermission(userPermissions, 'org.admin') ||
+      hasPermission(userPermissions, 'org.owner');
+    ```
+  - Added integration test `Test 5b` in `meetings_actions_ai.integration.test.js` asserting that a user holding `meeting.notes.read` AND `meeting.edit` (but lacking `meeting.action.manage`) receives HTTP 403 `FORBIDDEN`.
+  - Aligned documentation in `docs/managex-ai-implementation-plan.md` (§4.1, §9.3) to exclude `meeting.edit`.
+- **Finding 03 Assessment & Architectural Specification (Server-Side Idempotency):**
+  - Confirmed current client-side retry handling in `AiActionItemsModal.tsx` implements Finding-01 safe retry (removing confirmed saved items from draft state).
+  - Evaluated requirements for true server-side idempotency:
+    - In-memory maps violate horizontal scalability and multi-process safety.
+    - Redis is not part of the current technology stack or approved architecture.
+    - Reliable server-side idempotency requires database schema persistence (`idempotency_keys` table or `client_request_id` column on `meeting_action_items`).
+    - Per user explicit instructions: zero unapproved database migrations, schema alterations, or database mutations may be applied.
+    - Fully specified the proposed database schema addition, uniqueness scope, concurrency locking behavior, and verification path for future stakeholder review and approval.
+
+### 2. Files Created or Changed
+- `backend/src/platform/ai/meetingsAiService.js` (Added `fullName` to match result; removed `meeting.edit` from `canManageActions`)
+- `frontend/src/pages/workspace/meetings/AiActionItemsModal.tsx` (Mapped canonical `candidateActionItems`, `suggestedDueDate`, `rawAssigneeName`, `fullName`)
+- `backend/src/platform/ai/meetingsAi.test.js` (Updated unit test for `suggestedAssignee.fullName`)
+- `backend/src/platform/ai/meetings_actions_ai.integration.test.js` (Added Test 5b for `meeting.edit` denial; verified `suggestedAssignee.fullName`)
+- `frontend/src/pages/workspace/meetings/AiActionItemsModal.test.tsx` (Added 5 contract compatibility tests)
+- `docs/managex-ai-implementation-plan.md` (Updated §4.1 and §9.3)
+- `docs/progress.md` (Appended Phase 02C Remediation section)
+
+### 3. Verification & Test Results
+- **AI Unit Tests (`meetingsAi.test.js`, `openrouterClient.test.js`):** 30/30 passed (100%).
+- **AI Integration Tests Suite (`meetings_actions_ai`, `meetings_agenda_ai`, `meetings_summary_ai`):** 23/23 passed (100%) against `managex_test` (including new permission symmetry Test 5b).
+- **Frontend Meetings AI Tests (`AiActionItemsModal.test.tsx`, `AiNotesSummaryModal.test.tsx`, `AiAgendaDraftModal.test.tsx`):** 20/20 passed (100%).
+- **Frontend Meeting Detail Page Tests (`MeetingDetailPage.test.tsx`):** 47/47 passed (100%).
+- **Frontend Production Build (`tsc && vite build`):** 0 errors, build successful.
+
+### 4. Database Migrations Added
+- Zero migrations added: All remediations executed within existing database objects. Server-side idempotency schema addition documented and held for explicit migration approval.
+
+### 5. Next Phase
+- Phase 03: Events & Hackathons AI — Task 3.1 completed; Task 3.2 pending authorization.
+
+---
+
+## Phase 03 Task 3.1 Completion Report — Events AI Backend Schemas & Service Foundation
+
+### 1. Requirements Implemented
+- **Events AI Schemas (`backend/src/platform/ai/schemas/eventsAiSchemas.js`):**
+  - `generateEventContentInputSchema`: Validates optional theme (max 200), target audience (max 200), focus areas (max 5 items, max 200 each), and additional instructions (max 1000).
+  - `eventFaqItemSchema` & `generateEventContentOutputSchema`: Validates structured event title suggestion, overview (1-1000 chars), description (1-5000 chars), eligibility criteria, submission guidelines, rules array (max 20), and FAQ items array (max 15).
+  - `generateJudgingRubricInputSchema`: Validates competition tracks (max 5), criteria count (2-10, default 4), focus areas, and additional instructions.
+  - `judgingCriterionSchema` & `generateJudgingRubricOutputSchema`: Validates criteria names (2-120 chars), descriptions, scoring guidance, order index, and enforces PRD §20.14 Decision 9 / database schema constraints for `maxScore` (integer > 0 and <= 100).
+- **Events AI Service Foundation (`backend/src/platform/ai/eventsAiService.js`):**
+  - `moduleSlug: 'events'`.
+  - System prompts `EVENT_CONTENT_SYSTEM_PROMPT` and `JUDGING_RUBRIC_SYSTEM_PROMPT` with delimiter isolation.
+  - `sanitizeText` sanitizer neutralizing closing XML delimiters (`</event_context>`, `</event_tracks>`, etc.) to prevent prompt-injection breakouts.
+  - `generateEventContent`: Retrieves event metadata inside `withTenantTransaction`, enforces `event.edit` / creator / admin authorization, rejects terminal events (`completed`, `cancelled`, `archived`) with HTTP 409 `EVENT_TERMINAL`, executes `executeAiCompletion` outside DB transaction with OpenRouter ZDR routing controls (`{ provider: { data_collection: 'deny', zdr: true } }`), and returns strictly ephemeral draft (`isDraft: true`).
+  - `generateJudgingRubric`: Retrieves event context, enforces `event.edit` / creator / admin authorization, enforces strict scoring commencement guard (PRD EVT-008: queries `event_scores` and rejects with HTTP 409 `SCORING_ALREADY_STARTED` if scoring has commenced), executes `executeAiCompletion`, normalizes criteria scores/order, and returns ephemeral draft (`isDraft: true`).
+  - Strict data minimization: Submissions, confidential judge notes, private scores, and unreleased participant data are strictly excluded from AI context. Zero automated database persistence.
+
+### 2. Files Created or Changed
+- `backend/src/platform/ai/schemas/eventsAiSchemas.js` (Created Zod schemas for content and rubrics)
+- `backend/src/platform/ai/eventsAiService.js` (Created service with prompt builders, injection defenses, and lifecycle guards)
+- `backend/src/platform/ai/eventsAi.test.js` (Created 12 unit tests for schema validation, score bounds, and prompt injection sanitization)
+- `backend/src/platform/ai/events_ai.integration.test.js` (Created 7 database integration tests against `managex_test`)
+- `docs/progress.md` (Appended Task 3.1 completion report)
+
+### 3. Verification & Test Results
+- **Events AI Unit Tests (`eventsAi.test.js`):** 12/12 passed (100%).
+- **Events AI Integration Suite (`events_ai.integration.test.js`):** 7/7 passed (100%) against `managex_test`.
+- **All AI Unit Tests Suite (`eventsAi.test.js`, `meetingsAi.test.js`, `openrouterClient.test.js`):** 42/42 passed (100%).
+- **Database Migrations Added:** 0 (zero migrations; used existing `events`, `event_scoring_criteria`, `organisation_ai_settings`, `ai_usage_records`).
+
+### 4. Next Task
+- Phase 03 Task 3.2: API Route Mounting & Integration Tests (`POST .../events/:id/ai/content`, `POST .../events/:id/ai/rubrics`) — COMPLETED.
+
+---
+
+## Phase 03 Task 3.2 Completion Report — API Route Mounting & Integration
+
+### 1. Requirements Implemented
+- **Route Endpoint Mounting (`backend/src/routes/events.js`):**
+  - Mounted `POST /api/v1/organisations/:orgId/events/:eventId/ai/content`:
+    - Middleware pipeline: `requireOrgMembership`, `requireModuleEntitlement('events')`, `requireOrgPermission('event.edit')`.
+    - Payload validation: parsed with `generateEventContentInputSchema`. Throws `ValidationError` (HTTP 422 `VALIDATION_ERROR`) on invalid payloads.
+    - Handled via `generateEventContent({ organisationId, eventId, userId, userPermissions, input })`.
+    - Responds with `sendSuccess(res, 200, draftResult)` containing `{ isDraft: true, eventId, content, usage }`.
+  - Mounted `POST /api/v1/organisations/:orgId/events/:eventId/ai/rubrics`:
+    - Middleware pipeline: `requireOrgMembership`, `requireModuleEntitlement('events')`, `requireOrgPermission('event.edit')`.
+    - Payload validation: parsed with `generateJudgingRubricInputSchema`. Throws `ValidationError` (HTTP 422 `VALIDATION_ERROR`) on invalid payloads.
+    - Handled via `generateJudgingRubric({ organisationId, eventId, roundId, userId, userPermissions, input })`.
+    - Responds with `sendSuccess(res, 200, draftResult)` containing `{ isDraft: true, eventId, roundId, rubrics, usage }`.
+- **Authorization & Security Guards:**
+  - Enforced authentication: 401 when unauthenticated.
+  - Enforced organization membership: 403 when user is not a member of `:orgId`.
+  - Enforced module entitlement: 403 `MODULE_DISABLED` when the `events` module is disabled for `:orgId`.
+  - Enforced permission: 403 `FORBIDDEN` when caller lacks `event.edit` and is not event creator / admin.
+  - Enforced terminal event guard: 409 `EVENT_TERMINAL` when event status is `completed`, `cancelled`, or `archived`.
+  - Enforced scoring commenced guard (EVT-008): 409 `SCORING_ALREADY_STARTED` when submissions have begun evaluation/scoring.
+  - Enforced PostgreSQL tenant isolation & RLS: 404 `EVENT_NOT_FOUND` when attempting to access cross-tenant events.
+  - Ephemeral AI generation: zero database writes performed on `events` or `event_scoring_criteria` tables.
+
+### 2. Files Created or Changed
+- `backend/src/routes/events.js` (Mounted `POST /:eventId/ai/content` and `POST /:eventId/ai/rubrics` with validation and access control)
+- `backend/src/platform/ai/aiService.js` (Resolved `apiKey` dynamically from `env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY`)
+- `backend/src/platform/ai/openrouterClient.js` (Resolved `apiKey` dynamically from `env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY`)
+- `backend/src/platform/ai/events_routes_ai.integration.test.js` (Created comprehensive 11-test suite for route lifecycle, authorization, validation, scoring guards, and ephemerality)
+- `backend/src/platform/ai/events_ai.integration.test.js` (Updated teardown to close DB pool cleanly)
+- `docs/requirements-traceability.md` (Updated `AI-REQ-07` and `AI-REQ-08` backend status to verified)
+- `docs/progress.md` (Appended Task 3.2 completion report)
+
+### 3. Verification & Test Results
+- **Events AI Route Integration Tests (`events_routes_ai.integration.test.js`):** 11/11 passed (100%) against `managex_test`:
+  - `POST /api/v1/organisations/:orgId/events/:eventId/ai/content`:
+    1. Event creator can generate ephemeral content draft via API endpoint (200 OK, `isDraft: true`, zero DB mutation)
+    2. Rejects request with missing authentication (401 UNAUTHORIZED)
+    3. Rejects user without organisation membership (403 FORBIDDEN)
+    4. Rejects user lacking `event.edit` permission (403 FORBIDDEN)
+    5. Rejects request when Events module is not entitled (403 MODULE_DISABLED)
+    6. Rejects malformed payload exceeding input constraints (422 VALIDATION_ERROR)
+    7. Rejects generation for completed terminal events (409 EVENT_TERMINAL)
+    8. Cross-tenant event access fails closed (404 EVENT_NOT_FOUND)
+  - `POST /api/v1/organisations/:orgId/events/:eventId/ai/rubrics`:
+    1. Event editor can generate ephemeral judging rubric via API endpoint (200 OK, `isDraft: true`, integer maxScores, zero DB mutation)
+    2. Rejects rubric generation once scoring has commenced (EVT-008, 409 SCORING_ALREADY_STARTED)
+    3. Rejects invalid rubric request body (`criteriaCount < 2`, 422 VALIDATION_ERROR)
+- **Events AI Foundation Integration Suite (`events_ai.integration.test.js`):** 7/7 passed (100%) against `managex_test`.
+- **All AI Unit Tests Suite (`eventsAi.test.js`, `meetingsAi.test.js`, `openrouterClient.test.js`):** 42/42 passed (100%).
+- **Database Migrations Added:** 0 (zero migrations added or executed).
+
+### 4. Next Task
+- Phase 03 Task 3.3: Frontend AI Modals & Event Integration (`AiEventContentModal`, `AiJudgingRubricModal`, and Event Detail / Judging setup wiring) — COMPLETED.
+
+---
+
+## Phase 03 Task 3.3 Completion Report — Frontend AI Modals & Event Integration
+
+### 1. Requirements Implemented
+- **AI Event Content Modal (`frontend/src/pages/workspace/events/AiEventContentModal.tsx`):**
+  - Integrated into `EventDetailPage.tsx` action bar next to "Edit Event", guarded by `canEditEvent` and disabled when event is in terminal state.
+  - Collects only valid inputs supported by `generateEventContentInputSchema`: Theme (max 200), Target Audience (max 200), Focus Areas (tags, max 5), and Additional Instructions (max 1000).
+  - Calls `POST /api/v1/organisations/:orgId/events/:eventId/ai/content` with the existing authenticated `apiClient`.
+  - Renders the returned structured draft as an explicitly labelled AI draft (`AI Draft` badge) with independent field-level selection:
+    - Update Event Title (checkbox + editable input)
+    - Apply Event Overview & Description (checkbox + editable textarea)
+    - Apply Participant Instructions (checkbox + editable textarea formatted from guidelines, rules, and FAQs via `composeParticipantInstructions`)
+  - Provides quick copy-to-clipboard buttons for Title, Description, Instructions, and raw FAQs.
+  - Explicit confirmation & overwrite safeguards:
+    - Does NOT automatically persist on generation or modal opening.
+    - Pre-flight refetches current event state from server (`GET /organisations/:orgId/events/:eventId`).
+    - If relevant fields have changed in the database since the modal was opened, halts and displays the `Concurrent Modification Detected` conflict review step showing side-by-side values ("Current in Database" vs "Your Proposed Draft").
+    - Requires explicit confirmation to overwrite.
+    - Preserves existing database values for unselected fields.
+    - Persists via standard `PATCH /organisations/:orgId/events/:eventId` update workflow.
+- **AI Judging Rubric Modal (`frontend/src/pages/workspace/events/AiJudgingRubricModal.tsx`):**
+  - Integrated into `EventDetailPage.tsx` under Judging -> Criteria subtab next to "Add Criterion", guarded by `canEditEvent` and disabled for terminal events.
+  - Collects Competition Tracks (max 5 tags), Criteria Count (2–10, default 4), Focus Areas (max 5 tags), and Additional Instructions (max 1000).
+  - Calls `POST /api/v1/organisations/:orgId/events/:eventId/ai/rubrics${roundId ? `?roundId=${roundId}` : ''}`.
+  - Strictly consumes `response.data.criteria` (NOT `rubrics`).
+  - Merges generated `scoringGuidance` into criterion description using a clearly labelled `Scoring Guidance:` section via `mergeScoringGuidance`, allowing full user review and editing.
+  - Validates `maxScore` as an integer between 1 and 100 per PRD §20.14 Decision 9.
+  - Allows editing criterion name, max score, description, deleting individual criteria, adding custom criteria, and reordering.
+  - Sequential save with Finding-01 retry protection:
+    - Sequential creation via standard `POST /api/v1/organisations/:orgId/events/:eventId/criteria`.
+    - Successfully saved criteria are removed from the unsaved draft list in real-time.
+    - If a criterion fails (e.g. duplicate name 409 conflict or scoring started 409):
+      - Saves halt immediately; unsaved criteria remain in the modal list.
+      - Displays actionable Partial Save Notice detailing saved count, failed criterion name, and server error message.
+      - Prevents duplicate submissions of already-saved criteria upon retry.
+    - Re-fetches judging criteria via `fetchJudgingData()` upon completion.
+
+### 2. Files Created or Changed
+- `frontend/src/pages/workspace/events/AiEventContentModal.tsx` (Created AI event content modal with field selection, copy tools, and concurrency conflict detection)
+- `frontend/src/pages/workspace/events/AiJudgingRubricModal.tsx` (Created AI judging rubric modal with score bounds, scoring guidance consolidation, and sequential save retry protection)
+- `frontend/src/pages/workspace/events/EventDetailPage.tsx` (Wired action buttons and dialog components guarded by `canEditEvent` and active event lifecycle)
+- `frontend/src/pages/workspace/events/AiEventContentModal.test.tsx` (Created 7 unit and concurrency tests)
+- `frontend/src/pages/workspace/events/AiJudgingRubricModal.test.tsx` (Created 7 unit, score bound, and Finding-01 sequential save retry tests)
+- `docs/requirements-traceability.md` (Updated `AI-REQ-07` and `AI-REQ-08` status to `VERIFIED`)
+- `docs/progress.md` (Recorded Task 3.3 completion report)
+
+### 3. Verification & Test Results
+- **Frontend Event AI Tests (`AiEventContentModal.test.tsx`, `AiJudgingRubricModal.test.tsx`, `EventDetailPage.test.tsx`):** **26/26 passed (100%)**.
+- **All AI Frontend Modal Suites (`events/`, `meetings/Ai*`):** **45/45 passed (100%)**.
+- **Frontend Production Build & Typecheck (`tsc && vite build`):** **0 errors, build successful**.
+- **Backend AI Unit Suites (`eventsAi.test.js`, `meetingsAi.test.js`, `openrouterClient.test.js`):** **42/42 passed (100%)**.
+- **Backend AI Integration Suites (`events_ai.integration.test.js`, `events_routes_ai.integration.test.js`):** **18/18 passed (100%)** against `managex_test`.
+- **Database Migrations Added:** 0 (zero migrations added or executed).
+
+### 4. Next Phase
+- Phase 04: Projects & Tasks AI (Task Breakdown & Status Reports).

@@ -123,7 +123,7 @@ export function WorkspaceOverviewPage() {
               <div className="space-y-1">
                 <h2 className="text-base font-semibold text-slate-900">Platform Administrator Workspace</h2>
                 <p className="text-xs text-slate-600 max-w-md mx-auto">
-                  You are currently signed in with platform administrative privileges without an active tenant organisation membership. You can access the Operator Console or create a new organisation workspace.
+                  You are currently signed in with platform administrative privileges without an active organisation selected. You can access the Operator Console or create a new organisation workspace.
                 </p>
               </div>
               <div className="flex items-center justify-center gap-3">

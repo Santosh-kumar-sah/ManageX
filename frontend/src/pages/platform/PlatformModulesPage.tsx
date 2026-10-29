@@ -91,11 +91,11 @@ export function PlatformModulesPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Platform Module Catalogue</h1>
             <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              PLAT-004
+              Module Governance
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Global availability controls for the 3 fixed MVP modules. Deactivation preserves customer data.
+            Global availability controls for enterprise modules. Deactivation preserves customer data.
           </p>
         </div>
 
@@ -140,7 +140,7 @@ export function PlatformModulesPage() {
                           <Badge variant="danger">Platform Disabled</Badge>
                         )}
                         {mod.isCore && (
-                          <Badge variant="brand" className="text-[10px]">MVP Core</Badge>
+                          <Badge variant="brand" className="text-[10px]">Standard Core</Badge>
                         )}
                       </div>
                       <p className="text-xs text-slate-600 mt-1.5 leading-relaxed max-w-2xl">

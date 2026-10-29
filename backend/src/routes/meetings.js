@@ -49,6 +49,16 @@ import {
   exportMeeting,
 } from '../platform/meetings/meetingService.js';
 import { syncMeetingWithGoogle } from '../platform/integrations/googleMeetService.js';
+import {
+  generateAgendaInputSchema,
+  summarizeNotesInputSchema,
+  extractActionItemsInputSchema,
+} from '../platform/ai/schemas/meetingsAiSchemas.js';
+import {
+  generateMeetingAgendaDraft,
+  summarizeMeetingNotes,
+  extractMeetingActionItems,
+} from '../platform/ai/meetingsAiService.js';
 import { sendSuccess } from '../platform/common/responses.js';
 import { ValidationError, AuthorizationError } from '../platform/common/errors.js';
 
@@ -711,6 +721,99 @@ meetingsRouter.put(
       );
 
       return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// -----------------------------------------------------------------------------
+// 3.1 AI Agenda Draft Generation (Phase 02A)
+// -----------------------------------------------------------------------------
+
+meetingsRouter.post(
+  '/:meetingId/ai/agenda',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.edit'),
+  async (req, res, next) => {
+    try {
+      const parsed = generateAgendaInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const draftResult = await generateMeetingAgendaDraft({
+        organisationId: req.organisation.id,
+        meetingId: req.params.meetingId,
+        userId: req.user.id,
+        userPermissions: req.membership?.permissions || [],
+        input: parsed.data,
+      });
+
+      return sendSuccess(res, 200, draftResult);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// -----------------------------------------------------------------------------
+// 3.2 AI Meeting Notes Summarization (Phase 02B)
+// -----------------------------------------------------------------------------
+
+meetingsRouter.post(
+  '/:meetingId/ai/summarize',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = summarizeNotesInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const summaryResult = await summarizeMeetingNotes({
+        organisationId: req.organisation.id,
+        meetingId: req.params.meetingId,
+        userId: req.user.id,
+        userPermissions: req.membership?.permissions || [],
+        input: parsed.data,
+      });
+
+      return sendSuccess(res, 200, summaryResult);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// -----------------------------------------------------------------------------
+// 3.3 AI Meeting Action Items Extraction (Phase 02C)
+// -----------------------------------------------------------------------------
+
+meetingsRouter.post(
+  '/:meetingId/ai/action-items',
+  requireOrgMembership,
+  requireModuleEntitlement('meetings'),
+  requireOrgPermission('meeting.view'),
+  async (req, res, next) => {
+    try {
+      const parsed = extractActionItemsInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const extractionResult = await extractMeetingActionItems({
+        organisationId: req.organisation.id,
+        meetingId: req.params.meetingId,
+        userId: req.user.id,
+        userPermissions: req.membership?.permissions || [],
+        input: parsed.data,
+      });
+
+      return sendSuccess(res, 200, extractionResult);
     } catch (err) {
       next(err);
     }

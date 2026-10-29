@@ -125,7 +125,7 @@ export function PlatformOrganisationsPage() {
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Operational tenant inspection and suspension controls. Strictly isolated from private tenant records.
+            Enterprise organization directory and status controls with strict workspace privacy isolation.
           </p>
         </div>
 

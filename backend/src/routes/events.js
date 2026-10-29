@@ -97,6 +97,14 @@ import {
   revokeEvaluationJudgeInvitation,
   completeRoundEvaluation,
 } from '../platform/events/evaluationService.js';
+import {
+  generateEventContentInputSchema,
+  generateJudgingRubricInputSchema,
+} from '../platform/ai/schemas/eventsAiSchemas.js';
+import {
+  generateEventContent,
+  generateJudgingRubric,
+} from '../platform/ai/eventsAiService.js';
 import { requireAuth, requireVerifiedUser } from '../platform/middleware/auth.js';
 import { sendSuccess } from '../platform/common/responses.js';
 import { ValidationError } from '../platform/common/errors.js';
@@ -2089,6 +2097,65 @@ eventsRouter.get(
 
       const session = data.sessions && data.sessions.length > 0 ? data.sessions[0] : null;
       return sendSuccess(res, 200, { session });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// -----------------------------------------------------------------------------
+// Phase 03: Events & Hackathons AI Endpoints (AI-REQ-07, AI-REQ-08)
+// -----------------------------------------------------------------------------
+
+eventsRouter.post(
+  '/:eventId/ai/content',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireOrgPermission('event.edit'),
+  async (req, res, next) => {
+    try {
+      const parsed = generateEventContentInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const draftResult = await generateEventContent({
+        organisationId: req.organisation.id,
+        eventId: req.params.eventId,
+        userId: req.user.id,
+        userPermissions: req.membership?.permissions || [],
+        input: parsed.data,
+      });
+
+      return sendSuccess(res, 200, draftResult);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+eventsRouter.post(
+  '/:eventId/ai/rubrics',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireOrgPermission('event.edit'),
+  async (req, res, next) => {
+    try {
+      const parsed = generateJudgingRubricInputSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new ValidationError('Validation failed', parsed.error.issues);
+      }
+
+      const draftResult = await generateJudgingRubric({
+        organisationId: req.organisation.id,
+        eventId: req.params.eventId,
+        roundId: req.query.roundId || req.body?.roundId || null,
+        userId: req.user.id,
+        userPermissions: req.membership?.permissions || [],
+        input: parsed.data,
+      });
+
+      return sendSuccess(res, 200, draftResult);
     } catch (err) {
       next(err);
     }
