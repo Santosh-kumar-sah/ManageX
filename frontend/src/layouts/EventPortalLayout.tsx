@@ -102,10 +102,16 @@ export function EventPortalLayout() {
                   <span className="font-semibold text-slate-900">{user.fullName || user.email}</span>
                 </Link>
 
-                {organisations.length > 0 && (
+                {organisations.length > 0 ? (
                   <Link to="/app">
                     <Button variant="outline" size="sm" className="text-xs">
                       Organisation Workspace
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link to="/app/organisations">
+                    <Button variant="primary" size="sm" className="text-xs">
+                      + Create Organisation
                     </Button>
                   </Link>
                 )}
@@ -185,6 +191,27 @@ export function EventPortalLayout() {
                   <div className="px-3 py-1 text-sm font-medium text-slate-900">
                     Signed in as {user.fullName || user.email}
                   </div>
+                  {organisations.length > 0 ? (
+                    <Link
+                      to="/app"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block w-full"
+                    >
+                      <Button variant="outline" size="sm" className="w-full justify-start">
+                        Organisation Workspace
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link
+                      to="/app/organisations"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="block w-full"
+                    >
+                      <Button variant="primary" size="sm" className="w-full justify-start">
+                        + Create Organisation
+                      </Button>
+                    </Link>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

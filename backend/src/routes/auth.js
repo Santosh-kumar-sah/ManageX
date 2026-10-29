@@ -21,6 +21,7 @@ import { hashPassword, verifyPassword } from '../platform/auth/passwords.js';
 import { generateSecureToken, hashToken } from '../platform/auth/tokens.js';
 import { createSession, revokeSession, revokeAllUserSessions, SESSION_COOKIE_NAME } from '../platform/auth/sessionService.js';
 import { sendEmail } from '../platform/email/emailService.js';
+import { createOrganisation } from '../platform/organisations/organisationService.js';
 import { requireAuth } from '../platform/middleware/auth.js';
 import { createRateLimiter } from '../platform/middleware/rateLimiter.js';
 import { CSRF_COOKIE_NAME } from '../platform/middleware/csrf.js';
@@ -78,6 +79,17 @@ const registerSchema = z.object({
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number')
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+  accountType: z.enum(['individual', 'organisation']).optional().default('individual'),
+  organisationName: z.string().trim().max(255).optional(),
+  organisationSlug: z.string().trim().max(100).optional(),
+}).superRefine((data, ctx) => {
+  if (data.accountType === 'organisation' && (!data.organisationName || data.organisationName.trim().length < 2)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['organisationName'],
+      message: 'Organisation name is required and must be at least 2 characters when registering as an organisation.',
+    });
+  }
 });
 
 authRouter.post('/register', registerLimiter, async (req, res, next) => {
@@ -88,7 +100,7 @@ authRouter.post('/register', registerLimiter, async (req, res, next) => {
       throw new ValidationError('Validation failed for registration input', details);
     }
 
-    const { fullName, email, password } = parseResult.data;
+    const { fullName, email, password, accountType, organisationName, organisationSlug } = parseResult.data;
     const normalizedEmail = email.toLowerCase().trim();
 
     const pool = getPool();
@@ -135,6 +147,18 @@ authRouter.post('/register', registerLimiter, async (req, res, next) => {
       client.release();
     }
 
+    // If registered as organisation, create the organisation with owner assignment atomically
+    let createdOrg = null;
+    if (accountType === 'organisation' && organisationName?.trim()) {
+      createdOrg = await createOrganisation({
+        name: organisationName.trim(),
+        slug: organisationSlug?.trim() || undefined,
+        userId: newUserId,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+    }
+
     // Deliver verification email (AUTH-008)
     const verificationUrl = `${env.FRONTEND_ORIGIN}/auth/verify-email?token=${rawVerificationToken}`;
     await sendEmail({
@@ -147,6 +171,7 @@ authRouter.post('/register', registerLimiter, async (req, res, next) => {
     return sendSuccess(res, 201, {
       message: 'Registration successful. Please check your email to verify your account.',
       email: normalizedEmail,
+      organisation: createdOrg ? { id: createdOrg.id, name: createdOrg.name, slug: createdOrg.slug } : null,
     });
   } catch (err) {
     next(err);
