@@ -96,6 +96,9 @@ import {
   createEvaluationJudgeInvitation,
   revokeEvaluationJudgeInvitation,
   completeRoundEvaluation,
+  generateDefaultMeetingUrl,
+  generatePanelMeetingUrl,
+  bulkGeneratePanelsMeetingUrls,
 } from '../platform/events/evaluationService.js';
 import {
   generateEventContentInputSchema,
@@ -1624,6 +1627,28 @@ eventsRouter.patch(
   }
 );
 
+// 3b. Generate default Google Meet for round evaluation
+eventsRouter.post(
+  '/:eventId/rounds/:roundId/evaluation/generate-default-meet',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireStrictOrgPermission('event.evaluation.manage'),
+  async (req, res, next) => {
+    try {
+      const data = await generateDefaultMeetingUrl(
+        req.organisation.id,
+        req.params.eventId,
+        req.params.roundId,
+        req.user.id,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
+      return sendSuccess(res, 200, data);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 // 4. List evaluation panels
 eventsRouter.get(
   '/:eventId/rounds/:roundId/evaluation/panels',
@@ -1726,6 +1751,55 @@ eventsRouter.delete(
         { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
       );
 
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// 7b. Bulk generate Google Meet links for all panels
+eventsRouter.post(
+  '/:eventId/rounds/:roundId/evaluation/panels/bulk-generate-meet',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireStrictOrgPermission('event.evaluation.judge.manage'),
+  async (req, res, next) => {
+    try {
+      const result = await bulkGeneratePanelsMeetingUrls(
+        req.organisation.id,
+        req.params.eventId,
+        req.params.roundId,
+        req.user.id,
+        {
+          overwriteExisting: Boolean(req.body?.overwriteExisting),
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+        }
+      );
+      return sendSuccess(res, 200, result);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// 7c. Generate Google Meet link for a single panel
+eventsRouter.post(
+  '/:eventId/rounds/:roundId/evaluation/panels/:panelId/generate-meet',
+  requireOrgMembership,
+  requireModuleEntitlement('events'),
+  requireStrictOrgPermission('event.evaluation.judge.manage'),
+  async (req, res, next) => {
+    try {
+      const result = await generatePanelMeetingUrl(
+        req.organisation.id,
+        req.params.eventId,
+        req.params.roundId,
+        req.params.panelId,
+        req.user.id,
+        { ipAddress: req.ip, userAgent: req.headers['user-agent'] }
+      );
       return sendSuccess(res, 200, result);
     } catch (err) {
       next(err);

@@ -11,6 +11,7 @@ import {
   Settings2,
   Trash2,
   Users,
+  Video,
 } from 'lucide-react';
 import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
@@ -202,6 +203,9 @@ export function EvaluationPage({
   const [scheduleOverwrite, setScheduleOverwrite] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [rescheduleForm, setRescheduleForm] = useState({ panelId: '', startsAt: '', endsAt: '', meetingUrl: '' });
+  const [isGeneratingDefaultMeet, setIsGeneratingDefaultMeet] = useState(false);
+  const [isGeneratingModalMeet, setIsGeneratingModalMeet] = useState(false);
+  const [isGeneratingBulkMeet, setIsGeneratingBulkMeet] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!basePath || !orgId || !eventId) return;
@@ -351,6 +355,95 @@ export function EvaluationPage({
       await apiClient(`${basePath}/judge-invitations/${invitation.id}`, { method: 'DELETE' });
       setInvitations((current) => current.filter((item) => item.id !== invitation.id));
     }, 'Invitation revoked.');
+  }
+
+  async function handleGenerateDefaultMeet() {
+    if (!basePath) return;
+    try {
+      setIsGeneratingDefaultMeet(true);
+      clearMessages();
+      const res = await apiClient<{ meetingUrl: string }>(`${basePath}/generate-default-meet`, {
+        method: 'POST',
+      });
+      if (res.data?.meetingUrl) {
+        setConfigForm((prev) => ({ ...prev, defaultMeetingUrl: res.data!.meetingUrl }));
+        setSuccessMessage('Google Meet link successfully generated!');
+      }
+    } catch (error) {
+      setMutationError(getErrorMessage(error, 'Failed to generate Google Meet link. Ensure Google is connected in Settings.'));
+    } finally {
+      setIsGeneratingDefaultMeet(false);
+    }
+  }
+
+  async function handleGenerateModalMeet() {
+    if (!basePath) return;
+    try {
+      setIsGeneratingModalMeet(true);
+      clearMessages();
+      if (editingPanel) {
+        const res = await apiClient<{ meetingUrl: string }>(`${basePath}/panels/${editingPanel.id}/generate-meet`, {
+          method: 'POST',
+        });
+        if (res.data?.meetingUrl) {
+          setPanelForm((prev) => ({ ...prev, meetingUrl: res.data!.meetingUrl }));
+          setSuccessMessage('Google Meet link created for panel!');
+        }
+      } else {
+        const res = await apiClient<{ meetingUrl: string }>(`${basePath}/generate-default-meet`, {
+          method: 'POST',
+        });
+        if (res.data?.meetingUrl) {
+          setPanelForm((prev) => ({ ...prev, meetingUrl: res.data!.meetingUrl }));
+          setSuccessMessage('Google Meet link created!');
+        }
+      }
+    } catch (error) {
+      setMutationError(getErrorMessage(error, 'Failed to generate Google Meet link. Ensure Google is connected in Settings.'));
+    } finally {
+      setIsGeneratingModalMeet(false);
+    }
+  }
+
+  async function handleBulkGeneratePanelsMeet() {
+    if (!basePath) return;
+    try {
+      setIsGeneratingBulkMeet(true);
+      clearMessages();
+      const res = await apiClient<{ updatedCount: number; totalPanels: number; message?: string }>(
+        `${basePath}/panels/bulk-generate-meet`,
+        { method: 'POST', body: JSON.stringify({ overwriteExisting: false }) }
+      );
+      await fetchData();
+      if (res.data && res.data.updatedCount > 0) {
+        setSuccessMessage(`Successfully generated Google Meet links for ${res.data.updatedCount} panel(s)!`);
+      } else {
+        setSuccessMessage(res.data?.message || 'All panels already have meeting links configured.');
+      }
+    } catch (error) {
+      setMutationError(getErrorMessage(error, 'Failed to bulk-generate Google Meet links. Ensure Google is connected in Settings.'));
+    } finally {
+      setIsGeneratingBulkMeet(false);
+    }
+  }
+
+  async function handleGenerateSinglePanelMeet(panelId: string) {
+    if (!basePath) return;
+    try {
+      setIsMutating(true);
+      clearMessages();
+      const res = await apiClient<{ meetingUrl: string }>(`${basePath}/panels/${panelId}/generate-meet`, {
+        method: 'POST',
+      });
+      await fetchData();
+      if (res.data?.meetingUrl) {
+        setSuccessMessage('Google Meet room generated and assigned to panel!');
+      }
+    } catch (error) {
+      setMutationError(getErrorMessage(error, 'Failed to generate Google Meet link for panel. Ensure Google is connected in Settings.'));
+    } finally {
+      setIsMutating(false);
+    }
   }
 
   async function createSession(event: FormEvent) {
@@ -657,7 +750,23 @@ export function EvaluationPage({
             <Card>
               <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
                 <div><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4 text-brand-600" /> Evaluation panels</CardTitle><CardDescription className="mt-2">Panel assignments synchronize only evaluation-generated legacy assignments.</CardDescription></div>
-                {canManageJudges && <Button size="sm" onClick={() => openPanel()}><Plus className="h-4 w-4" /> Add panel</Button>}
+                {canManageJudges && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {panels.length > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                        onClick={handleBulkGeneratePanelsMeet}
+                        isLoading={isGeneratingBulkMeet}
+                      >
+                        <Video className="h-4 w-4 mr-1.5 text-indigo-600" />
+                        Auto-Generate Meet for All Panels
+                      </Button>
+                    )}
+                    <Button size="sm" onClick={() => openPanel()}><Plus className="h-4 w-4 mr-1" /> Add panel</Button>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="pt-5">
                 {panels.length === 0 ? <EmptyState title="No panels configured" description="Create a panel before generating an evaluation schedule." /> : (
@@ -665,7 +774,40 @@ export function EvaluationPage({
                     {panels.map((panel) => (
                       <div key={panel.id} className="rounded-lg border border-slate-200 p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div><div className="flex items-center gap-2"><Badge variant="neutral">Panel {panel.panelNumber}</Badge><h3 className="font-semibold text-slate-900">{panel.name}</h3></div><p className="mt-1 text-xs text-slate-500">{panel.meetingUrl || 'No panel meeting link configured'}</p></div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="neutral">Panel {panel.panelNumber}</Badge>
+                              <h3 className="font-semibold text-slate-900">{panel.name}</h3>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              {panel.meetingUrl ? (
+                                <a
+                                  href={panel.meetingUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:underline font-medium"
+                                >
+                                  <Video className="h-3.5 w-3.5 text-brand-500" />
+                                  <span>{panel.meetingUrl}</span>
+                                </a>
+                              ) : (
+                                <div className="flex items-center gap-2 text-xs text-slate-500">
+                                  <span>No meeting link configured</span>
+                                  {canManageJudges && (
+                                    <button
+                                      type="button"
+                                      className="font-medium text-brand-600 hover:text-brand-800 underline inline-flex items-center gap-1"
+                                      onClick={() => handleGenerateSinglePanelMeet(panel.id)}
+                                      disabled={isMutating}
+                                    >
+                                      <Video className="h-3 w-3" />
+                                      Generate Meet
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                           {canManageJudges && <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => openPanel(panel)}>Edit</Button><Button size="sm" variant="destructive" onClick={() => setPanelToDelete(panel)}><Trash2 className="h-3.5 w-3.5" /> Delete</Button></div>}
                         </div>
                         <div className="mt-4 space-y-2">
@@ -712,13 +854,56 @@ export function EvaluationPage({
           <FormField label="Evaluation mode" htmlFor="evaluation-mode" helperText="Live showcase and hybrid modes retain the existing scoring workflow."><Select id="evaluation-mode" value={configForm.evaluationMode} onChange={(event) => setConfigForm({ ...configForm, evaluationMode: event.target.value as EvaluationMode })}><option value="submission_based">Submission based</option><option value="live_showcase">Live showcase</option><option value="hybrid">Hybrid</option></Select></FormField>
           <div className="grid gap-4 sm:grid-cols-2"><FormField label="Session duration (minutes)" htmlFor="duration"><Input id="duration" type="number" min={5} max={180} value={configForm.sessionDurationMinutes} onChange={(event) => setConfigForm({ ...configForm, sessionDurationMinutes: Number(event.target.value) })} /></FormField><FormField label="Transition buffer (minutes)" htmlFor="buffer"><Input id="buffer" type="number" min={0} max={60} value={configForm.bufferMinutes} onChange={(event) => setConfigForm({ ...configForm, bufferMinutes: Number(event.target.value) })} /></FormField><FormField label="Judges per panel" htmlFor="judges"><Input id="judges" type="number" min={1} max={20} value={configForm.judgesPerPanel} onChange={(event) => setConfigForm({ ...configForm, judgesPerPanel: Number(event.target.value) })} /></FormField><FormField label="Evaluations per team" htmlFor="evaluations"><Input id="evaluations" type="number" min={1} max={10} value={configForm.evaluationsPerTeam} onChange={(event) => setConfigForm({ ...configForm, evaluationsPerTeam: Number(event.target.value) })} /></FormField></div>
           <div className="grid gap-4 sm:grid-cols-2"><FormField label="Schedule starts" htmlFor="schedule-starts"><Input id="schedule-starts" type="datetime-local" value={configForm.scheduleStartsAt} onChange={(event) => setConfigForm({ ...configForm, scheduleStartsAt: event.target.value })} /></FormField><FormField label="Schedule ends" htmlFor="schedule-ends"><Input id="schedule-ends" type="datetime-local" value={configForm.scheduleEndsAt} onChange={(event) => setConfigForm({ ...configForm, scheduleEndsAt: event.target.value })} /></FormField></div>
-          <FormField label="Default meeting URL" htmlFor="default-meeting-url"><Input id="default-meeting-url" type="url" value={configForm.defaultMeetingUrl} onChange={(event) => setConfigForm({ ...configForm, defaultMeetingUrl: event.target.value })} /></FormField>
+          <FormField label="Default meeting URL" htmlFor="default-meeting-url" helperText="Fallback room for all evaluation sessions.">
+            <div className="flex gap-2">
+              <Input
+                id="default-meeting-url"
+                type="url"
+                placeholder="https://meet.google.com/..."
+                value={configForm.defaultMeetingUrl}
+                onChange={(event) => setConfigForm({ ...configForm, defaultMeetingUrl: event.target.value })}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                onClick={handleGenerateDefaultMeet}
+                isLoading={isGeneratingDefaultMeet}
+              >
+                <Video className="h-3.5 w-3.5 mr-1 text-indigo-600" /> Generate Meet
+              </Button>
+            </div>
+          </FormField>
           <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setShowConfigDialog(false)}>Cancel</Button><Button type="submit" isLoading={isMutating}>Save configuration</Button></div>
         </form>
       </Dialog>
 
       <Dialog isOpen={showPanelDialog} onClose={() => setShowPanelDialog(false)} title={editingPanel ? 'Edit evaluation panel' : 'Create evaluation panel'}>
-        <form onSubmit={savePanel} className="space-y-4"><FormField label="Panel name" htmlFor="panel-name" required><Input id="panel-name" required value={panelForm.name} onChange={(event) => setPanelForm({ ...panelForm, name: event.target.value })} /></FormField><FormField label="Meeting URL" htmlFor="panel-url"><Input id="panel-url" type="url" value={panelForm.meetingUrl} onChange={(event) => setPanelForm({ ...panelForm, meetingUrl: event.target.value })} /></FormField><FormField label="Notes" htmlFor="panel-notes"><Textarea id="panel-notes" value={panelForm.notes} onChange={(event) => setPanelForm({ ...panelForm, notes: event.target.value })} /></FormField><div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setShowPanelDialog(false)}>Cancel</Button><Button type="submit" isLoading={isMutating}>Save panel</Button></div></form>
+        <form onSubmit={savePanel} className="space-y-4">
+          <FormField label="Panel name" htmlFor="panel-name" required><Input id="panel-name" required value={panelForm.name} onChange={(event) => setPanelForm({ ...panelForm, name: event.target.value })} /></FormField>
+          <FormField label="Meeting URL" htmlFor="panel-url" helperText="Specific room link for this panel track.">
+            <div className="flex gap-2">
+              <Input
+                id="panel-url"
+                type="url"
+                placeholder="https://meet.google.com/..."
+                value={panelForm.meetingUrl}
+                onChange={(event) => setPanelForm({ ...panelForm, meetingUrl: event.target.value })}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                onClick={handleGenerateModalMeet}
+                isLoading={isGeneratingModalMeet}
+              >
+                <Video className="h-3.5 w-3.5 mr-1 text-indigo-600" /> Generate Meet
+              </Button>
+            </div>
+          </FormField>
+          <FormField label="Notes" htmlFor="panel-notes"><Textarea id="panel-notes" value={panelForm.notes} onChange={(event) => setPanelForm({ ...panelForm, notes: event.target.value })} /></FormField>
+          <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setShowPanelDialog(false)}>Cancel</Button><Button type="submit" isLoading={isMutating}>Save panel</Button></div>
+        </form>
       </Dialog>
 
       <Dialog isOpen={showInviteDialog} onClose={() => setShowInviteDialog(false)} title="Invite evaluation judge" description="The invitation contains a single-use secret delivered by email. This page never displays it.">
