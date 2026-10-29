@@ -18,6 +18,8 @@ export const envSchema = z
     SMTP_PORT: z.coerce.number().optional().default(587),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
+    BREVO_API_KEY: z.string().optional(),
+    BREVO_SENDER_EMAIL: z.string().optional(),
     EMAIL_FROM: z.string().default('ManageX <notifications@managex.local>'),
 
     // Google OAuth 2.0 Integration (Phase 1B — Optional during development)

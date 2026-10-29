@@ -50,6 +50,42 @@ function getTransporter() {
  * @returns {Promise<{ delivered: boolean, previewUrl?: string, inMemory?: boolean }>}
  */
 export async function sendEmail({ to, subject, text, html }) {
+  // 1. HTTPS-based Brevo API (bypasses cloud SMTP port blocks on port 443)
+  if (env.BREVO_API_KEY) {
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'accept': 'application/json',
+          'api-key': env.BREVO_API_KEY,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: {
+            name: 'ManageX',
+            email: env.BREVO_SENDER_EMAIL || 'sureshsirf886@gmail.com',
+          },
+          to: [{ email: to }],
+          subject,
+          htmlContent: html || text,
+          textContent: text,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Brevo API returned status ${res.status}`);
+      }
+
+      const data = await res.json();
+      logger.info({ to, subject, messageId: data.messageId }, 'Email delivered successfully via Brevo HTTPS API');
+      return { delivered: true, messageId: data.messageId };
+    } catch (err) {
+      logger.error({ err: err.message, to, subject }, 'Failed to deliver email via Brevo');
+      throw new ServiceUnavailableError(`Email delivery failed: ${err.message}`, 'EMAIL_DELIVERY_FAILED');
+    }
+  }
+
   const transporter = getTransporter();
 
   if (transporter) {
