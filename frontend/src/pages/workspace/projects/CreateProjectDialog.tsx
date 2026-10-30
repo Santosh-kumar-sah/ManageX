@@ -47,18 +47,30 @@ export function CreateProjectDialog({
     async function loadMembers() {
       try {
         setIsLoadingMembers(true);
-        const res = await apiClient<{ members: Array<{ user: { id: string; fullName: string; email: string }; status: string }> }>(
-          `/organisations/${organisationId}/members`
-        );
+        const res = await apiClient<{
+          members: Array<{
+            userId?: string;
+            fullName?: string;
+            email?: string;
+            user?: { id: string; fullName: string; email: string };
+            status: string;
+          }>;
+        }>(`/organisations/${organisationId}/members`);
         if (res.data?.members) {
           const activeMembers = res.data.members
             .filter((m) => m.status === 'active')
-            .map((m) => ({
-              userId: m.user.id,
-              fullName: m.user.fullName || m.user.email,
-              email: m.user.email,
-              status: m.status,
-            }));
+            .map((m) => {
+              const uId = m.userId || m.user?.id || '';
+              const uName = m.fullName || m.user?.fullName || m.email || m.user?.email || 'Unknown Member';
+              const uEmail = m.email || m.user?.email || '';
+              return {
+                userId: uId,
+                fullName: uName,
+                email: uEmail,
+                status: m.status,
+              };
+            })
+            .filter((m) => Boolean(m.userId));
           setMembers(activeMembers);
           if (activeMembers.length > 0 && !ownerId) {
             setOwnerId(activeMembers[0].userId);
