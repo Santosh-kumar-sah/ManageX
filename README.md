@@ -298,16 +298,6 @@ npm run dev:frontend
 
 ---
 
-## 👥 Demo Accounts & Seeding
-
-Running `npm run seed` initializes the database with the following demo credentials:
-
-| Role | Email | Password | Primary Workspace / Access |
-|---|---|---|---|
-| **Platform Super Admin** | `admin@managex.dev` | `Password123!` | Global Platform Console (`/platform`) |
-| **Organisation Owner** | `organiser@managex.dev` | `Password123!` | ManageX Demo Org (`/workspace`) |
-| **Organisation Member** | `member@managex.dev` | `Password123!` | ManageX Demo Org (Collaborator) |
-| **External Participant** | `student@managex.dev` | `Password123!` | Public Events & Hackathon Registrations |
 
 ---
 
@@ -415,17 +405,6 @@ The application is optimized for low-cost, high-reliability deployment across cl
 
 ---
 
-## 📚 Documentation Index
-
-For in-depth architectural specifications and operational guides, consult the `docs/` directory:
-
-- [**Product Requirements Document (PRD)**](docs/PRD.md) — Authoritative functional and technical scope.
-- [**Architecture Guide**](docs/architecture.md) — Modular monolith topology, domain boundaries, and request lifecycle.
-- [**Database & RLS Specification**](docs/database.md) — Complete ER diagrams, tables, foreign keys, and RLS policies.
-- [**Security & Threat Model**](docs/security.md) — Authorization tiers, token encryption, and threat mitigations.
-- [**API Contracts**](docs/api-contracts.md) — Endpoint specifications, JSON envelopes, and status codes.
-- [**Google Meet Integration Plan**](docs/google-meet-integration-plan.md) — Two-Stage Decoupled sync engine and OAuth2 flow.
-- [**Implementation Progress**](docs/progress.md) — Chronological phase completion records and test evidence.
 
 ---
 
