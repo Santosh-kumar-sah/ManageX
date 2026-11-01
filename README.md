@@ -37,12 +37,10 @@
   - [Prerequisites](#prerequisites)
   - [Option A: Docker Compose (Recommended)](#option-a-docker-compose-recommended)
   - [Option B: Manual Local Setup](#option-b-manual-local-setup)
-- [Demo Accounts & Seeding](#-demo-accounts--seeding)
 - [Environment Configuration](#-environment-configuration)
 - [Testing & Code Quality](#-testing--code-quality)
 - [Security Invariants & RLS](#-security-invariants--rls)
 - [Deployment Architecture](#-deployment-architecture)
-- [Documentation Index](#-documentation-index)
 - [Contributing](#-contributing)
 - [License](#-license)
 
