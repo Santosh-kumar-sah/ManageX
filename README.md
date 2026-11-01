@@ -361,53 +361,6 @@ ManageX enforces strict quality gates across linting, type-safety, unit tests, i
 | `npm run test:frontend` | Frontend | Component, hook, and state tests via Vitest |
 | `npm test` | All Suites | Executes both backend and frontend test runners |
 
-### Security & RLS Test Invariants
-- Tests explicitly verify that non-member actors receive `403 Forbidden` or empty results when querying resources owned by other organisations.
-- SQL tests execute under the restricted database role `managex_app` to verify that `FORCE ROW LEVEL SECURITY` cannot be bypassed.
-- Meeting Join Gateway enforces status lockdown (`completed`, `cancelled`, and `missed` reject join requests with `409 Conflict`) and scheme sanitization (blocking dangerous schemes such as `javascript:`, `data:`, and protocol-relative URLs).
-
----
-
-## 🔒 Security Invariants & RLS
-
-ManageX implements defense-in-depth security at every layer:
-
-```sql
--- Security Pattern: Transaction-Local Tenant Context
-BEGIN;
-SELECT set_config('app.current_organisation_id', $1::text, true);
-SELECT set_config('app.current_user_id', $2::text, true);
-
--- Query executed under RLS isolation:
-SELECT * FROM projects WHERE id = $3;
-COMMIT;
-```
-
-1. **Transaction-Local Isolation:** The database connection context is set with `set_config(..., true)` (is_local = true), ensuring configuration parameters expire automatically upon transaction completion and preventing leakage across connection pools.
-2. **Restricted Runtime Role:** The backend connects to PostgreSQL using the `managex_app` role, configured with:
-   - `NOSUPERUSER`
-   - `NOBYPASSRLS`
-   - `NOCREATEDB`
-   - `NOCREATEROLE`
-3. **Defense Against IDOR:** Resource endpoints validate tenant boundaries at both the SQL RLS level and the Express route controller level before executing queries.
-4. **Cold-Start Resilience:** The frontend API client includes automated backoff retries designed specifically for Render free-tier cold starts, strictly restricted to idempotent `GET` requests.
-
----
-
-## 🚢 Deployment Architecture
-
-The application is optimized for low-cost, high-reliability deployment across cloud providers:
-
-| Layer | Provider | Configuration |
-|---|---|---|
-| **Frontend** | **Vercel** | SPA build (`dist/`), automatic routing, edge rewrites forwarding `/api/v1/*` directly to the Render backend origin. |
-| **Backend** | **Render** | Node.js web service running `npm start`, configured with health check probes (`/api/v1/health`, `/api/v1/ready`). |
-| **Database** | **Neon** | Serverless PostgreSQL with connection pooling, native SSL/TLS enforcement, and automated backups. |
-
----
-
-
-
 ---
 
 ## 🤝 Contributing
