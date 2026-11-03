@@ -222,17 +222,27 @@ manageX/
 
 ### Option A: Docker Compose (Recommended)
 
-Spin up the entire stack (PostgreSQL, Express Backend, Vite Frontend) with a single command:
+Spin up the local stack (PostgreSQL, Express backend, and Vite frontend) with Docker:
 
 ```bash
-# 1. Clone repository
+# 1. Clone and enter the repository
 git clone https://github.com/Santosh-kumar-sah/ManageX.git
 cd ManageX
 
 # 2. Copy the environment template
 cp .env.example .env
 
-# 3. Start containers
+# 3. Start the database first
+docker compose up -d postgres
+
+# 4. Install dependencies and apply migrations from the host
+npm install
+npm --prefix backend install
+npm --prefix frontend install
+npm run migrate
+npm run seed
+
+# 5. Start the application containers
 docker compose up -d
 ```
 
@@ -241,10 +251,13 @@ Once running:
 - **Backend API:** [http://localhost:4000/api/v1/health](http://localhost:4000/api/v1/health)
 - **PostgreSQL:** `localhost:5432` (`managex_app` / `managex_dev_password`)
 
-To seed the initial demo accounts into the running Docker container:
+After PostgreSQL is healthy and migrations have completed, seed the local demo accounts:
 ```bash
 npm run seed
 ```
+
+The host-side commands use the connection strings in `.env`. The Compose database is
+published on `localhost:5432`; update `.env` if it still points at another local port.
 
 ---
 
@@ -275,10 +288,10 @@ npm --prefix frontend install
 
 #### 3. Run Database Migrations & Seed Data
 ```bash
-# Executes 42+ SQL migrations with SHA-256 verification
+# Executes versioned SQL migrations with SHA-256 verification
 npm run migrate
 
-# Creates demo organisations, modules, and test users
+# Creates the demo organisation, modules, memberships, and test users
 npm run seed
 ```
 
