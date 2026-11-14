@@ -13,7 +13,6 @@ export function PublicLayout() {
 
   const navLinks = [
     { label: 'Overview', href: '/' },
-    { label: 'Events & Hackathons', href: '/events' },
     { label: 'Modules', href: '/modules' },
     { label: 'Security & Privacy', href: '/security' },
   ];
@@ -168,6 +167,9 @@ export function PublicLayout() {
             <div>
               <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Access</h4>
               <ul className="space-y-2">
+                <li>
+                  <Link to="/events" className="hover:text-brand-600 transition-colors">Browse Public Events</Link>
+                </li>
                 <li>
                   <Link to="/auth/login" className="hover:text-brand-600 transition-colors">Sign In to Workspace</Link>
                 </li>
