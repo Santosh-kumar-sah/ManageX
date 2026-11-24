@@ -89,10 +89,7 @@ export function PlatformModulesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Platform Module Catalogue</h1>
-            <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              Module Governance
-            </Badge>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Workspace tools</h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
             Global availability controls for enterprise modules. Deactivation preserves customer data.
@@ -225,7 +222,7 @@ export function PlatformModulesPage() {
 
           <div>
             <label className="block font-medium text-slate-700 mb-1">
-              Operational Reason (Recorded in Platform Audit Log)
+              Reason for this change (saved to the audit log)
             </label>
             <Input
               placeholder="Optional reason for audit log..."

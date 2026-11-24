@@ -621,7 +621,7 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
     );
 
     // Header & Mode
-    expect(html).toContain('Meeting Minutes (MOM)');
+    expect(html).toContain('Meeting minutes');
     expect(html).toContain('Edit Mode');
 
     // Section 1: Discussion Points
@@ -1960,7 +1960,7 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
       );
 
       expect(html).toContain('data-testid="sync-failed-banner"');
-      expect(html).toContain('Google Meet synchronization failed');
+      expect(html).toContain('Google Meet link unavailable');
       expect(html).toContain('data-testid="retry-sync-cta"');
     });
 

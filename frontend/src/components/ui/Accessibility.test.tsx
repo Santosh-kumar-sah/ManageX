@@ -56,10 +56,11 @@ describe('Phase 10 — Accessibility Primitives Suite (UI-005)', () => {
 
     expect(html).toContain('role="dialog"');
     expect(html).toContain('aria-modal="true"');
-    expect(html).toContain('aria-labelledby="dialog-title"');
-    expect(html).toContain('aria-describedby="dialog-description"');
-    expect(html).toContain('id="dialog-title"');
-    expect(html).toContain('id="dialog-description"');
+    for (const attr of ['aria-labelledby', 'aria-describedby']) {
+      const id = html.match(new RegExp(attr + '="([^"]+)"'))?.[1];
+      expect(id).toBeTruthy();
+      expect(html).toContain('id="' + id + '"');
+    }
     expect(html).toContain('aria-label="Close dialog"');
   });
 

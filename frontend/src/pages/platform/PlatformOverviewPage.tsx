@@ -37,18 +37,15 @@ export function PlatformOverviewPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Platform Operational Overview</h1>
-            <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              Operator Console
-            </Badge>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Platform overview</h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time system health, organization directory statistics, and platform module controls.
+            Review accounts, organisations and workspace tool availability.
           </p>
         </div>
 
         <Button variant="outline" size="sm" onClick={fetchOverview} disabled={loading}>
-          Refresh Metrics
+          Refresh
         </Button>
       </div>
 
@@ -66,30 +63,30 @@ export function PlatformOverviewPage() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-indigo-600" />
+                <Users className="h-4 w-4 text-brand-600" />
                 <span>User Accounts</span>
               </CardTitle>
-              <Link to="/platform/accounts" className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+              <Link to="/platform/accounts" className="text-xs text-brand-600 hover:text-brand-800 font-medium">
                 Manage &rarr;
               </Link>
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-slate-900 tracking-tight">
-              {loading ? '—' : data?.users.total ?? 0}
+              {loading ? '—' : data?.users.total ?? '—'}
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
               <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                {data?.users.active ?? 0} active
+                {data?.users.active ?? '—'} active
               </span>
               <span className="text-slate-300">&bull;</span>
               <span className="text-slate-500">
-                {data?.users.suspended ?? 0} suspended
+                {data?.users.suspended ?? '—'} suspended
               </span>
               <span className="text-slate-300">&bull;</span>
               <span className="text-slate-500">
-                {data?.users.pendingVerification ?? 0} pending
+                {data?.users.pendingVerification ?? '—'} pending
               </span>
             </div>
           </CardContent>
@@ -100,26 +97,26 @@ export function PlatformOverviewPage() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                <Building className="h-4 w-4 text-indigo-600" />
-                <span>Customer Workspaces</span>
+                <Building className="h-4 w-4 text-brand-600" />
+                <span>Organisations</span>
               </CardTitle>
-              <Link to="/platform/organisations" className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+              <Link to="/platform/organisations" className="text-xs text-brand-600 hover:text-brand-800 font-medium">
                 Inspect &rarr;
               </Link>
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-slate-900 tracking-tight">
-              {loading ? '—' : data?.organisations.total ?? 0}
+              {loading ? '—' : data?.organisations.total ?? '—'}
             </div>
             <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
               <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
                 <CheckCircle2 className="h-3.5 w-3.5" />
-                {data?.organisations.active ?? 0} active
+                {data?.organisations.active ?? '—'} active
               </span>
               <span className="text-slate-300">&bull;</span>
               <span className="text-slate-500">
-                {data?.organisations.suspended ?? 0} suspended
+                {data?.organisations.suspended ?? '—'} suspended
               </span>
             </div>
           </CardContent>
@@ -130,20 +127,20 @@ export function PlatformOverviewPage() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-indigo-600" />
+                <ShieldCheck className="h-4 w-4 text-brand-600" />
                 <span>Security & Governance</span>
               </CardTitle>
-              <Link to="/platform/audit-logs" className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+              <Link to="/platform/audit-logs" className="text-xs text-brand-600 hover:text-brand-800 font-medium">
                 View Logs &rarr;
               </Link>
             </div>
           </CardHeader>
           <CardContent>
             <div className="text-sm font-semibold text-slate-800">
-              Append-Only Audit Engine
+              Administrative changes
             </div>
             <div className="mt-2 text-xs text-slate-500 leading-relaxed">
-              Platform mutations, account suspensions, and module toggles are logged immutably.
+              See who changed account access and tool availability.
             </div>
           </CardContent>
         </Card>
@@ -154,8 +151,8 @@ export function PlatformOverviewPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Boxes className="h-4 w-4 text-indigo-600" />
-              <span>Platform Module Catalogue Status (PLAT-004)</span>
+              <Boxes className="h-4 w-4 text-brand-600" />
+              <span>Workspace tool availability</span>
             </CardTitle>
             <Link to="/platform/modules">
               <Button variant="outline" size="sm">

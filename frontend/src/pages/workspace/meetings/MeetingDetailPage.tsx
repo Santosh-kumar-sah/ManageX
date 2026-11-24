@@ -1636,9 +1636,9 @@ export function MeetingDetailPage({
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                     <div>
-                      <p className="font-semibold">Google Meet synchronization failed</p>
+                      <p className="font-semibold">Google Meet link unavailable</p>
                       <p className="text-amber-700 mt-0.5">
-                        {meeting.googleSyncError || 'Unable to provision Google Meet conference link with Google Calendar.'}
+                        {meeting.googleSyncError || 'The meeting link could not be created using Google Calendar.'}
                       </p>
                     </div>
                   </div>
@@ -2165,7 +2165,7 @@ export function MeetingDetailPage({
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                     <FileText className="h-5 w-5 text-brand-600" />
-                    Meeting Minutes (MOM)
+                    Meeting minutes
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Structured minutes comprising discussion points, key decisions, action items, and additional notes.

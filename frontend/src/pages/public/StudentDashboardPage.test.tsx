@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { StudentDashboardPage } from './StudentDashboardPage';
@@ -22,7 +22,11 @@ vi.mock('@/api/AuthContext', () => ({
 describe('StudentDashboardPage — Participant Hub & My Registrations', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-20T12:00:00Z'));
   });
+
+  afterEach(() => vi.useRealTimers());
 
   const mockUser = {
     id: 'user-part-1',
@@ -166,8 +170,8 @@ describe('StudentDashboardPage — Participant Hub & My Registrations', () => {
       </MemoryRouter>
     );
 
-    expect(html).toContain('No Event Registrations Yet');
-    expect(html).toContain('Browse Upcoming Events');
+    expect(html).toContain('No registrations yet');
+    expect(html).toContain('Browse public events');
     expect(html).toContain('href="/events"');
   });
 
@@ -201,12 +205,12 @@ describe('StudentDashboardPage — Participant Hub & My Registrations', () => {
     expect(html).toContain('Apex Cloud Summit');
 
     // Badges
-    expect(html).toContain('Confirmed Registration');
+    expect(html).toContain('Registered');
     expect(html).toContain('Withdrawn');
 
     // Quick stats counter
-    expect(html).toContain('Active Registrations');
-    expect(html).toContain('All Events (2)');
+    expect(html).toContain('Filter registrations');
+    expect(html).toContain('All events (2)');
     expect(html).toContain('Active (1)');
     expect(html).toContain('Withdrawn (1)');
 
@@ -241,11 +245,11 @@ describe('StudentDashboardPage — Participant Hub & My Registrations', () => {
     );
 
     // Instructions displayed for active registration
-    expect(html).toContain('Instructions for Registered Participants');
+    expect(html).toContain('Joining instructions');
     expect(html).toContain('Discord channel: #hackathon-room-42');
 
     // Withdrawn card displays Re-register button
-    expect(html).toContain('Re-register for Event');
+    expect(html).toContain('Register again');
   });
 
   it('5. Renders round evaluation schedule integration when hackathon team and round are present', () => {

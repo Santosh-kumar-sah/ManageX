@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { PublicLayout } from '@/layouts/PublicLayout';
 import { EventPortalLayout } from '@/layouts/EventPortalLayout';
@@ -24,20 +25,22 @@ import { MembersPage } from '@/pages/workspace/MembersPage';
 import { OrgSettingsPage } from '@/pages/workspace/OrgSettingsPage';
 import { OrgModulesPage } from '@/pages/workspace/OrgModulesPage';
 import { OrgAuditLogsPage } from '@/pages/workspace/OrgAuditLogsPage';
-import { EventsPage } from '@/pages/workspace/events/EventsPage';
-import { EventDetailPage } from '@/pages/workspace/events/EventDetailPage';
-import { EvaluationPage } from '@/pages/workspace/events/EvaluationPage';
-import { JudgeWorkspacePage } from '@/pages/workspace/events/JudgeWorkspacePage';
-import { MeetingsPage } from '@/pages/workspace/meetings/MeetingsPage';
-import { MeetingDetailPage } from '@/pages/workspace/meetings/MeetingDetailPage';
-import { ProjectsPage } from '@/pages/workspace/projects/ProjectsPage';
-import { ProjectDetailPage } from '@/pages/workspace/projects/ProjectDetailPage';
 import { PlatformOverviewPage } from '@/pages/platform/PlatformOverviewPage';
 import { PlatformAccountsPage } from '@/pages/platform/PlatformAccountsPage';
 import { PlatformOrganisationsPage } from '@/pages/platform/PlatformOrganisationsPage';
 import { PlatformModulesPage } from '@/pages/platform/PlatformModulesPage';
 import { PlatformAuditLogsPage } from '@/pages/platform/PlatformAuditLogsPage';
 import { NotFoundPage } from '@/pages/edge/ErrorPages';
+
+// Load the heavier tools once a member actually opens their route.
+const EventsPage = lazy(() => import('@/pages/workspace/events/EventsPage').then(m => ({ default: m.EventsPage })));
+const EventDetailPage = lazy(() => import('@/pages/workspace/events/EventDetailPage').then(m => ({ default: m.EventDetailPage })));
+const EvaluationPage = lazy(() => import('@/pages/workspace/events/EvaluationPage').then(m => ({ default: m.EvaluationPage })));
+const JudgeWorkspacePage = lazy(() => import('@/pages/workspace/events/JudgeWorkspacePage').then(m => ({ default: m.JudgeWorkspacePage })));
+const MeetingsPage = lazy(() => import('@/pages/workspace/meetings/MeetingsPage').then(m => ({ default: m.MeetingsPage })));
+const MeetingDetailPage = lazy(() => import('@/pages/workspace/meetings/MeetingDetailPage').then(m => ({ default: m.MeetingDetailPage })));
+const ProjectsPage = lazy(() => import('@/pages/workspace/projects/ProjectsPage').then(m => ({ default: m.ProjectsPage })));
+const ProjectDetailPage = lazy(() => import('@/pages/workspace/projects/ProjectDetailPage').then(m => ({ default: m.ProjectDetailPage })));
 
 export function App() {
   return (

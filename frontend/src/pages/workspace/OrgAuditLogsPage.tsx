@@ -155,10 +155,9 @@ export function OrgAuditLogsPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Security & Audit Log</h1>
-            <Badge variant="neutral">Append-Only</Badge>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Immutable audit trail of administrative actions, membership lifecycles, and module toggles for{' '}
+            Review changes to membership, settings and tools for{' '}
             <strong className="text-slate-700">{activeOrg?.name || 'this organisation'}</strong>.
           </p>
         </div>
@@ -185,7 +184,7 @@ export function OrgAuditLogsPage() {
           <div>
             <CardTitle className="text-base">Audit Trail</CardTitle>
             <CardDescription className="text-xs">
-              Showing records scoped strictly to this organisation. IP addresses and user agents recorded for compliance.
+              Filter by action to find the changes you need.
             </CardDescription>
           </div>
 
@@ -310,7 +309,7 @@ export function OrgAuditLogsPage() {
 
       <div className="flex items-center gap-2 text-[11px] text-slate-400 justify-end">
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-        <span>PostgreSQL Append-Only Audit Invariant Enforced (AUD-001)</span>
+        <span>Workspace members can’t edit or delete audit entries.</span>
       </div>
     </div>
   );

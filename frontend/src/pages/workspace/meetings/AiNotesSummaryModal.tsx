@@ -297,10 +297,10 @@ export function AiNotesSummaryModal({
             <div className="p-3 bg-brand-50/70 border border-brand-100 rounded-md text-xs text-brand-900 flex items-start gap-2">
               <Sparkles className="h-4 w-4 text-brand-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold">Privacy & Human-in-the-Loop Verification</p>
+                <p className="font-semibold">How your notes are used</p>
                 <p className="text-brand-700">
-                  ManageX analyzes confidential notes and structured MOM points using Zero Data Retention (ZDR) routing.
-                  Summaries are returned as non-persistent drafts for your review before anything is saved.
+                  To draft a summary, ManageX sends meeting notes and discussion points to an AI provider
+                  with a zero data retention requirement. Review the draft before saving it.
                 </p>
               </div>
             </div>

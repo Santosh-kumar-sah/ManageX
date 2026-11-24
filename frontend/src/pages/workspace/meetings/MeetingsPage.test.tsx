@@ -335,7 +335,7 @@ describe('MeetingsPage — Workspace Meetings List & Filters', () => {
       </MemoryRouter>
     );
 
-    expect(html).toContain('Meetings &amp; MOM');
+    expect(html).toContain('>Meetings</h1>');
     expect(html).toContain('data-testid="tab-meetings"');
     expect(html).toContain('data-testid="tab-action-items"');
     expect(html).toContain('My Action Items');
@@ -522,7 +522,7 @@ describe('MeetingsPage — Workspace Meetings List & Filters', () => {
     );
 
     expect(html).toContain('data-testid="analytics-tab-content"');
-    expect(html).toContain('Meeting Analytics &amp; Performance');
+    expect(html).toContain('Meeting analytics');
     expect(html).toContain('data-testid="analytics-timeframe-all"');
     expect(html).toContain('data-testid="analytics-timeframe-30d"');
     expect(html).toContain('data-testid="analytics-timeframe-90d"');
@@ -804,7 +804,7 @@ describe('MeetingsPage — Workspace Meetings List & Filters', () => {
     expect(html).toContain('1 cancelled');
 
     // Lifecycle Breakdown card
-    expect(html).toContain('Action Items Lifecycle');
+    expect(html).toContain('Action item progress');
     expect(html).toContain('5 total items (4 actionable)');
     expect(html).toContain('Actionable Completion Rate');
   });

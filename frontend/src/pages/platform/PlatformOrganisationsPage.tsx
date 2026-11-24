@@ -119,13 +119,10 @@ export function PlatformOrganisationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Customer Workspaces</h1>
-            <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              Workspace Directory
-            </Badge>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Organisations</h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Enterprise organization directory and status controls with strict workspace privacy isolation.
+            Find an organisation and review its access and available tools.
           </p>
         </div>
 
@@ -191,7 +188,7 @@ export function PlatformOrganisationsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Workspace Name</TableHead>
-                <TableHead>Slug</TableHead>
+                <TableHead>Workspace address</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Active Members</TableHead>
                 <TableHead>Active Modules</TableHead>
@@ -306,7 +303,7 @@ export function PlatformOrganisationsPage() {
       <Dialog
         isOpen={inspectOrg !== null}
         onClose={() => setInspectOrg(null)}
-        title="Workspace Operational Metadata"
+        title="Workspace details"
         className="sm:max-w-lg"
       >
         {inspectOrg && (
@@ -317,7 +314,7 @@ export function PlatformOrganisationsPage() {
                 <strong className="text-slate-800 text-sm">{inspectOrg.name}</strong>
               </div>
               <div>
-                <span className="text-slate-400 block mb-0.5">Workspace Slug</span>
+                <span className="text-slate-400 block mb-0.5">Workspace address</span>
                 <code className="text-slate-700 font-mono text-xs">{inspectOrg.slug}</code>
               </div>
               <div>
@@ -363,9 +360,7 @@ export function PlatformOrganisationsPage() {
             </div>
 
             <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded text-[11px] text-slate-600">
-              <strong>Privacy Boundary:</strong> Platform operators inspect operational configuration only.
-              Private workspace content (events, submissions, meeting notes, project tasks, comments) is
-              protected by organisation-level access controls and Row-Level Security.
+              This view shows workspace settings and tool availability. Team content is private to the workspace.
             </div>
           </div>
         )}
@@ -414,7 +409,7 @@ export function PlatformOrganisationsPage() {
 
           <div>
             <label className="block font-medium text-slate-700 mb-1">
-              Operational Reason (Recorded in Platform Audit Log)
+              Reason for this change (saved to the audit log)
             </label>
             <Input
               placeholder="Optional reason for audit log..."

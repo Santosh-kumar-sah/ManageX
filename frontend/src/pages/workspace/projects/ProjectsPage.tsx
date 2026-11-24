@@ -115,7 +115,7 @@ export function ProjectsPage() {
             Projects & Tasks
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Organise workstreams, manage project memberships, and track delivery lifecycles.
+            Manage project members, assign tasks and track deadlines.
           </p>
         </div>
         {canCreateProject && (

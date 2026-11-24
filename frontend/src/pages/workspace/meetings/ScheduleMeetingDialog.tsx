@@ -403,11 +403,11 @@ export function ScheduleMeetingDialog({
               >
                 <p className="font-medium flex items-center gap-1.5">
                   <Video className="h-3.5 w-3.5 text-indigo-600" />
-                  Automatic Meeting Provisioning
+                  Google Meet link
                 </p>
                 <p className="text-indigo-700">
-                  ManageX will provision a video conference container on the organisation's Google Calendar.
-                  Attendee emails are not shared with Google; participants join securely through ManageX.
+                  A Google Meet link will be created using your organisation’s Google Calendar.
+                  Participants can join from the meeting page. Their email addresses stay out of the Google Calendar guest list.
                 </p>
               </div>
             ) : (

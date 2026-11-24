@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { PublicEventDetailPage } from './PublicEventDetailPage';
@@ -22,7 +22,11 @@ vi.mock('@/api/AuthContext', () => ({
 describe('PublicEventDetailPage — Public Details & External Registration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-20T12:00:00Z'));
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it('1. Renders loading state initially', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
@@ -116,7 +120,8 @@ describe('PublicEventDetailPage — Public Details & External Registration', () 
 
     // Links to /events portal homepage
     expect(html).toContain('href="/events"');
-    expect(html).toContain('All Events');
+    expect(html).toContain('All events');
+    expect(html.indexOf('aria-label="Event registration"')).toBeLessThan(html.indexOf('About this event'));
   });
 
   it('4. Confidential participant instructions are NOT visible to unregistered visitors', () => {
@@ -153,7 +158,7 @@ describe('PublicEventDetailPage — Public Details & External Registration', () 
       </MemoryRouter>
     );
 
-    expect(html).not.toContain('Instructions for Registered Participants');
+    expect(html).not.toContain('Joining instructions');
     expect(html).not.toContain('Secret Meeting Discord Join Code');
   });
 
@@ -210,7 +215,7 @@ describe('PublicEventDetailPage — Public Details & External Registration', () 
       </MemoryRouter>
     );
 
-    expect(html).toContain('Instructions for Registered Participants');
+    expect(html).toContain('Joining instructions');
     expect(html).toContain('Secret Meeting Discord Join Code: #HACK-2026-STAGE');
   });
 
@@ -268,8 +273,8 @@ describe('PublicEventDetailPage — Public Details & External Registration', () 
       </MemoryRouter>
     );
 
-    expect(html).not.toContain('Instructions for Registered Participants');
-    expect(html).toContain('Re-register for Event');
+    expect(html).not.toContain('Joining instructions');
+    expect(html).toContain('Register again');
   });
 
   it('7. EVT-006: In hackathon event, registered participant without a team sees team creation and available teams roster', () => {
@@ -444,7 +449,7 @@ describe('PublicEventDetailPage — Public Details & External Registration', () 
     expect(html).toContain('Bob Builder');
   });
 
-  it('9. EVT-006: Unregistered visitor sees "Registration Required for Teams" notice on hackathon events', () => {
+  it('9. EVT-006: Unregistered visitor sees "Register to join a team" notice on hackathon events', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       user: null,
       isLoading: false,
@@ -487,7 +492,7 @@ describe('PublicEventDetailPage — Public Details & External Registration', () 
       </MemoryRouter>
     );
 
-    expect(html).toContain('Registration Required for Teams');
+    expect(html).toContain('Register to join a team');
     expect(html).not.toContain('You are not in a team yet');
   });
 
@@ -559,7 +564,7 @@ describe('PublicEventDetailPage — Public Details & External Registration', () 
       </MemoryRouter>
     );
 
-    expect(html).toContain('You Have Received Team Invitations');
+    expect(html).toContain('Your team invitations');
     expect(html).toContain('Quantum Pioneers');
     expect(html).toContain('Dr. Jane Quantum');
     expect(html).toContain('Join Team');

@@ -175,7 +175,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
                   )}
                 </div>
                 <CardDescription className="text-xs text-slate-500 mt-0.5">
-                  Automatically provision secure Google Meet conferencing links when scheduling virtual or hybrid meetings.
+                  Create Google Meet links when scheduling online or hybrid meetings.
                 </CardDescription>
               </div>
             </div>
@@ -249,7 +249,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
                         </span>
                       ))
                     ) : (
-                      <span className="text-slate-400 italic">Default Calendar Scopes</span>
+                      <span className="text-slate-400 italic">Default calendar permissions</span>
                     )}
                   </div>
                 </div>
@@ -259,8 +259,8 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
               <div className="p-3.5 bg-emerald-50/60 border border-emerald-200/80 rounded-lg flex items-start gap-3">
                 <ShieldCheck className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div className="text-xs text-emerald-900 leading-relaxed">
-                  <div className="font-semibold text-emerald-950">Option A Privacy Guarantee Active</div>
-                  ManageX provisions Google Meet rooms headlessly without sending participant email rosters to Google Calendar. Zero participant personal identities are disclosed to Google infrastructure.
+                  <div className="font-semibold text-emerald-950">Attendee privacy</div>
+                  ManageX creates meeting links without adding attendee email addresses to the Google Calendar guest list.
                 </div>
               </div>
 
@@ -274,7 +274,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
             <div className="space-y-4">
               {status?.status === 'error' && (
                 <Alert variant="warning" title="Authorization Issue">
-                  {status.lastError || 'Google refresh token may have expired or been revoked upstream.'}
+                  {status.lastError || 'Reconnect the Google account to continue creating meeting links.'}
                 </Alert>
               )}
 
@@ -315,7 +315,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
           )}
 
           <p className="text-xs text-slate-600 leading-relaxed">
-            Disconnecting will revoke the OAuth token upstream at Google and permanently delete all stored credentials from ManageX.
+            Disconnecting removes this workspace’s saved Google authorisation.
           </p>
 
           <div className="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonStyles } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -32,6 +32,8 @@ import {
 import { apiClient, ApiError } from '@/api/client';
 import { useAuth } from '@/api/AuthContext';
 import {
+  EVENT_STATUS_LABELS,
+  EVENT_STATUS_VARIANTS,
   EventItem,
   RegistrationItem,
   TeamItem,
@@ -519,7 +521,7 @@ export function PublicEventDetailPage({
       );
 
       if (res.data?.invitation) {
-        setTeamActionSuccess(`Invitation sent to ${res.data.invitation.email}!`);
+        setTeamActionSuccess(`Invitation created for ${res.data.invitation.email}.`);
         if (res.data.invitation.token) {
           setGeneratedTokenNotice(res.data.invitation.token);
         }
@@ -674,6 +676,7 @@ export function PublicEventDetailPage({
         month: 'short',
         day: 'numeric',
         year: 'numeric',
+        timeZone: event?.timezone || 'UTC',
       });
     } catch {
       return isoString;
@@ -687,6 +690,7 @@ export function PublicEventDetailPage({
       return `${d.toLocaleTimeString(undefined, {
         hour: '2-digit',
         minute: '2-digit',
+        timeZone: tz || 'UTC',
       })} ${tz || ''}`.trim();
     } catch {
       return '';
@@ -731,15 +735,13 @@ export function PublicEventDetailPage({
   if (errorMessage || !event) {
     return (
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-        <Alert variant="error" title="Event Unavailable">
-          {errorMessage || 'The requested event could not be found or is not publicly published.'}
+        <Alert variant="error" title="Event unavailable">
+          {errorMessage || 'This event could not be found. It may no longer be public.'}
         </Alert>
         <div className="mt-6">
-          <Link to="/events">
-            <Button variant="outline" className="gap-2">
+          <Link to="/events" className={buttonStyles({ variant: 'outline' })}>
               <ArrowLeft className="h-4 w-4" />
-              <span>Back to Events</span>
-            </Button>
+              <span>Browse events</span>
           </Link>
         </div>
       </div>
@@ -747,7 +749,7 @@ export function PublicEventDetailPage({
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div className="mx-auto max-w-6xl px-4 py-7 sm:px-8 sm:py-10">
       {/* Top Back Navigation & Action Bar */}
       <div className="mb-6 flex items-center justify-between">
         <Link
@@ -755,7 +757,7 @@ export function PublicEventDetailPage({
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
-          <span>All Events</span>
+          <span>All events</span>
         </Link>
 
         <button
@@ -764,16 +766,11 @@ export function PublicEventDetailPage({
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
         >
           <Share2 className="h-3.5 w-3.5 text-slate-400" />
-          <span>{copiedLink ? 'Link Copied!' : 'Share Event'}</span>
+          <span>{copiedLink ? 'Link copied' : 'Share event'}</span>
         </button>
       </div>
 
-      {/* Main Grid: Details (Left 2 cols) & Registration Card (Right 1 col) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        {/* Left Column: Event Metadata & Body */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Header Card */}
-          <Card className="p-6 space-y-4">
+          <header className="mb-7 space-y-4 border-b border-border pb-6">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={isHackathon ? 'brand' : 'neutral'}>
                 {isHackathon ? (
@@ -786,7 +783,7 @@ export function PublicEventDetailPage({
                 )}
               </Badge>
 
-              <Badge variant="success">Published</Badge>
+              <Badge variant={EVENT_STATUS_VARIANTS[event.status]}>{EVENT_STATUS_LABELS[event.status]}</Badge>
 
               {event.organisation && (
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 ml-auto">
@@ -796,12 +793,12 @@ export function PublicEventDetailPage({
               )}
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+            <h1 className="break-words text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
               {event.title}
             </h1>
 
             {/* Quick Meta Ribbon */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-border text-xs text-slate-600">
+            <div className="grid max-w-3xl grid-cols-1 gap-4 pt-2 text-sm text-slate-600 sm:grid-cols-2">
               <div className="flex items-start gap-2">
                 <Clock className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
                 <div>
@@ -835,21 +832,200 @@ export function PublicEventDetailPage({
                 </div>
               </div>
             </div>
-          </Card>
+          </header>
 
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <aside aria-label="Event registration" className="min-w-0 lg:sticky lg:top-20 lg:col-start-2 lg:row-start-1">
+          <Card className="border-t-2 border-t-brand-700 p-5">
+            <CardHeader className="p-0 pb-4 border-b border-border">
+              <CardTitle className="text-lg font-bold text-slate-900 flex items-center justify-between">
+                <span>Registration</span>
+                {event.capacity && (
+                  <Badge variant="neutral" className="text-xs font-normal">
+                    Capacity: {event.capacity}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="p-0 pt-4 space-y-4">
+              {/* Action feedback alerts */}
+              {actionSuccessMessage && (
+                <Alert variant="success" title="Success">
+                  {actionSuccessMessage}
+                </Alert>
+              )}
+
+              {actionErrorMessage && (
+                <Alert variant="error" title="Registration Error">
+                  {actionErrorMessage}
+                </Alert>
+              )}
+
+              {/* Status Timeline */}
+              <div className="space-y-2 text-xs text-slate-600">
+                <div className="flex justify-between py-1 border-b border-border">
+                  <span className="text-slate-500">Registration Opens</span>
+                  <span className="font-medium text-slate-800">
+                    {event.registrationOpensAt ? formatDate(event.registrationOpensAt) : 'Immediately'}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-border">
+                  <span className="text-slate-500">Registration Closes</span>
+                  <span className="font-medium text-slate-800">
+                    {event.registrationClosesAt
+                      ? formatDate(event.registrationClosesAt)
+                      : event.endAt
+                      ? formatDate(event.endAt)
+                      : formatDate(event.startAt)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Authentication / Registration State */}
+              {isStatusLoading ? (
+                <div className="py-6 text-center">
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ) : !isAuthenticated ? (
+                /* 1. Unauthenticated Visitor */
+                <div className="space-y-3 pt-2">
+                  <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600 leading-relaxed border border-border">
+                    <p className="font-semibold text-slate-800 mb-1">Sign in to join</p>
+                    Anyone with a verified ManageX account can register for a public event.
+                  </div>
+
+                  <Link
+                    to="/auth/login"
+                    state={{ from: { pathname: location.pathname } }}
+                    className={buttonStyles({ className: 'w-full' })}
+                  >
+                    Sign in to register
+                  </Link>
+
+                  <div className="text-center text-xs text-slate-500 pt-1">
+                    Don't have an account?{' '}
+                    <Link to="/auth/register" className="text-brand-600 hover:underline font-medium">
+                      Create an account
+                    </Link>
+                  </div>
+                </div>
+              ) : isRegistered ? (
+                /* 2. Authenticated & Registered */
+                <div className="space-y-4 pt-2">
+                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
+                    <div className="flex items-start gap-2.5">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-xs font-bold text-emerald-900">You are registered</h4>
+                        <p className="text-xs text-emerald-700 mt-0.5">
+                          Registered under{' '}
+                          <span className="font-medium">{user?.email}</span>
+                        </p>
+                        {registration?.registeredAt && (
+                          <p className="text-xs text-emerald-600 mt-1">
+                            Registered on {formatDate(registration.registeredAt)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {!showWithdrawConfirm ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowWithdrawConfirm(true)}
+                      className="w-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
+                    >
+                      Withdraw Registration
+                    </Button>
+                  ) : (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg space-y-2">
+                      <p className="text-xs text-rose-800">
+                        Are you sure you want to withdraw from this event?
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={isActionLoading}
+                          onClick={handleWithdraw}
+                          className="flex-1"
+                        >
+                          {isActionLoading ? 'Withdrawing...' : 'Confirm Withdrawal'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowWithdrawConfirm(false)}
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* 3. Authenticated & Not Registered / Withdrawn */
+                <div className="space-y-3 pt-2">
+                  {registration?.status === 'withdrawn' && (
+                    <div className="rounded-md bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
+                      You previously withdrew from this event. You can re-register while registration remains open.
+                    </div>
+                  )}
+
+                  {!isEventOpenForRegistration ? (
+                    <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">Registration Closed</p>
+                        <p className="mt-0.5">
+                          {event.status !== 'published'
+                            ? `Registration is closed because this event is currently ${EVENT_STATUS_LABELS[event.status]}.`
+                            : isRegistrationNotYetOpen
+                            ? `Registration opens on ${formatDate(event.registrationOpensAt)}.`
+                            : 'Registration for this event is now closed.'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={handleRegister}
+                      disabled={isActionLoading}
+                      className="w-full justify-center"
+                    >
+                      {isActionLoading
+                        ? 'Registering...'
+                        : registration?.status === 'withdrawn'
+                        ? 'Register again'
+                        : 'Register for Event'}
+                    </Button>
+                  )}
+
+                  <p className="text-center text-xs text-slate-500">
+                    Signed in as <span className="font-medium text-slate-700">{user?.fullName || user?.email}</span>
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </aside>
+        <div className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-1">
           {/* About / Description */}
           <Card className="p-6 space-y-4">
             <h2 className="text-lg font-bold text-slate-900 border-b border-border pb-3">
-              About this Event
+              About this event
             </h2>
             <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-              {event.description || 'No detailed description provided by the event host.'}
+              {event.description || 'The organiser has not added a description.'}
             </div>
 
             {(registration?.participantInstructions || event.participantInstructions) && registration?.status === 'registered' && (
               <div className="mt-6 pt-4 border-t border-border bg-slate-50 p-4 rounded-lg">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">
-                  Instructions for Registered Participants
+                <h3 className="text-xs font-semibold text-slate-900 mb-2">
+                  Joining instructions
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
                   {registration?.participantInstructions || event.participantInstructions}
@@ -863,14 +1039,14 @@ export function PublicEventDetailPage({
             <Card className="p-6 space-y-4">
               <h2 className="text-lg font-bold text-slate-900 border-b border-border pb-3 flex items-center gap-2">
                 <Code2 className="h-5 w-5 text-brand-600" />
-                <span>Hackathon Guidelines & Rules</span>
+                <span>Hackathon rules</span>
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div className="p-3 rounded-lg bg-surface-subtle border border-border">
                   <div className="font-semibold text-slate-800 flex items-center gap-1.5 mb-1">
                     <Users className="h-3.5 w-3.5 text-brand-600" />
-                    <span>Team Composition</span>
+                    <span>Team size</span>
                   </div>
                   <div className="text-slate-600">
                     Teams may range from{' '}
@@ -1012,7 +1188,7 @@ export function PublicEventDetailPage({
                               <div className="font-semibold text-slate-900 truncate">
                                 {member.user?.fullName || 'Participant'}
                               </div>
-                              <div className="text-[11px] text-slate-500 truncate font-mono">
+                              <div className="text-xs text-slate-500 truncate font-mono">
                                 {member.user?.email || member.userId}
                               </div>
                             </div>
@@ -1037,10 +1213,10 @@ export function PublicEventDetailPage({
                         Sent Invitations ({teamInvitations.length})
                       </div>
                       {generatedTokenNotice && (
-                        <Alert variant="info" title="Invitation Token Generated">
+                        <Alert variant="info" title="Invitation code">
                           <p className="font-mono text-xs select-all text-slate-800 break-all">{generatedTokenNotice}</p>
-                          <p className="text-[11px] mt-1 text-slate-500">
-                            Valid for 7 days. The invitee can join using this token.
+                          <p className="text-xs mt-1 text-slate-500">
+                            Share this code with the participant you invited. It expires in 7 days.
                           </p>
                         </Alert>
                       )}
@@ -1055,7 +1231,7 @@ export function PublicEventDetailPage({
                             >
                               <div className="min-w-0 pr-2">
                                 <span className="font-medium text-slate-800 block truncate">{inv.invitedEmail}</span>
-                                <span className="text-[11px] text-slate-400 block">
+                                <span className="text-xs text-slate-400 block">
                                   Expires {formatDate(inv.expiresAt)}
                                 </span>
                               </div>
@@ -1076,7 +1252,7 @@ export function PublicEventDetailPage({
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-6 px-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 text-[11px]"
+                                    className="h-6 px-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 text-xs"
                                     isLoading={revokingInviteId === inv.id}
                                     onClick={() => handleRevokeInvite(inv.id)}
                                   >
@@ -1094,9 +1270,9 @@ export function PublicEventDetailPage({
               ) : !isRegistered ? (
                 /* View 2: User is NOT registered */
                 <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600">
-                  <p className="font-medium text-slate-800 mb-1">Registration Required for Teams</p>
+                  <p className="font-medium text-slate-800 mb-1">Register to join a team</p>
                   <p>
-                    You must register for this hackathon before creating or joining a team. Use the registration card on the right to sign up.
+                    Once you register for this hackathon, you can create or join a team.
                   </p>
                 </div>
               ) : (
@@ -1104,20 +1280,20 @@ export function PublicEventDetailPage({
                 <div className="space-y-4">
                   {/* Received Invitations Banner */}
                   {myPendingInvites.length > 0 && (
-                    <div className="p-3.5 rounded-lg bg-indigo-50 border border-indigo-200 text-xs text-indigo-900 space-y-2">
-                      <div className="font-bold flex items-center gap-1.5 text-indigo-900">
-                        <Mail className="h-4 w-4 text-indigo-600" />
-                        <span>You Have Received Team Invitations</span>
+                    <div className="p-3.5 rounded-lg bg-brand-50 border border-brand-200 text-xs text-brand-900 space-y-2">
+                      <div className="font-bold flex items-center gap-1.5 text-brand-900">
+                        <Mail className="h-4 w-4 text-brand-600" />
+                        <span>Your team invitations</span>
                       </div>
                       <div className="space-y-2">
                         {myPendingInvites.map((inv) => (
                           <div
                             key={inv.id}
-                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded bg-white border border-indigo-100"
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded bg-white border border-brand-100"
                           >
                             <div>
                               <span className="font-semibold text-slate-900">{inv.teamName}</span>
-                              <span className="text-slate-500 text-[11px] block">
+                              <span className="text-slate-500 text-xs block">
                                 Invited by {inv.invitedByName} · Expires {formatDate(inv.expiresAt)}
                               </span>
                             </div>
@@ -1148,8 +1324,8 @@ export function PublicEventDetailPage({
                   <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <span className="font-bold">You are not in a team yet.</span>
-                      <p className="text-amber-800 text-[11px] mt-0.5">
-                        Create a new team, join an open team below, or accept an invitation token.
+                      <p className="text-amber-800 text-xs mt-0.5">
+                        Create a team, join an open team, or use an invitation code.
                       </p>
                     </div>
                     {isEventOpenForRegistration && (
@@ -1164,7 +1340,7 @@ export function PublicEventDetailPage({
                           }}
                         >
                           <Key className="h-3.5 w-3.5" />
-                          Accept Token
+                          Use invitation code
                         </Button>
                         <Button
                           size="sm"
@@ -1224,7 +1400,7 @@ export function PublicEventDetailPage({
                                   <p className="text-xs text-slate-500 mt-1 line-clamp-1">{t.description}</p>
                                 )}
                                 {t.owner && (
-                                  <p className="text-[11px] text-slate-400 mt-0.5">
+                                  <p className="text-xs text-slate-400 mt-0.5">
                                     Owner: {t.owner.fullName || t.owner.email}
                                   </p>
                                 )}
@@ -1263,7 +1439,7 @@ export function PublicEventDetailPage({
                     <span>Project Submission</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Submit your project deliverable URLs before the submission deadline.
+                    Add your project details and links before the deadline.
                   </p>
                 </div>
                 {(!event.submissionClosesAt || new Date() <= new Date(event.submissionClosesAt)) &&
@@ -1354,7 +1530,7 @@ export function PublicEventDetailPage({
                   </div>
 
                   {mySubmission.submittedAt && (
-                    <div className="text-[11px] text-slate-400 pt-1">
+                    <div className="text-xs text-slate-400 pt-1">
                       Submitted on {formatDate(mySubmission.submittedAt)}
                     </div>
                   )}
@@ -1391,7 +1567,7 @@ export function PublicEventDetailPage({
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">Evaluation Schedule</h2>
                     <p className="text-xs text-slate-500">
-                      Live presentation appointments and judging panels scheduled for your team.
+                      Check when your team presents and how to join.
                     </p>
                   </div>
                 </div>
@@ -1432,13 +1608,11 @@ export function PublicEventDetailPage({
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">Official Results & Leaderboard</h2>
                     <p className="text-xs text-slate-500">
-                      Calculated rankings and final aggregate scores published on {formatDate(event.resultsPublishedAt)}.
+                      Scores and rankings published on {formatDate(event.resultsPublishedAt)}.
                     </p>
                   </div>
                 </div>
-                <Badge variant="brand" className="text-xs">
-                  Official
-                </Badge>
+
               </div>
 
               {isLoadingResults ? (
@@ -1523,187 +1697,6 @@ export function PublicEventDetailPage({
             </Card>
           )}
         </div>
-
-        {/* Right Column: Registration Card & Action Panel */}
-        <div className="space-y-6">
-          <Card className="p-6 shadow-card border-border sticky top-20">
-            <CardHeader className="p-0 pb-4 border-b border-border">
-              <CardTitle className="text-lg font-bold text-slate-900 flex items-center justify-between">
-                <span>Participation</span>
-                {event.capacity && (
-                  <Badge variant="neutral" className="text-xs font-normal">
-                    Capacity: {event.capacity}
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent className="p-0 pt-4 space-y-4">
-              {/* Action feedback alerts */}
-              {actionSuccessMessage && (
-                <Alert variant="success" title="Success">
-                  {actionSuccessMessage}
-                </Alert>
-              )}
-
-              {actionErrorMessage && (
-                <Alert variant="error" title="Registration Error">
-                  {actionErrorMessage}
-                </Alert>
-              )}
-
-              {/* Status Timeline */}
-              <div className="space-y-2 text-xs text-slate-600">
-                <div className="flex justify-between py-1 border-b border-border">
-                  <span className="text-slate-500">Registration Opens</span>
-                  <span className="font-medium text-slate-800">
-                    {event.registrationOpensAt ? formatDate(event.registrationOpensAt) : 'Immediately'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-border">
-                  <span className="text-slate-500">Registration Closes</span>
-                  <span className="font-medium text-slate-800">
-                    {event.registrationClosesAt
-                      ? formatDate(event.registrationClosesAt)
-                      : event.endAt
-                      ? formatDate(event.endAt)
-                      : formatDate(event.startAt)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Authentication / Registration State */}
-              {isStatusLoading ? (
-                <div className="py-6 text-center">
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ) : !isAuthenticated ? (
-                /* 1. Unauthenticated Visitor */
-                <div className="space-y-3 pt-2">
-                  <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600 leading-relaxed border border-border">
-                    <p className="font-semibold text-slate-800 mb-1">Authenticated Registration</p>
-                    ManageX requires a verified account to register. Organisation membership is not required for public events.
-                  </div>
-
-                  <Link
-                    to="/auth/login"
-                    state={{ from: { pathname: location.pathname } }}
-                    className="block w-full"
-                  >
-                    <Button className="w-full justify-center">
-                      Sign in to Register
-                    </Button>
-                  </Link>
-
-                  <div className="text-center text-xs text-slate-500 pt-1">
-                    Don't have an account?{' '}
-                    <Link to="/auth/register" className="text-brand-600 hover:underline font-medium">
-                      Create an account
-                    </Link>
-                  </div>
-                </div>
-              ) : isRegistered ? (
-                /* 2. Authenticated & Registered */
-                <div className="space-y-4 pt-2">
-                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4">
-                    <div className="flex items-start gap-2.5">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="text-xs font-bold text-emerald-900">You Are Registered</h4>
-                        <p className="text-xs text-emerald-700 mt-0.5">
-                          Registered under{' '}
-                          <span className="font-medium">{user?.email}</span>
-                        </p>
-                        {registration?.registeredAt && (
-                          <p className="text-[11px] text-emerald-600 mt-1">
-                            Registered on {formatDate(registration.registeredAt)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {!showWithdrawConfirm ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowWithdrawConfirm(true)}
-                      className="w-full text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
-                    >
-                      Withdraw Registration
-                    </Button>
-                  ) : (
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg space-y-2">
-                      <p className="text-xs text-rose-800">
-                        Are you sure you want to withdraw from this event?
-                      </p>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={isActionLoading}
-                          onClick={handleWithdraw}
-                          className="flex-1"
-                        >
-                          {isActionLoading ? 'Withdrawing...' : 'Confirm Withdrawal'}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowWithdrawConfirm(false)}
-                          className="flex-1"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* 3. Authenticated & Not Registered / Withdrawn */
-                <div className="space-y-3 pt-2">
-                  {registration?.status === 'withdrawn' && (
-                    <div className="rounded-md bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
-                      You previously withdrew from this event. You can re-register while registration remains open.
-                    </div>
-                  )}
-
-                  {!isEventOpenForRegistration ? (
-                    <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 flex items-start gap-2">
-                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-semibold">Registration Closed</p>
-                        <p className="mt-0.5">
-                          {event.status !== 'published'
-                            ? `Registration is closed because this event is currently ${event.status}.`
-                            : isRegistrationNotYetOpen
-                            ? `Registration opens on ${formatDate(event.registrationOpensAt)}.`
-                            : 'Registration for this event is now closed.'}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <Button
-                      onClick={handleRegister}
-                      disabled={isActionLoading}
-                      className="w-full justify-center"
-                    >
-                      {isActionLoading
-                        ? 'Registering...'
-                        : registration?.status === 'withdrawn'
-                        ? 'Re-register for Event'
-                        : 'Register for Event'}
-                    </Button>
-                  )}
-
-                  <p className="text-center text-[11px] text-slate-500">
-                    Logged in as <span className="font-medium text-slate-700">{user?.fullName || user?.email}</span>
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
       </div>
 
       {/* Create Team Dialog */}
@@ -1714,8 +1707,9 @@ export function PublicEventDetailPage({
         description={`Create a new team for ${event?.title || 'this event'}. You will become the team owner.`}
       >
         <form onSubmit={handleCreateTeam} className="space-y-4">
-          <FormField label="Team Name" required>
+          <FormField htmlFor="team-name" label="Team Name" required>
             <Input
+              id="team-name"
               value={newTeamName}
               onChange={(e) => setNewTeamName(e.target.value)}
               placeholder="e.g. Cyber Innovators"
@@ -1726,8 +1720,9 @@ export function PublicEventDetailPage({
             />
           </FormField>
 
-          <FormField label="Description (Optional)">
+          <FormField htmlFor="team-description" label="Description (Optional)">
             <Textarea
+              id="team-description"
               value={newTeamDesc}
               onChange={(e) => setNewTeamDesc(e.target.value)}
               placeholder="What problem is your team solving?"
@@ -1778,8 +1773,9 @@ export function PublicEventDetailPage({
         description="Enter the email address of a registered participant. An invitation valid for 7 days will be created."
       >
         <form onSubmit={handleSendInvite} className="space-y-4">
-          <FormField label="Participant Email" required>
+          <FormField htmlFor="invite-email" label="Participant Email" required>
             <Input
+              id="invite-email"
               type="email"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
@@ -1804,7 +1800,7 @@ export function PublicEventDetailPage({
               isLoading={isInviting}
               disabled={!inviteEmail.trim()}
             >
-              Send Invitation
+              Create invitation
             </Button>
           </div>
         </form>
@@ -1815,14 +1811,15 @@ export function PublicEventDetailPage({
         isOpen={showTokenAcceptModal}
         onClose={() => !isAcceptingToken && setShowTokenAcceptModal(false)}
         title="Accept Team Invitation"
-        description="Enter the 32-byte invitation token provided by the team owner to join their team."
+        description="Enter the invitation code from your team owner."
       >
         <div className="space-y-4">
-          <FormField label="Invitation Token" required>
+          <FormField htmlFor="invitation-code" label="Invitation code" required>
             <Input
+              id="invitation-code"
               value={acceptTokenInput}
               onChange={(e) => setAcceptTokenInput(e.target.value)}
-              placeholder="Paste invitation token here..."
+              placeholder="Paste your invitation code"
               required
               autoFocus
             />
@@ -1855,14 +1852,15 @@ export function PublicEventDetailPage({
         isOpen={showSubmissionModal}
         onClose={() => !isSubmitting && setShowSubmissionModal(false)}
         title={mySubmission ? 'Edit Project Submission' : 'Submit Project'}
-        description={`Provide your project deliverable details for ${event?.title || 'this event'}.`}
+        description={`Add your project and links for ${event?.title || 'this event'}.`}
       >
         <form onSubmit={handleSaveSubmission} className="space-y-4">
-          <FormField label="Project Title" required>
+          <FormField htmlFor="submission-title" label="Project Title" required>
             <Input
+              id="submission-title"
               value={subTitle}
               onChange={(e) => setSubTitle(e.target.value)}
-              placeholder="e.g. Autonomous Defense Agent"
+              placeholder="Project name"
               required
               minLength={2}
               maxLength={255}
@@ -1870,18 +1868,20 @@ export function PublicEventDetailPage({
             />
           </FormField>
 
-          <FormField label="Project Description (Optional)">
+          <FormField htmlFor="submission-description" label="Project Description (Optional)">
             <Textarea
+              id="submission-description"
               value={subDesc}
               onChange={(e) => setSubDesc(e.target.value)}
-              placeholder="Brief summary of your project, tech stack, and solution..."
+              placeholder="What did you build?"
               rows={3}
               maxLength={5000}
             />
           </FormField>
 
-          <FormField label="Repository URL (Optional)">
+          <FormField htmlFor="submission-repository" label="Repository URL (Optional)">
             <Input
+              id="submission-repository"
               type="url"
               value={subRepoUrl}
               onChange={(e) => setSubRepoUrl(e.target.value)}
@@ -1889,8 +1889,9 @@ export function PublicEventDetailPage({
             />
           </FormField>
 
-          <FormField label="Live Demo URL (Optional)">
+          <FormField htmlFor="submission-demo" label="Live Demo URL (Optional)">
             <Input
+              id="submission-demo"
               type="url"
               value={subDemoUrl}
               onChange={(e) => setSubDemoUrl(e.target.value)}

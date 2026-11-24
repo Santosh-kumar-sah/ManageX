@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
+import { Card, CardHeader, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
@@ -39,7 +39,7 @@ export function VerifyEmailPage() {
       if (err instanceof ApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Failed to verify email. The token may be expired or invalid.');
+        setErrorMessage('Couldn’t verify your email. Check that your verification link is current.');
       }
     } finally {
       setIsVerifying(false);
@@ -52,63 +52,52 @@ export function VerifyEmailPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md text-center shadow-card">
-        <CardHeader className="space-y-2">
-          <div className="mx-auto h-12 w-12 rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600">
-            {isSuccess ? <CheckCircle2 className="h-6 w-6 text-green-600" /> : <MailCheck className="h-6 w-6" />}
-          </div>
-          <CardTitle className="text-xl">
-            {isSuccess ? 'Email Verified Successfully!' : 'Verify Your Email'}
-          </CardTitle>
-          <CardDescription>
-            {isSuccess
-              ? 'Your account is now active. You may sign in to access your organisation workspace.'
-              : emailParam
-              ? `We sent a verification link to ${emailParam}. Please click the link or paste your token below.`
-              : 'Please enter the verification token received in your email.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {errorMessage && (
-            <Alert variant="error" title="Verification Failed">
-              {errorMessage}
-            </Alert>
-          )}
+    <Card className="mx-auth-panel">
+      <CardHeader className="mx-auth-heading">
+        <div className="h-12 w-12 rounded-full bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600">
+          {isSuccess ? <CheckCircle2 className="h-6 w-6 text-green-600" /> : <MailCheck className="h-6 w-6" />}
+        </div>
+        <h1 className="mx-auth-title">
+          {isSuccess ? 'Email verified' : 'Verify your email'}
+        </h1>
+        <CardDescription>
+          {isSuccess
+            ? 'You can now sign in to ManageX.'
+            : emailParam
+            ? `Check the inbox for ${emailParam}. Open your verification link or enter its code below.`
+            : 'Open the link in your verification email or enter the code from the link.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="mx-auth-fields space-y-4">
+        {errorMessage && (
+          <Alert variant="error" title="Couldn’t verify email">
+            {errorMessage}
+          </Alert>
+        )}
 
-          {isSuccess && (
-            <Alert variant="success" title="Ready to Sign In">
-              Your email address has been verified. You can now log in to ManageX.
-            </Alert>
-          )}
-
-          {!isSuccess && !tokenParam && (
-            <form onSubmit={handleSubmit} className="space-y-4 text-left">
-              <FormField label="Verification Token" htmlFor="token" required>
-                <Input
-                  id="token"
-                  placeholder="Paste your 64-character token"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  required
-                  disabled={isVerifying}
-                />
-              </FormField>
-              <Button type="submit" className="w-full" disabled={isVerifying || !tokenInput}>
-                {isVerifying ? 'Verifying...' : 'Verify Token'}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-        <CardFooter className="flex flex-col gap-2">
-          <Link to="/auth/login" className="w-full">
-            <Button variant={isSuccess ? 'primary' : 'outline'} className="w-full">
-              {isSuccess ? 'Proceed to Sign In' : 'Back to Sign In'}
+        {!isSuccess && !tokenParam && (
+          <form onSubmit={handleSubmit} className="space-y-4 text-left">
+            <FormField label="Verification code" htmlFor="token" required>
+              <Input
+                id="token"
+                placeholder="Code from your verification link"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                required
+                disabled={isVerifying}
+              />
+            </FormField>
+            <Button type="submit" className="w-full" disabled={isVerifying || !tokenInput}>
+              {isVerifying ? 'Verifying…' : 'Verify email'}
             </Button>
+          </form>
+        )}
+      </CardContent>
+      <CardFooter className="mx-auth-actions flex flex-col gap-2">
+        <Link to="/auth/login" className={isSuccess ? 'mx-auth-link mx-auth-link-solid w-full' : 'mx-auth-link w-full'}>
+            {isSuccess ? 'Sign in' : 'Back to sign in'}
           </Link>
-        </CardFooter>
-      </Card>
-    </div>
+      </CardFooter>
+    </Card>
   );
 }
-

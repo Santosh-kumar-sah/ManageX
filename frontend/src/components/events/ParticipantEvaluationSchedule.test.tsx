@@ -73,7 +73,7 @@ describe('ParticipantEvaluationSchedule Component (Phase 4D)', () => {
     );
 
     expect(html).toContain('data-testid="participant-schedule-empty"');
-    expect(html).toContain('No session appointment published yet');
+    expect(html).toContain('No judging time has been published yet');
     expect(html).toContain('Refresh');
   });
 
@@ -92,7 +92,7 @@ describe('ParticipantEvaluationSchedule Component (Phase 4D)', () => {
     );
 
     expect(html).toContain('data-testid="participant-schedule-card"');
-    expect(html).toContain('Evaluation Appointment');
+    expect(html).toContain('Judging appointment');
     expect(html).toContain('Technical &amp; Architecture Panel');
     expect(html).toContain('Slot #1');
     expect(html).toContain('Cyber Panthers');
@@ -117,10 +117,10 @@ describe('ParticipantEvaluationSchedule Component (Phase 4D)', () => {
     );
 
     // Join button must NOT be present
-    expect(html).not.toContain('Join Evaluation Meeting');
+    expect(html).not.toContain('Join judging meeting');
     // Lock notice and availability time must be present
-    expect(html).toContain('Meeting link will unlock 10 minutes prior to session');
-    expect(html).toContain('Check Link');
+    expect(html).toContain('The link opens 10 minutes before your appointment');
+    expect(html).toContain('Check link');
   });
 
   it('5. Releases meeting link and displays join button when within window or active', () => {
@@ -140,11 +140,11 @@ describe('ParticipantEvaluationSchedule Component (Phase 4D)', () => {
       />
     );
 
-    expect(html).toContain('Join Evaluation Meeting');
+    expect(html).toContain('Join judging meeting');
     expect(html).toContain('href="https://meet.google.com/xyz-eval-appt"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
-    expect(html).toContain('Session is Live Now');
+    expect(html).toContain('Session in progress');
   });
 
   it('6. Does not expose judge identities, judge emails, scoring criteria, or private notes', () => {
@@ -192,7 +192,7 @@ describe('ParticipantEvaluationSchedule Component (Phase 4D)', () => {
       />
     );
 
-    expect(html).not.toContain('Join Evaluation Meeting');
+    expect(html).not.toContain('Join judging meeting');
     expect(html).toContain('This evaluation session has been marked as');
     expect(html).toContain('Cancelled');
   });

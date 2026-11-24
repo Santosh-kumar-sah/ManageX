@@ -294,12 +294,12 @@ export function OrgSettingsPage() {
             </FormField>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              <FormField label="URL Slug" helperText="Permanent unique workspace handle.">
-                <Input value={activeOrg?.slug || ''} disabled className="bg-slate-50 text-slate-500" />
+              <FormField label="Workspace handle" htmlFor="org-handle">
+                <Input id="org-handle" value={activeOrg?.slug || ''} disabled className="bg-slate-50 text-slate-500" />
               </FormField>
 
-              <FormField label="Workspace UUID" helperText="Immutable database identifier.">
-                <Input value={activeOrg?.id || ''} disabled className="bg-slate-50 font-mono text-[11px] text-slate-500" />
+              <FormField label="Workspace ID" htmlFor="org-id">
+                <Input id="org-id" value={activeOrg?.id || ''} disabled className="bg-slate-50 font-mono text-xs text-slate-500" />
               </FormField>
             </div>
           </CardContent>

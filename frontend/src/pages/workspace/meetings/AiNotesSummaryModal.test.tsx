@@ -25,8 +25,8 @@ describe('AiNotesSummaryModal (Phase 02B SSR / Unit)', () => {
     expect(html).toContain('Focus Areas (Optional, one per line)');
     expect(html).toContain('Additional Instructions (Optional)');
     expect(html).toContain('Generate Summary');
-    expect(html).toContain('Privacy &amp; Human-in-the-Loop Verification');
-    expect(html).toContain('Zero Data Retention');
+    expect(html).toContain('How your notes are used');
+    expect(html).toContain('zero data retention requirement');
   });
 
   it('renders closed modal as empty/hidden', () => {

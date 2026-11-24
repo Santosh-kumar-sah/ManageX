@@ -320,7 +320,7 @@ export function AiActionItemsModal({
               <textarea
                 value={additionalInstructions}
                 onChange={(e) => setAdditionalInstructions(e.target.value)}
-                placeholder="e.g. Default due dates to next Monday unless specified. Ensure Sarah is assigned database tasks."
+                placeholder="For example, suggest next Monday for items without a due date."
                 rows={2}
                 disabled={isGenerating}
                 className="w-full text-sm rounded-md border border-slate-300 p-2 text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
@@ -331,12 +331,11 @@ export function AiActionItemsModal({
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-600 space-y-1">
               <p className="font-semibold text-slate-700 flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-                Zero Data Retention & Member Matching
+                How suggestions are made
               </p>
               <p>
-                ManageX AI analyzes confidential notes, discussion points, and recorded decisions. Candidate assignees
-                are deterministically matched against active members in your organisation. All extracted items are
-                ephemeral drafts and require explicit review before saving.
+                ManageX sends meeting notes, discussion points and decisions to an AI provider with a zero data
+                retention requirement. Suggested owners are matched to current members. Review each item before saving it.
               </p>
             </div>
 

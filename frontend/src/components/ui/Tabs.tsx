@@ -16,7 +16,7 @@ export interface TabsProps {
 export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
   return (
     <div className={cn('border-b border-border', className)}>
-      <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+      <nav className="-mb-px flex gap-4 overflow-x-auto px-1 sm:gap-6" aria-label="Tabs">
         {tabs.map((tab) => {
           const isActive = tab.id === activeTab;
           return (

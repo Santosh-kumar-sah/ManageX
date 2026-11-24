@@ -749,7 +749,7 @@ export function EvaluationPage({
           {activeTab === 'panels' && (
             <Card>
               <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
-                <div><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4 text-brand-600" /> Evaluation panels</CardTitle><CardDescription className="mt-2">Panel assignments synchronize only evaluation-generated legacy assignments.</CardDescription></div>
+                <div><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4 text-brand-600" /> Evaluation panels</CardTitle><CardDescription className="mt-2">Choose the judges for each evaluation panel.</CardDescription></div>
                 {canManageJudges && (
                   <div className="flex flex-wrap items-center gap-2">
                     {panels.length > 0 && (
@@ -935,7 +935,7 @@ export function EvaluationPage({
         </form>
       </Dialog>
       <ConfirmDialog isOpen={confirmOverwrite} onClose={() => setConfirmOverwrite(false)} onConfirm={generateSchedule} title="Replace scheduled sessions?" description="Overwrite will replace existing scheduled sessions for this evaluation. Completed and cancelled history is not treated as ordinary editable schedule data." confirmLabel="Generate and replace" variant="destructive" isLoading={isMutating} />
-      <ConfirmDialog isOpen={Boolean(confirmPublish)} onClose={() => setConfirmPublish(null)} onConfirm={() => confirmPublish && publishSchedule(confirmPublish)} title={confirmPublish === 'publish' ? 'Publish evaluation schedule?' : 'Unpublish evaluation schedule?'} description={confirmPublish === 'publish' ? 'Participants will see permitted sessions according to the backend release rules.' : 'Unpublishing hides participant sessions and meeting links.'} confirmLabel={confirmPublish === 'publish' ? 'Publish schedule' : 'Unpublish schedule'} isLoading={isMutating} />
+      <ConfirmDialog isOpen={Boolean(confirmPublish)} onClose={() => setConfirmPublish(null)} onConfirm={() => confirmPublish && publishSchedule(confirmPublish)} title={confirmPublish === 'publish' ? 'Publish evaluation schedule?' : 'Unpublish evaluation schedule?'} description={confirmPublish === 'publish' ? 'Participants will be able to see their released evaluation sessions.' : 'Unpublishing hides participant sessions and meeting links.'} confirmLabel={confirmPublish === 'publish' ? 'Publish schedule' : 'Unpublish schedule'} isLoading={isMutating} />
       <ConfirmDialog isOpen={confirmComplete} onClose={() => setConfirmComplete(false)} onConfirm={completeEvaluation} title="Complete evaluation?" description="The server will verify terminal sessions, criteria, compatible submissions, and required scores. This does not publish results or advance the round." confirmLabel="Complete evaluation" isLoading={isMutating} />
     </div>
   );

@@ -121,7 +121,7 @@ export function EventsPage() {
             Events & Hackathons
           </h1>
           <p className="text-sm text-slate-500">
-            Organise conferences, workshops, and hackathons with timezone-aware scheduling.
+            Manage registrations, teams and submissions for your events.
           </p>
         </div>
 

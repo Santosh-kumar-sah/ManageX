@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table';
 import { Dialog } from '@/components/ui/Dialog';
@@ -54,13 +53,10 @@ export function PlatformAuditLogsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Platform Audit Logs</h1>
-            <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              Security Audit
-            </Badge>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Platform audit log</h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Immutable append-only record of platform administrative mutations, account suspensions, and module availability changes.
+            Review changes to accounts, organisations and workspace tools.
           </p>
         </div>
 
@@ -94,7 +90,7 @@ export function PlatformAuditLogsPage() {
                 <TableHead>Timestamp (UTC)</TableHead>
                 <TableHead>Action</TableHead>
                 <TableHead>Target Entity</TableHead>
-                <TableHead>Operator / Actor</TableHead>
+                <TableHead>Changed by</TableHead>
                 <TableHead className="text-right">Details</TableHead>
               </TableRow>
             </TableHeader>

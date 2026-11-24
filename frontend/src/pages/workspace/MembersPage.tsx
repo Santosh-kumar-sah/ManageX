@@ -360,7 +360,7 @@ export function MembersPage() {
         <CardHeader className="p-5 pb-4 border-b border-border">
           <CardTitle className="text-base">Active Members ({members.length})</CardTitle>
           <CardDescription className="text-xs">
-            Members authenticated with active workspace access and assigned scoped RBAC roles.
+            People who can access this workspace and their roles.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -701,7 +701,7 @@ export function MembersPage() {
               </Button>
             </div>
             <p className="text-[11px] text-slate-400">
-              Only roles within your authorized permission scope can be assigned (anti-escalation check enforced).
+              You can assign only the roles available to you.
             </p>
           </form>
 

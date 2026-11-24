@@ -58,7 +58,7 @@ describe('AiAgendaDraftModal (Phase 02A SSR / Unit)', () => {
           // Confirmed successful save: remove item from working list
           itemsToSave.shift();
         }
-      } catch (err) {
+      } catch {
         errorOccurred = true;
       }
 
@@ -90,7 +90,7 @@ describe('AiAgendaDraftModal (Phase 02A SSR / Unit)', () => {
     });
 
     it('prevents duplicate submissions while save is in progress', () => {
-      let isSaving = true;
+      const isSaving = true;
       const saveAttempts: number[] = [];
 
       const attemptSave = () => {

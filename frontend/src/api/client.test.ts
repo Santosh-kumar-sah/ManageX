@@ -84,7 +84,7 @@ describe('Central API Client', () => {
       const apiErr = err as ApiError;
       expect(apiErr.statusCode).toBe(504);
       expect(apiErr.code).toBe('GATEWAY_TIMEOUT_MUTATION_UNVERIFIED');
-      expect(apiErr.message).toContain('The operation may have completed');
+      expect(apiErr.message).toContain('It may have been saved');
     }
   });
 
@@ -267,7 +267,7 @@ describe('Central API Client', () => {
       expect(apiErr.statusCode).toBe(500);
       expect(apiErr.code).toBe('INVALID_SERVER_RESPONSE');
       expect(apiErr.requestId).toBe('html-err-1');
-      expect(apiErr.message).toContain('Received non-JSON response from server (HTTP 500)');
+      expect(apiErr.message).toContain('ManageX couldn’t read the response');
     }
   });
 });

@@ -77,7 +77,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
  */
 async function pollHealthUntilAwake(maxTimeoutMs: number = 60000, intervalMs: number = 5000): Promise<boolean> {
   const startTime = Date.now();
-  notifyColdStart('waking', 'ManageX service is waking up, please wait a moment...');
+  notifyColdStart('waking', 'Connecting to ManageX. This may take a moment.');
 
   while (Date.now() - startTime < maxTimeoutMs) {
     try {
@@ -95,7 +95,7 @@ async function pollHealthUntilAwake(maxTimeoutMs: number = 60000, intervalMs: nu
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  notifyColdStart('failed', 'Service did not respond in time. Please check your network or try again.');
+  notifyColdStart('failed', 'ManageX took longer than usual to respond. Check your connection and try again.');
   return false;
 }
 
@@ -164,7 +164,7 @@ export async function apiClient<T>(
       }
     }
     throw new ApiError(
-      'Network connection failed or server is unreachable.',
+      'Couldn’t connect to ManageX. Check your connection and try again.',
       0,
       'NETWORK_ERROR',
       undefined,
@@ -186,7 +186,7 @@ export async function apiClient<T>(
       // Never auto-replay a POST/PUT/PATCH/DELETE mutation because the server
       // might have already committed the operation before the proxy disconnected.
       throw new ApiError(
-        'The server took longer than expected to respond. The operation may have completed. Please refresh or verify the status before trying again.',
+        'We couldn’t confirm your change. It may have been saved. Refresh the page and check before trying again.',
         response.status,
         'GATEWAY_TIMEOUT_MUTATION_UNVERIFIED',
         response.headers.get('x-request-id') || undefined,
@@ -203,7 +203,7 @@ export async function apiClient<T>(
     body = await response.json();
   } catch {
     throw new ApiError(
-      `Received non-JSON response from server (HTTP ${response.status})`,
+      'ManageX couldn’t read the response. Refresh the page to check the latest information.',
       response.status,
       'INVALID_SERVER_RESPONSE',
       requestId
@@ -213,7 +213,7 @@ export async function apiClient<T>(
   if (!response.ok || body.success === false) {
     const errorInfo = body.error;
     throw new ApiError(
-      errorInfo?.message || `Request failed with status ${response.status}`,
+      errorInfo?.message || 'ManageX couldn’t complete this request.',
       response.status,
       errorInfo?.code || 'API_ERROR',
       errorInfo?.requestId || requestId,
