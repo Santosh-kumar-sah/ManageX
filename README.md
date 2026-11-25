@@ -2,10 +2,10 @@
 
 ManageX is a production-ready, multi-tenant modular operations platform designed for universities, tech communities, and growing teams. It delivers enterprise-grade workspace isolation, competitive hackathon orchestration, timezone-aware meeting management with native Google Meet sync, and agile project delivery.
 
-[![Netlify Status](https://api.netlify.com/api/v1/badges/1a2b3c4d/deploy-status)](https://elaborate-tanuki-c70edd.netlify.app)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B%20with%20RLS-blue.svg)](https://www.postgresql.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Live Demo](https://img.shields.io/badge/Demo-Live%20Platform-00C7B7?logo=netlify&logoColor=white)](https://elaborate-tanuki-c70edd.netlify.app)
+[![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D20.0.0-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B%20(RLS)-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
@@ -170,6 +170,13 @@ Run from the repository root:
                                             ▼                                   ▼
                                 [ Google Calendar & Meet ]              [ Brevo Email HTTPS ]
 ```
+
+---
+
+## 👨‍💻 Author
+
+**Santosh Kumar Sah**
+- GitHub: [@Santosh-kumar-sah](https://github.com/Santosh-kumar-sah)
 
 ---
 

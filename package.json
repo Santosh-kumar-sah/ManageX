@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "ManageX - Multi-Tenant Modular Organisation Management SaaS Platform",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev:backend": "npm --prefix backend run dev",
