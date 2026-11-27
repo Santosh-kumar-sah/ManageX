@@ -161,10 +161,10 @@ export function EditMeetingDialog({
         )}
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label htmlFor="edit-meeting-dialog-title" className="block text-sm font-medium text-slate-700 mb-1">
             Meeting Title <span className="text-red-500">*</span>
           </label>
-          <Input
+          <Input id="edit-meeting-dialog-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Weekly Product Sync"
@@ -175,26 +175,26 @@ export function EditMeetingDialog({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label htmlFor="edit-meeting-dialog-description" className="block text-sm font-medium text-slate-700 mb-1">
             Description
           </label>
-          <textarea
+          <textarea id="edit-meeting-dialog-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             placeholder="Meeting goals, topics, or instructions..."
             disabled={isSubmitting}
-            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white"
+            className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-slate-900 bg-white"
             data-testid="edit-meeting-description"
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="edit-meeting-dialog-start-at" className="block text-sm font-medium text-slate-700 mb-1">
               Start Time <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="edit-meeting-dialog-start-at"
               type="datetime-local"
               value={startAt}
               onChange={(e) => setStartAt(e.target.value)}
@@ -205,10 +205,10 @@ export function EditMeetingDialog({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="edit-meeting-dialog-end-at" className="block text-sm font-medium text-slate-700 mb-1">
               End Time <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="edit-meeting-dialog-end-at"
               type="datetime-local"
               value={endAt}
               onChange={(e) => setEndAt(e.target.value)}
@@ -221,14 +221,14 @@ export function EditMeetingDialog({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="edit-meeting-dialog-timezone" className="block text-sm font-medium text-slate-700 mb-1">
               Timezone <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="edit-meeting-dialog-timezone"
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               disabled={isSubmitting}
-              className="w-full h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white"
+              className="w-full h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-slate-900 bg-white"
               data-testid="edit-meeting-timezone"
             >
               {COMMON_TIMEZONE_OPTIONS.map((opt) => (
@@ -243,16 +243,16 @@ export function EditMeetingDialog({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="edit-meeting-dialog-location-type" className="block text-sm font-medium text-slate-700 mb-1">
               Location Type <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="edit-meeting-dialog-location-type"
               value={locationType}
               onChange={(e) =>
                 setLocationType(e.target.value as MeetingLocationType)
               }
               disabled={isSubmitting}
-              className="w-full h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white"
+              className="w-full h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-slate-900 bg-white"
               data-testid="edit-meeting-location-type"
             >
               <option value="virtual">Virtual (Online)</option>
@@ -264,10 +264,10 @@ export function EditMeetingDialog({
 
         {locationType !== 'virtual' && (
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="edit-meeting-dialog-location" className="block text-sm font-medium text-slate-700 mb-1">
               Physical Location <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="edit-meeting-dialog-location"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g. Conference Room 3B, HQ Building"
@@ -280,10 +280,10 @@ export function EditMeetingDialog({
 
         {locationType !== 'in_person' && (
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="edit-meeting-dialog-virtual-url" className="block text-sm font-medium text-slate-700 mb-1">
               Virtual Meeting URL <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="edit-meeting-dialog-virtual-url"
               type="url"
               value={virtualUrl}
               onChange={(e) => setVirtualUrl(e.target.value)}
@@ -296,14 +296,14 @@ export function EditMeetingDialog({
         )}
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label htmlFor="edit-meeting-dialog-visibility" className="block text-sm font-medium text-slate-700 mb-1">
             Visibility
           </label>
-          <select
+          <select id="edit-meeting-dialog-visibility"
             value={visibility}
             onChange={(e) => setVisibility(e.target.value as MeetingVisibility)}
             disabled={isSubmitting}
-            className="w-full h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 bg-white"
+            className="w-full h-10 px-3 py-2 text-sm border border-slate-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-slate-900 bg-white"
             data-testid="edit-meeting-visibility"
           >
             <option value="organisation">Organisation (Visible to all members)</option>

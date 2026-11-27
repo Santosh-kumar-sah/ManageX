@@ -89,10 +89,10 @@ describe('EvaluationPage', () => {
     });
 
     const html = renderPage();
-    expect(html).toContain('Round evaluation configuration');
+    expect(html).toContain('Round setup');
     expect(html).toContain('Evaluation panels');
     expect(html).toContain('Session schedule');
-    expect(html).toContain('Invitations and completion');
+    expect(html).toContain('Invitations &amp; completion');
   });
 
   it('renders specific tab content according to active tab or search params', () => {
@@ -129,7 +129,7 @@ describe('EvaluationPage', () => {
         </Routes>
       </MemoryRouter>
     );
-    expect(htmlPanels).toContain('No panels configured');
+    expect(htmlPanels).toContain('No judging panels yet');
 
     const htmlSchedule = renderToStaticMarkup(
       <MemoryRouter initialEntries={['/app/organisations/org-1/events/event-1/rounds/round-1/evaluation?tab=schedule']}>

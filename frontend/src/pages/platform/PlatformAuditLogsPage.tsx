@@ -61,7 +61,7 @@ export function PlatformAuditLogsPage() {
         </div>
 
         <Button variant="outline" size="sm" onClick={fetchLogs} disabled={loading}>
-          Refresh Logs
+          Refresh
         </Button>
       </div>
 
@@ -76,8 +76,8 @@ export function PlatformAuditLogsPage() {
       <Card>
         <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
           <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-indigo-600" />
-            <span>Audit Events ({total})</span>
+            <ShieldCheck className="h-4 w-4 text-brand-600" />
+            <span>Activity ({total})</span>
           </CardTitle>
           <span className="text-xs text-slate-400">
             Page {page} of {totalPages}
@@ -89,7 +89,7 @@ export function PlatformAuditLogsPage() {
               <TableRow>
                 <TableHead>Timestamp (UTC)</TableHead>
                 <TableHead>Action</TableHead>
-                <TableHead>Target Entity</TableHead>
+                <TableHead>Changed item</TableHead>
                 <TableHead>Changed by</TableHead>
                 <TableHead className="text-right">Details</TableHead>
               </TableRow>
@@ -120,14 +120,11 @@ export function PlatformAuditLogsPage() {
                       <div className="text-xs font-medium text-slate-800">
                         {formatAuditAction(log.action)}
                       </div>
-                      <span className="text-[10px] font-mono text-slate-400">
-                        {log.action}
-                      </span>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">
                       <span className="capitalize font-medium">{log.entityType}</span>
                       {log.entityId && (
-                        <span className="text-slate-400 font-mono text-[10px] ml-1">
+                        <span className="text-slate-400 font-mono text-xs ml-1">
                           ({log.entityId.substring(0, 8)}...)
                         </span>
                       )}
@@ -147,11 +144,11 @@ export function PlatformAuditLogsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-xs text-indigo-600 hover:text-indigo-800"
+                        className="text-xs text-brand-600 hover:text-brand-800"
                         onClick={() => setSelectedLog(log)}
                       >
                         <Eye className="h-3.5 w-3.5 mr-1" />
-                        Inspect
+                        View details
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -191,39 +188,35 @@ export function PlatformAuditLogsPage() {
       <Dialog
         isOpen={selectedLog !== null}
         onClose={() => setSelectedLog(null)}
-        title="Audit Event Metadata"
+        title="Activity details"
         className="sm:max-w-lg"
       >
         {selectedLog && (
           <div className="space-y-4 py-2 text-xs">
-            <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded border border-slate-100">
+            <div className="grid break-words grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 rounded border border-slate-100">
               <div>
-                <span className="text-slate-400 block mb-0.5">Action Key</span>
-                <code className="text-indigo-700 font-mono">{selectedLog.action}</code>
+                <span className="text-slate-400 block mb-0.5">Action reference</span>
+                <code className="text-brand-700 font-mono">{selectedLog.action}</code>
               </div>
               <div>
-                <span className="text-slate-400 block mb-0.5">Entity Type</span>
+                <span className="text-slate-400 block mb-0.5">Item type</span>
                 <span className="text-slate-800 font-medium capitalize">{selectedLog.entityType}</span>
               </div>
               <div>
-                <span className="text-slate-400 block mb-0.5">Entity ID</span>
-                <code className="text-slate-700 font-mono text-[11px]">{selectedLog.entityId || 'N/A'}</code>
+                <span className="text-slate-400 block mb-0.5">Item reference</span>
+                <code className="text-slate-700 font-mono break-all text-xs">{selectedLog.entityId || 'N/A'}</code>
               </div>
               <div>
-                <span className="text-slate-400 block mb-0.5">Caller IP Address</span>
-                <span className="text-slate-800 font-mono">{selectedLog.ipAddress || '127.0.0.1'}</span>
+                <span className="text-slate-400 block mb-0.5">IP address</span>
+                <span className="text-slate-800 font-mono">{selectedLog.ipAddress || 'Not recorded'}</span>
               </div>
             </div>
 
             <div>
-              <span className="text-slate-500 font-medium block mb-1">Payload Metadata (Sanitized)</span>
+              <span className="text-slate-500 font-medium block mb-1">Recorded details</span>
               <pre className="p-3 bg-slate-900 text-emerald-400 rounded-md font-mono text-[11px] overflow-x-auto max-h-56">
                 {JSON.stringify(selectedLog.metadata, null, 2)}
               </pre>
-            </div>
-
-            <div className="text-[11px] text-slate-500 italic">
-              Credentials, passwords, session tokens, and confidential fields are automatically redacted from audit records.
             </div>
           </div>
         )}

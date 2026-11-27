@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonStyles } from '@/components/ui/Button';
 import { Users, Building, Boxes, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { apiClient } from '@/api/client';
 import { PlatformOverview } from '@/types/platform';
@@ -149,30 +149,25 @@ export function PlatformOverviewPage() {
       {/* Global Module Catalogue Status */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
               <Boxes className="h-4 w-4 text-brand-600" />
               <span>Workspace tool availability</span>
             </CardTitle>
-            <Link to="/platform/modules">
-              <Button variant="outline" size="sm">
-                Manage Availability
-              </Button>
+            <Link to="/platform/modules" className={buttonStyles({ variant: 'outline', size: 'sm' })}>
+              Manage availability
             </Link>
           </div>
         </CardHeader>
         <CardContent className="border-t border-slate-100 pt-4">
           <div className="divide-y divide-slate-100">
             {data?.modules.map((mod) => (
-              <div key={mod.slug} className="py-3 flex items-center justify-between">
+              <div key={mod.slug} className="py-3 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-slate-900">{mod.name}</span>
-                    <code className="text-[11px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
-                      {mod.slug}
-                    </code>
                     {mod.isCore && (
-                      <Badge variant="brand" className="text-[10px]">Core</Badge>
+                      <Badge variant="brand" className="text-xs">Core</Badge>
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">{mod.description}</p>
@@ -183,9 +178,9 @@ export function PlatformOverviewPage() {
                     {mod.activeOrganisationsCount} workspaces
                   </span>
                   {mod.isPlatformAvailable ? (
-                    <Badge variant="success">Available Platform-wide</Badge>
+                    <Badge variant="success">Available</Badge>
                   ) : (
-                    <Badge variant="danger">Disabled Platform-wide</Badge>
+                    <Badge variant="danger">Unavailable</Badge>
                   )}
                 </div>
               </div>

@@ -1,5 +1,15 @@
 # Sea-glass UI preview
 
+## Signed-in workspace review, 27 November 2026
+
+All 226 frontend tests passed. The end-to-end browser run also passed from fresh accounts, including an assigned judge opening the team's submission, saving a score to the active event and seeing the confirmation. The run reported no uncaught browser exceptions.
+
+The review branch now styles event management, evaluation schedules and judging, meeting details and exports, project boards and lists, and the remaining organisation and platform settings. Form errors and help text are associated with their fields. The mobile administration header stacks its title so the workspace link stays reachable at 320 pixels.
+
+Chrome checks used the production frontend build, the existing Express API and an isolated PostgreSQL instance with the repository migrations and demo accounts. An organiser created and moved a task, reopened it from the list, added an agenda item and downloaded Markdown and PDF minutes. A participant registered for an event, saw it on their dashboard and received the expected restricted screen on a member-only route. A member received the restricted audit screen. All five platform administration pages fit at 320 and 1440 pixels, and workspace inspection opened successfully.
+
+Local commands included `npm run build:frontend` (including TypeScript), `npm run lint:frontend`, and `npm --prefix frontend test -- --silent --maxWorkers=3 --minWorkers=1 --reporter=dot`. The suite includes regression tests for keyboard task moves, read-only tasks and reopening completed tasks. Frontend lint reported 147 warnings and zero errors. No migration, backend access rule or production setting changed. Live Google authorisation, outbound email and AI generation require a configured review environment. The next phase is owner comparison on the draft preview, followed by an explicit release decision.
+
 ManageX now has a review branch, `redesign/sea-glass-preview`. The original frontend is recorded at tag `ui-before-redesign`, commit `5f0469de7de44890cf345e3596fed646f19c2cd9`. The public Netlify site served the same JavaScript and CSS asset names as the local original build at the start of the review.
 
 ## Delivered for review

@@ -1,8 +1,9 @@
+import './events.css';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonStyles } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Avatar } from '@/components/ui/Avatar';
@@ -255,7 +256,7 @@ export function EventDetailPage({
     setSuccessMsg(null);
     try {
       if (!navigator.clipboard || !navigator.clipboard.writeText) {
-        throw new Error('Clipboard API is unavailable in this environment.');
+        throw new Error('Copying is unavailable in this browser.');
       }
       const shareUrl = `${window.location.origin}/events/${event.id}`;
       await navigator.clipboard.writeText(shareUrl);
@@ -1380,10 +1381,8 @@ export function EventDetailPage({
   const isTeamOwner = myTeam?.createdById === user?.id;
 
   return (
-    <div className="space-y-6">
-      
-      {/* Header & Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="mx-events space-y-6">
+      <header className="mx-event-heading mx-event-detail-heading">
         <div>
           <Breadcrumbs
             items={[
@@ -1397,18 +1396,18 @@ export function EventDetailPage({
             ]}
           />
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            <h1 className="mx-event-title">
               {event.title}
             </h1>
             <Badge variant={EVENT_STATUS_VARIANTS[event.status]}>
               {EVENT_STATUS_LABELS[event.status]}
             </Badge>
-            <Badge variant="neutral" className="uppercase tracking-wider font-mono text-[10px]">
+            <Badge variant="neutral" className="text-xs">
               {event.eventType === 'hackathon' ? 'Hackathon · ' + (event.visibility === 'public' ? 'Public' : 'Private') : 'General Event · ' + (event.visibility === 'public' ? 'Public' : 'Private')}
             </Badge>
           </div>
-          <p className="mt-1 text-xs text-slate-500">
-            {formatDateTime(event.startAt, event.timezone)} to {formatDateTime(event.endAt, event.timezone)} · {event.locationType === 'virtual' ? 'Virtual Meeting' : (event.location || 'In Person')}
+          <p className="mx-event-intro">
+            {formatDateTime(event.startAt, event.timezone)} to {formatDateTime(event.endAt, event.timezone)} · {event.locationType === 'virtual' ? 'Online' : (event.location || 'In Person')}
           </p>
         </div>
 
@@ -1460,9 +1459,9 @@ export function EventDetailPage({
                   size="sm"
                   onClick={() => setIsAiContentModalOpen(true)}
                   data-testid="ai-draft-content-button"
-                  className="flex items-center gap-1.5 text-xs text-indigo-700 hover:text-indigo-900 border-indigo-200 hover:bg-indigo-50"
+                  className="flex items-center gap-1.5 text-xs text-brand-700 hover:text-brand-900 border-brand-200 hover:bg-brand-50"
                 >
-                  <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                  <Sparkles className="h-3.5 w-3.5 text-brand-600" />
                   <span>Draft Content with AI</span>
                 </Button>
               )}
@@ -1501,33 +1500,67 @@ export function EventDetailPage({
             </Button>
           )}
 
-          <Link to={`/app/organisations/${effectiveOrgId}/events`}>
-            <Button variant="outline" size="sm" className="flex items-center gap-1.5 text-xs">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to Events
-            </Button>
+          <Link to={`/app/organisations/${effectiveOrgId}/events`} className={buttonStyles({ variant: 'outline', size: 'sm' })}>
+            <ArrowLeft className="h-3.5 w-3.5" /> Back to Events
           </Link>
         </div>
-      </div>
+      </header>
 
       {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
       {successMsg && <Alert variant="success">{successMsg}</Alert>}
 
-      {/* Event status Stepper Card */}
-      <Card className="border-slate-200 bg-white shadow-xs">
-        <CardContent className="p-4 sm:p-5">
-          <div className="flex items-center justify-between pb-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Event status
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500">Current Status:</span>
-              <Badge variant={EVENT_STATUS_VARIANTS[event.status] || 'neutral'}>
-                {EVENT_STATUS_LABELS[event.status] || event.status}
-              </Badge>
-            </div>
-          </div>
+      {/* Horizontal Tab Navigation */}
+      <div className="border-b border-slate-200">
+        <nav className="mx-event-tabs" aria-label="Event tabs">
+          {[
+            { id: 'overview' as const, label: 'Overview' },
+            { id: 'registrations' as const, label: 'Registrations', count: participants.length },
+            ...(event.eventType === 'hackathon'
+              ? [
+                  { id: 'teams' as const, label: 'Teams', count: teams.length },
+                  { id: 'submissions' as const, label: 'Submissions', count: eventSubmissions.length },
+                  { id: 'judging' as const, label: 'Judging', count: rounds.length },
+                  { id: 'results' as const, label: 'Results' },
+                ]
+              : []),
+            { id: 'settings' as const, label: 'Settings' },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => handleTabClick(tab.id)}
+                className={`flex items-center gap-2 whitespace-nowrap border-b-2 py-3 px-1 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'border-brand-600 text-brand-600'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                }`}
+                data-testid={`event-tab-${tab.id}`}
+              >
+                <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                      isActive ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
-          <div className="py-2">
+      {/* Tab 1: Overview */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          <details className="mx-event-progress">
+            <summary>Event status <span>{EVENT_STATUS_LABELS[event.status]}</span></summary>
+          <div className="mx-event-stages">
             <div className="flex items-center justify-between">
               {[
                 { id: 'draft', label: 'Draft' },
@@ -1580,99 +1613,8 @@ export function EventDetailPage({
             </div>
           </div>
 
-          {canManageStatus && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-500 font-medium">Allowed next:</span>
-                {allowedTransitions.length === 0 ? (
-                  <span className="text-slate-400 italic">None (Concluded or Archived)</span>
-                ) : (
-                  allowedTransitions
-                    .filter((s) => s !== 'cancelled')
-                    .map((targetStatus) => {
-                      let variant: 'primary' | 'outline' = 'outline';
-                      if (targetStatus === 'published' || targetStatus === 'in_progress') {
-                        variant = 'primary';
-                      }
-                      return (
-                        <Button
-                          key={targetStatus}
-                          size="sm"
-                          variant={variant}
-                          disabled={isUpdatingStatus}
-                          onClick={() => handleStatusTransition(targetStatus)}
-                          className="h-7 text-xs"
-                        >
-                          {EVENT_STATUS_LABELS[targetStatus] || targetStatus}
-                        </Button>
-                      );
-                    })
-                )}
-              </div>
-              {allowedTransitions.includes('cancelled') && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={isUpdatingStatus}
-                  onClick={() => handleStatusTransition('cancelled')}
-                  className="h-7 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                >
-                  Cancel event
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Horizontal Tab Navigation */}
-      <div className="border-b border-slate-200">
-        <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Event tabs">
-          {[
-            { id: 'overview' as const, label: 'Overview' },
-            { id: 'registrations' as const, label: 'Registrations', count: participants.length },
-            ...(event.eventType === 'hackathon'
-              ? [
-                  { id: 'teams' as const, label: 'Teams', count: teams.length },
-                  { id: 'submissions' as const, label: 'Submissions', count: eventSubmissions.length },
-                  { id: 'judging' as const, label: 'Judging', count: rounds.length },
-                  { id: 'results' as const, label: 'Results' },
-                ]
-              : []),
-            { id: 'settings' as const, label: 'Settings' },
-          ].map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleTabClick(tab.id)}
-                className={`flex items-center gap-2 whitespace-nowrap border-b-2 py-3 px-1 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'border-brand-600 text-brand-600'
-                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                }`}
-                data-testid={`event-tab-${tab.id}`}
-              >
-                <span>{tab.label}</span>
-                {tab.count !== undefined && (
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                      isActive ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-600'
-                    }`}
-                  >
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
-
-      {/* Tab 1: Overview */}
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
+            {canManageStatus && <Button variant="ghost" size="sm" onClick={() => handleTabClick('settings')}>Manage event status</Button>}
+          </details>
           {/* 3 Metric Cards Grid as seen in reference mockup */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Card 1: Registration Window */}
@@ -1780,10 +1722,10 @@ export function EventDetailPage({
 
           {/* Schedule & Location Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Schedule & Timezone Sidebar */}
+            {/* Event schedule Sidebar */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Schedule & Timezone</CardTitle>
+              <CardTitle className="text-base">Event schedule</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-xs text-slate-600">
               <div className="flex items-start gap-2.5">
@@ -1811,10 +1753,10 @@ export function EventDetailPage({
               </div>
             </CardContent>
           </Card>
-            {/* Venue & Location Sidebar */}
+            {/* Location Sidebar */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Venue & Location</CardTitle>
+              <CardTitle className="text-base">Location</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-xs text-slate-600">
               <div className="flex items-start gap-2.5">
@@ -1828,7 +1770,7 @@ export function EventDetailPage({
                     {event.locationType ? event.locationType.replace('_', ' ') : 'In Person'}
                   </div>
                   <div className="text-slate-700">
-                    {event.location || (event.locationType === 'virtual' ? 'Virtual Meeting' : 'Venue TBD')}
+                    {event.location || (event.locationType === 'virtual' ? 'Online' : 'Venue TBD')}
                   </div>
                 </div>
               </div>
@@ -2624,7 +2566,7 @@ export function EventDetailPage({
                   <div className="py-6 text-center text-xs text-slate-500">Loading competition rounds...</div>
                 ) : rounds.length === 0 ? (
                   <div className="p-4 bg-slate-50 border border-slate-100 rounded-lg text-center text-xs text-slate-500">
-                    No rounds configured. Click "Add Round" to configure the first competition stage.
+                    Add a round to start planning the competition.
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -2768,10 +2710,10 @@ export function EventDetailPage({
                           variant="outline"
                           size="sm"
                           onClick={() => setIsAiRubricModalOpen(true)}
-                          className="flex items-center gap-1.5 text-xs text-indigo-700 hover:text-indigo-900 border-indigo-200 hover:bg-indigo-50"
+                          className="flex items-center gap-1.5 text-xs text-brand-700 hover:text-brand-900 border-brand-200 hover:bg-brand-50"
                           data-testid="ai-generate-rubric-button"
                         >
-                          <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                          <Sparkles className="h-3.5 w-3.5 text-brand-600" />
                           <span>Generate Rubric with AI</span>
                         </Button>
                       )}
@@ -2845,7 +2787,7 @@ export function EventDetailPage({
                     </h4>
                     {criteria.length === 0 ? (
                       <div className="p-3 bg-slate-50 border border-slate-100 rounded text-center text-xs text-slate-500">
-                        No criteria configured yet. Add criteria to enable judge evaluations.
+                        Add scoring criteria before judges begin reviewing entries.
                       </div>
                     ) : (
                       <Table>
@@ -2896,7 +2838,7 @@ export function EventDetailPage({
                         <TableHeader>
                           <TableRow>
                             <TableHead>Judge Name / Email</TableHead>
-                            <TableHead>Scope</TableHead>
+                            <TableHead>Assigned work</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2993,7 +2935,7 @@ export function EventDetailPage({
                 {eventResults?.isPublished || canManageJudging ? (
                   !eventResults || eventResults.results.length === 0 ? (
                     <div className="text-center py-6 text-slate-500 text-xs">
-                      No submissions or evaluated projects recorded yet.
+                      No scored submissions yet.
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -3097,14 +3039,14 @@ export function EventDetailPage({
               </div>
             </CardTitle>
             <CardDescription>
-              Manage the current stage of this event. Concluded or cancelled events cannot be modified.
+              Choose the next stage when your event is ready.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="flex flex-wrap items-center gap-2">
               {allowedTransitions.length === 0 ? (
                 <span className="text-xs text-slate-500 italic">
-                  This event is complete or archived and no further status changes are available.
+                  This event has no further stages.
                 </span>
               ) : (
                 allowedTransitions.map((targetStatus) => {
@@ -3166,8 +3108,8 @@ export function EventDetailPage({
           <Card className="border-slate-200">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
-                <CardTitle className="text-base">Event Configuration</CardTitle>
-                <CardDescription>Event title, type, timezone, and capacity settings.</CardDescription>
+                <CardTitle className="text-base">Event details</CardTitle>
+                <CardDescription>Review the details participants use to plan their visit.</CardDescription>
               </div>
               {canEditEvent && (
                 <Button size="sm" variant="outline" onClick={() => setIsEditOpen(true)}>
@@ -3179,7 +3121,7 @@ export function EventDetailPage({
             <CardContent className="space-y-3 text-xs text-slate-600">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><span className="text-slate-400">Title:</span> <p className="font-semibold text-slate-900">{event.title}</p></div>
-                <div><span className="text-slate-400">Slug:</span> <p className="font-mono text-slate-700">{event.slug}</p></div>
+                <div><span className="text-slate-400">Event address name</span> <p className="font-mono text-slate-700">{event.slug}</p></div>
                 <div><span className="text-slate-400">Event Type:</span> <p className="font-semibold text-slate-900 capitalize">{event.eventType.replace('_', ' ')}</p></div>
                 <div><span className="text-slate-400">Visibility:</span> <p className="font-semibold text-slate-900 capitalize">{event.visibility}</p></div>
                 <div><span className="text-slate-400">Timezone:</span> <p className="font-mono text-slate-700">{event.timezone}</p></div>
@@ -3248,7 +3190,7 @@ export function EventDetailPage({
           setGeneratedToken(null);
         }}
         title="Invite Team Member"
-        description={`Send a single-use invitation token to a registered participant. Valid for 7 days.`}
+        description={`Invite a registered participant to your team. Their invitation code is valid for seven days.`}
       >
         <div className="space-y-4">
           <div>
@@ -3264,12 +3206,12 @@ export function EventDetailPage({
 
           {generatedToken && (
             <div className="p-3 bg-slate-50 border border-slate-200 rounded text-xs space-y-1">
-              <span className="font-semibold text-slate-700 block">Invitation Token Generated:</span>
+              <span className="font-semibold text-slate-700 block">Invitation code Generated:</span>
               <div className="font-mono text-[11px] bg-white p-2 rounded border border-slate-200 select-all break-all">
                 {generatedToken}
               </div>
               <p className="text-[11px] text-slate-500">
-                The invitee can accept this invitation using this token.
+                Share this code with the participant so they can join your team.
               </p>
             </div>
           )}
@@ -3306,7 +3248,7 @@ export function EventDetailPage({
         isOpen={showSubmissionModal}
         onClose={() => setShowSubmissionModal(false)}
         title={mySubmission ? 'Edit Project Submission' : 'Submit Hackathon Project'}
-        description="Provide project details and URLs. Backend never fetches arbitrary URLs directly."
+        description="Add your project details and links for the judges to review."
       >
         <div className="space-y-4 text-xs">
           <div>
@@ -3466,7 +3408,7 @@ export function EventDetailPage({
             <label className="font-semibold text-slate-700 block mb-1">Select Judge *</label>
             {orgMembers.length === 0 ? (
               <Input
-                placeholder="Enter active user UUID"
+                placeholder="Paste the judge’s account ID"
                 value={assignJudgeUserId}
                 onChange={(e) => setAssignJudgeUserId(e.target.value)}
                 disabled={isAssigningJudge}
@@ -3530,7 +3472,7 @@ export function EventDetailPage({
         isOpen={showScoreModal}
         onClose={() => setShowScoreModal(false)}
         title={`Score Project: ${activeSubForScoring?.title || ''}`}
-        description="Submit numerical evaluations for each criterion. Straight sum aggregation will be computed automatically."
+        description="Score each criterion. Your total is the sum of these scores."
       >
         <div className="space-y-4 text-xs max-h-[70vh] overflow-y-auto pr-1">
           {criteria.length === 0 ? (

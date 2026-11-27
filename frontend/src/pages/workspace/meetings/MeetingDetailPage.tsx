@@ -44,7 +44,7 @@ import {
   FileDown,
 } from 'lucide-react';
 import { Toast, ToastContainer } from '@/components/ui/Toast';
-import { apiClient, ApiError } from '@/api/client';
+import { apiClient, ApiError, API_BASE_URL } from '@/api/client';
 import { useOrg } from '@/api/OrgContext';
 import { useAuth } from '@/api/AuthContext';
 import { EditMeetingDialog } from './EditMeetingDialog';
@@ -56,6 +56,7 @@ import {
   MeetingDiscussionPoint,
   MeetingDecision,
   MeetingActionItem,
+  type MeetingStatus,
   MEETING_STATUS_LABELS,
   MEETING_STATUS_VARIANTS,
   MEETING_ALLOWED_TRANSITIONS,
@@ -394,7 +395,7 @@ export function MeetingDetailPage({
   const availableMembers = orgMembers.filter((m) => !attendees.some((a) => a.userId === m.userId));
 
   // Status transition handler
-  const handleTransition = (newStatus: string) => {
+  const handleTransition = (newStatus: MeetingStatus) => {
     if (!effectiveOrgId || !meetingId) return;
 
     const isMomEmpty =
@@ -405,12 +406,12 @@ export function MeetingDetailPage({
 
     const confirmMessage =
       newStatus === 'cancelled'
-        ? 'Are you sure you want to cancel this meeting? This is a terminal action.'
+        ? 'Cancel this meeting? It cannot be reopened.'
         : newStatus === 'completed'
         ? getCompletionConfirmMessage(isMomEmpty)
         : newStatus === 'missed'
         ? 'Are you sure you want to mark this meeting as missed? This indicates the scheduled meeting did not take place.'
-        : `Are you sure you want to change the meeting status to ${newStatus}?`;
+        : `Are you sure you want to change the meeting status to ${MEETING_STATUS_LABELS[newStatus].toLowerCase()}?`;
 
     setConfirmState({
       isOpen: true,
@@ -1082,8 +1083,8 @@ export function MeetingDetailPage({
         setToast({
           type: 'success',
           message: res.data.alreadyPromoted
-            ? 'Action item is already promoted to this project task.'
-            : 'Action item promoted to Project Task successfully.',
+            ? 'This action item is already linked to the project task.'
+            : 'Project task created.',
         });
       }
       setPromotingItem(null);
@@ -1298,7 +1299,7 @@ export function MeetingDetailPage({
       setActionError(null);
 
       const response = await fetch(
-        `/api/v1/organisations/${effectiveOrgId}/meetings/${meetingId}/export?format=${format}`,
+        `${API_BASE_URL}/organisations/${effectiveOrgId}/meetings/${meetingId}/export?format=${format}`,
         {
           method: 'GET',
           headers: {
@@ -1387,7 +1388,7 @@ export function MeetingDetailPage({
             { label: 'Error' },
           ]}
         />
-        <Alert variant="error" title="Meeting Not Found or Access Denied">
+        <Alert variant="error" title="Meeting unavailable">
           {errorMsg || 'Could not load meeting details.'}
         </Alert>
         <Button variant="outline" onClick={() => navigate(`/app/organisations/${effectiveOrgId}/meetings`)}>
@@ -1415,7 +1416,7 @@ export function MeetingDetailPage({
       />
 
       {actionError && (
-        <Alert variant="error" title="Action Failed">
+        <Alert variant="error" title="Could not save this change">
           {actionError}
         </Alert>
       )}
@@ -1426,7 +1427,7 @@ export function MeetingDetailPage({
           <div className="flex items-center gap-2">
             <CheckCircle className="h-4 w-4 text-slate-500" />
             <span>
-              This meeting is <strong>{meeting.status}</strong>. Per lifecycle rules, terminal meetings cannot be modified or transitioned.
+              This meeting is <strong>{MEETING_STATUS_LABELS[meeting.status].toLowerCase()}</strong>. The schedule is closed to changes.
             </span>
           </div>
         </div>
@@ -1441,16 +1442,15 @@ export function MeetingDetailPage({
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
             <span>
-              This meeting's scheduled end time has passed. Please update the meeting status to complete it or mark it as missed.
+              The scheduled end time has passed.
             </span>
           </div>
         </div>
       )}
 
-      {/* Meeting Header Card */}
-      <Card className="shadow-xs">
-        <CardContent className="p-6 space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+      <Card className="overflow-hidden border-t-2 border-t-brand-700">
+        <CardContent className="space-y-5 p-4 sm:p-6">
+          <div className="flex min-w-0 flex-col gap-4">
             <div className="space-y-3 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={MEETING_STATUS_VARIANTS[meeting.status]}>
@@ -1478,7 +1478,7 @@ export function MeetingDetailPage({
                 </span>
               </div>
 
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              <h1 className="break-words text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                 {meeting.title}
               </h1>
 
@@ -1489,21 +1489,129 @@ export function MeetingDetailPage({
               )}
             </div>
 
+          </div>
+
+          {/* Timing & Location Details */}
+          <div className="grid grid-cols-1 gap-4 rounded-lg bg-surface-subtle p-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-brand-800">
+                Schedule
+              </span>
+              <div className="flex items-start gap-2 text-slate-700">
+                <Calendar className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">
+                    {formatMeetingDate(meeting.startAt, meeting.timezone)}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    to {formatMeetingDate(meeting.endAt, meeting.timezone)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-brand-800">
+                Location & Access
+              </span>
+              <div className="flex items-start gap-2 text-slate-700">
+                {meeting.locationType === 'virtual' ? (
+                  <Video className="h-4 w-4 text-brand-500 mt-0.5 shrink-0" />
+                ) : (
+                  <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
+                )}
+                <div>
+                  <p className="font-medium capitalize">{meeting.locationType.replace('_', ' ')}</p>
+                  {meeting.location && (
+                    <p className="text-xs text-slate-500">{meeting.location}</p>
+                  )}
+                  {meeting.virtualUrl && (
+                    !isTerminal ? (
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <a
+                          href={meeting.virtualUrl}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleJoinMeeting();
+                          }}
+                          className={`text-xs text-brand-600 hover:underline flex items-center gap-1 font-medium text-left cursor-pointer ${
+                            isJoining ? 'opacity-50 pointer-events-none' : ''
+                          }`}
+                          data-testid="join-meeting-cta"
+                        >
+                          {meeting.conferenceProvider === 'google_meet' ? 'Join Google Meet' : 'Join Virtual Meeting'}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                        {meeting.conferenceProvider === 'google_meet' && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            data-testid="google-meet-synced-badge"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Google Meet
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-1 space-y-0.5" data-testid="terminal-link-container">
+                        <span
+                          className="text-xs text-slate-400 flex items-center gap-1.5"
+                          data-testid="inactive-join-notice"
+                        >
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-300" />
+                          {meeting.status === 'cancelled'
+                            ? 'Meeting cancelled · Link inactive'
+                            : meeting.status === 'missed'
+                            ? 'Meeting missed · Link inactive'
+                            : 'Meeting ended · Link inactive'}
+                        </span>
+                        {isOrganiserOrManager && (
+                          <p
+                            className="max-w-full break-all text-xs text-slate-600 select-all"
+                            title={meeting.virtualUrl}
+                            data-testid="historical-meeting-url"
+                          >
+                            Historical link: {meeting.virtualUrl}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-brand-800">
+                Organiser
+              </span>
+              <div className="flex items-center gap-2 text-slate-700">
+                <Users className="h-4 w-4 text-slate-400 shrink-0" />
+                <div>
+                  <p className="font-medium">{meeting.organiserName || 'Organiser'}</p>
+                  {meeting.organiserEmail && (
+                    <p className="text-xs text-slate-500">{meeting.organiserEmail}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
             {/* Header Action Buttons: Export & Lifecycle Controls */}
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2">
               {/* MOM Export Controls */}
-              <div className="inline-flex items-center gap-1 border border-slate-200 rounded-md p-0.5 bg-slate-50">
+              <div role="group" aria-label="Download meeting minutes" className="inline-flex flex-wrap items-center gap-1 rounded-md border border-border p-0.5">
                 <Button
                   variant="ghost"
                   size="sm"
                   disabled={!!isExporting}
                   onClick={() => handleExport('markdown')}
-                  className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-indigo-600 hover:bg-white px-2 py-1 h-8"
+                  className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-brand-600 hover:bg-white px-2 py-1 h-8"
                   data-testid="export-md-btn"
-                  title="Export Minutes of Meeting as Markdown (.md)"
+                  title="Download meeting minutes as Markdown"
                 >
-                  <FileText className="h-3.5 w-3.5 text-indigo-600" />
-                  {isExporting === 'markdown' ? 'Exporting...' : 'Export .MD'}
+                  <FileText className="h-3.5 w-3.5 text-brand-600" />
+                  {isExporting === 'markdown' ? 'Exporting...' : 'Export Markdown'}
                 </Button>
                 <div className="h-4 w-px bg-slate-200" />
                 <Button
@@ -1513,7 +1621,7 @@ export function MeetingDetailPage({
                   onClick={() => handleExport('pdf')}
                   className="flex items-center gap-1.5 text-xs text-slate-700 hover:text-rose-600 hover:bg-white px-2 py-1 h-8"
                   data-testid="export-pdf-btn"
-                  title="Export Minutes of Meeting as PDF (.pdf)"
+                  title="Download meeting minutes as PDF"
                 >
                   <FileDown className="h-3.5 w-3.5 text-rose-600" />
                   {isExporting === 'pdf' ? 'Generating...' : 'Export PDF'}
@@ -1607,8 +1715,6 @@ export function MeetingDetailPage({
                 </>
               )}
             </div>
-          </div>
-
           {inviteStatusMessage && (
             <Alert variant={inviteStatusMessage.type === 'success' ? 'success' : 'error'}>
               {inviteStatusMessage.text}
@@ -1620,11 +1726,12 @@ export function MeetingDetailPage({
             <div className="space-y-2">
               {(meeting.googleSyncStatus === 'pending_create' || meeting.googleSyncStatus === 'pending_update') && (
                 <div
-                  className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-900"
+                  className="flex items-center gap-2 p-3 bg-brand-50 border border-brand-100 rounded-lg text-xs text-brand-900"
+                  role="status"
                   data-testid="sync-pending-banner"
                 >
-                  <div className="h-2 w-2 rounded-full bg-indigo-600 animate-pulse" />
-                  <span>Generating Google Meet conferencing link...</span>
+                  <div className="h-2 w-2 rounded-full bg-brand-600 animate-pulse" />
+                  <span>Preparing the Google Meet link...</span>
                 </div>
               )}
 
@@ -1666,119 +1773,13 @@ export function MeetingDetailPage({
                   <div>
                     <p className="font-semibold">Google Workspace connection expired or revoked</p>
                     <p className="text-amber-700 mt-0.5">
-                      The organisation Google integration credentials must be re-authenticated in Settings &gt; Integrations.
+                      Ask a workspace administrator to reconnect Google in Settings under Integrations.
                     </p>
                   </div>
                 </div>
               )}
             </div>
           )}
-
-          {/* Timing & Location Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-4 border-t border-slate-100 text-sm">
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Schedule
-              </span>
-              <div className="flex items-start gap-2 text-slate-700">
-                <Calendar className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-medium">
-                    {formatMeetingDate(meeting.startAt, meeting.timezone)}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    to {formatMeetingDate(meeting.endAt, meeting.timezone)}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Location & Access
-              </span>
-              <div className="flex items-start gap-2 text-slate-700">
-                {meeting.locationType === 'virtual' ? (
-                  <Video className="h-4 w-4 text-brand-500 mt-0.5 shrink-0" />
-                ) : (
-                  <MapPin className="h-4 w-4 text-slate-400 mt-0.5 shrink-0" />
-                )}
-                <div>
-                  <p className="font-medium capitalize">{meeting.locationType.replace('_', ' ')}</p>
-                  {meeting.location && (
-                    <p className="text-xs text-slate-500">{meeting.location}</p>
-                  )}
-                  {meeting.virtualUrl && (
-                    !isTerminal ? (
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <a
-                          href={meeting.virtualUrl}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleJoinMeeting();
-                          }}
-                          className={`text-xs text-brand-600 hover:underline flex items-center gap-1 font-medium text-left cursor-pointer ${
-                            isJoining ? 'opacity-50 pointer-events-none' : ''
-                          }`}
-                          data-testid="join-meeting-cta"
-                        >
-                          {meeting.conferenceProvider === 'google_meet' ? 'Join Google Meet' : 'Join Virtual Meeting'}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                        {meeting.conferenceProvider === 'google_meet' && (
-                          <span
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            data-testid="google-meet-synced-badge"
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Google Meet
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="mt-1 space-y-0.5" data-testid="terminal-link-container">
-                        <span
-                          className="text-xs text-slate-400 flex items-center gap-1.5"
-                          data-testid="inactive-join-notice"
-                        >
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-300" />
-                          {meeting.status === 'cancelled'
-                            ? 'Meeting cancelled · Link inactive'
-                            : meeting.status === 'missed'
-                            ? 'Meeting missed · Link inactive'
-                            : 'Meeting ended · Link inactive'}
-                        </span>
-                        {isOrganiserOrManager && (
-                          <p
-                            className="text-[11px] text-slate-400 font-mono truncate max-w-xs select-all"
-                            title={meeting.virtualUrl}
-                            data-testid="historical-meeting-url"
-                          >
-                            Historical link: {meeting.virtualUrl}
-                          </p>
-                        )}
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Organiser
-              </span>
-              <div className="flex items-center gap-2 text-slate-700">
-                <Users className="h-4 w-4 text-slate-400 shrink-0" />
-                <div>
-                  <p className="font-medium">{meeting.organiserName || 'Organiser'}</p>
-                  {meeting.organiserEmail && (
-                    <p className="text-xs text-slate-500">{meeting.organiserEmail}</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Current User RSVP Card (hidden for organiser; disabled for currently active response) */}
           {currentAttendee && meeting.organiserId !== user?.id && currentAttendee.role !== 'organiser' && (
@@ -1793,7 +1794,7 @@ export function MeetingDetailPage({
                 </Badge>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
                   variant={currentAttendee.rsvpStatus === 'accepted' ? 'primary' : 'outline'}
@@ -1835,8 +1836,10 @@ export function MeetingDetailPage({
 
       {/* Tabs Navigation */}
       <div className="border-b border-border">
-        <nav className="flex space-x-8">
+        <nav aria-label="Meeting sections" className="flex flex-wrap gap-x-4 gap-y-1 sm:gap-x-7">
           <button
+            type="button"
+            aria-pressed={activeTab === 'agenda'}
             onClick={() => setActiveTab('agenda')}
             className={`py-3 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-all ${
               activeTab === 'agenda'
@@ -1849,6 +1852,8 @@ export function MeetingDetailPage({
           </button>
 
           <button
+            type="button"
+            aria-pressed={activeTab === 'attendees'}
             onClick={() => setActiveTab('attendees')}
             className={`py-3 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-all ${
               activeTab === 'attendees'
@@ -1861,6 +1866,8 @@ export function MeetingDetailPage({
           </button>
 
           <button
+            type="button"
+            aria-pressed={activeTab === 'minutes'}
             onClick={() => setActiveTab('minutes')}
             className={`py-3 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-all ${
               activeTab === 'minutes'
@@ -1873,6 +1880,8 @@ export function MeetingDetailPage({
           </button>
 
           <button
+            type="button"
+            aria-pressed={activeTab === 'actions'}
             onClick={() => setActiveTab('actions')}
             className={`py-3 px-1 inline-flex items-center gap-2 border-b-2 font-medium text-sm transition-all ${
               activeTab === 'actions'
@@ -1889,7 +1898,7 @@ export function MeetingDetailPage({
       {/* Tab 1: Agenda */}
       {activeTab === 'agenda' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-slate-500">
               {totalAgendaDuration > 0 && (
                 <span>
@@ -1899,15 +1908,15 @@ export function MeetingDetailPage({
             </div>
 
             {canEditMeeting && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setIsAiAgendaOpen(true)}
-                  className="flex items-center gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                  className="flex items-center gap-1.5 text-brand-600 border-brand-200 hover:bg-brand-50"
                   data-testid="open-ai-agenda-btn"
                 >
-                  <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                  <Sparkles className="h-3.5 w-3.5 text-brand-600" />
                   Generate with AI
                 </Button>
                 <Button
@@ -1929,7 +1938,7 @@ export function MeetingDetailPage({
                 <ListOrdered className="h-8 w-8 text-slate-400 mx-auto" />
                 <CardTitle className="text-base">No Agenda Items Scheduled</CardTitle>
                 <CardDescription>
-                  Keep meetings focused and structured by scheduling ordered discussion items.
+                  Agenda topics will appear here in the order they will be discussed.
                 </CardDescription>
                 {canEditMeeting && (
                   <Button
@@ -2020,7 +2029,7 @@ export function MeetingDetailPage({
             const declinedCount = attendees.filter((a) => a.rsvpStatus === 'declined').length;
 
             return (
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-slate-600" data-testid="attendee-summary">
                   <span className="font-medium text-slate-900">{totalInvited} invited</span>
                   {' · '}
@@ -2049,14 +2058,14 @@ export function MeetingDetailPage({
 
           <Card className="shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
+              <table aria-label="Meeting attendees" className="min-w-full divide-y divide-slate-200 text-left text-sm">
                 <thead className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider">
                   <tr>
-                    <th className="px-6 py-3">Attendee</th>
-                    <th className="px-6 py-3">Role</th>
-                    <th className="px-6 py-3">RSVP Status</th>
-                    <th className="px-6 py-3">Invited</th>
-                    {canEditMeeting && <th className="px-6 py-3 text-right">Actions</th>}
+                    <th scope="col" className="px-6 py-3">Attendee</th>
+                    <th scope="col" className="px-6 py-3">Role</th>
+                    <th scope="col" className="px-6 py-3">RSVP Status</th>
+                    <th scope="col" className="px-6 py-3">Invited</th>
+                    {canEditMeeting && <th scope="col" className="px-6 py-3 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -2154,7 +2163,7 @@ export function MeetingDetailPage({
                   Confidential Minutes
                 </CardTitle>
                 <CardDescription className="text-slate-600">
-                  Meeting minutes are restricted to organisers and authorised administrative roles. Attendee status alone does not grant access.
+                  Ask the organiser if you need access to these confidential minutes.
                 </CardDescription>
               </CardContent>
             </Card>
@@ -2167,9 +2176,7 @@ export function MeetingDetailPage({
                     <FileText className="h-5 w-5 text-brand-600" />
                     Meeting minutes
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Structured minutes comprising discussion points, key decisions, action items, and additional notes.
-                  </p>
+
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -2370,7 +2377,7 @@ export function MeetingDetailPage({
                       <p>No decisions recorded yet.</p>
                       {canManageNotes && meeting.status !== 'cancelled' && (
                         <p className="text-xs text-slate-400 mt-1">
-                          Click "Add Decision" to record ratified outcomes, approvals, or strategic decisions.
+                          Record what the group agreed and why.
                         </p>
                       )}
                     </div>
@@ -2548,7 +2555,7 @@ export function MeetingDetailPage({
                             className="flex items-center justify-between gap-3 p-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50/50 transition-colors"
                           >
                             <div className="flex items-center gap-3 min-w-0">
-                              <input
+                              <input aria-label={`Mark ${item.title} as ${item.status === 'done' ? 'open' : 'done'}`}
                                 type="checkbox"
                                 checked={item.status === 'done'}
                                 disabled={!canManageActions || item.status === 'cancelled'}
@@ -2614,14 +2621,14 @@ export function MeetingDetailPage({
                 </CardContent>
               </Card>
 
-              {/* Section 4: Additional Notes & Historical Minutes */}
+              {/* Section 4: Additional notes */}
               <Card className="shadow-xs">
                 <CardContent className="p-6 space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                         <FileText className="h-4 w-4 text-brand-600" />
-                        Additional Notes & Historical Minutes
+                        Additional notes
                       </h3>
                       <p className="text-xs text-slate-500 mt-0.5">
                         General notes, miscellaneous information, and historical minutes preserved from prior recordings.
@@ -2663,7 +2670,7 @@ export function MeetingDetailPage({
 
                   <form onSubmit={handleSaveNotes} className="space-y-4">
                     <div>
-                      <textarea
+                      <textarea aria-label="Additional meeting notes"
                         value={notesContent}
                         onChange={(e) => setNotesContent(e.target.value)}
                         disabled={meeting.status === 'cancelled' || !canManageNotes || isSavingNotes}
@@ -2671,13 +2678,13 @@ export function MeetingDetailPage({
                         maxLength={50000}
                         placeholder={
                           canManageNotes
-                            ? "Record miscellaneous notes, executive summaries, or unstructured minutes..."
+                            ? "Add context or details to remember."
                             : "No additional notes recorded yet."
                         }
-                        className="w-full font-mono text-sm rounded-md border border-slate-300 p-4 text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50 disabled:text-slate-500"
+                        className="w-full text-sm rounded-md border border-slate-300 p-4 text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50 disabled:text-slate-500"
                       />
-                      <div className="flex justify-between items-center text-xs text-slate-400 mt-1">
-                        <span>Confidential note bodies are never exposed in audit logs or notification emails.</span>
+                      <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                        <span>Only people with access to the minutes can read these notes.</span>
                         <span>{notesContent.length} / 50,000 characters</span>
                       </div>
                     </div>
@@ -2706,13 +2713,13 @@ export function MeetingDetailPage({
       {/* Tab 4: Action Items (MTG-006) */}
       {activeTab === 'actions' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-slate-500">
               Track deliverables, owners, priorities, and completion dates.
             </p>
 
             {canManageActions && !isTerminal && actionItems.length > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -2879,7 +2886,7 @@ export function MeetingDetailPage({
                       </div>
 
                       {/* Status transitions and actions */}
-                      <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 sm:pt-0">
+                      <div className="flex flex-wrap items-center gap-2 pt-2 sm:pt-0">
                         {canChangeStatus && !isItemTerminal && (
                           <>
                             {item.status === 'open' && (
@@ -2983,16 +2990,16 @@ export function MeetingDetailPage({
         isOpen={isAddAgendaOpen}
         onClose={() => setIsAddAgendaOpen(false)}
         title="Add Agenda Item"
-        description="Add a discussion topic or presentation item to the structured agenda."
+        description="Set a topic and how long to spend on it."
       >
         <form onSubmit={handleAddAgenda} className="space-y-4 pt-2">
           {agendaError && <Alert variant="error">{agendaError}</Alert>}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-agenda-title" className="block text-sm font-medium text-slate-700 mb-1">
               Item Title <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="meeting-detail-page-agenda-title"
               value={agendaTitle}
               onChange={(e) => setAgendaTitle(e.target.value)}
               placeholder="e.g. Architecture review & sign-off"
@@ -3002,10 +3009,10 @@ export function MeetingDetailPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-agenda-duration" className="block text-sm font-medium text-slate-700 mb-1">
               Estimated Duration (Minutes)
             </label>
-            <Input
+            <Input id="meeting-detail-page-agenda-duration"
               type="number"
               min={1}
               max={480}
@@ -3018,10 +3025,10 @@ export function MeetingDetailPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-agenda-description" className="block text-sm font-medium text-slate-700 mb-1">
               Description / Notes
             </label>
-            <textarea
+            <textarea id="meeting-detail-page-agenda-description"
               value={agendaDescription}
               onChange={(e) => setAgendaDescription(e.target.value)}
               rows={3}
@@ -3112,10 +3119,10 @@ export function MeetingDetailPage({
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="meeting-detail-page-external-email" className="block text-sm font-medium text-slate-700 mb-1">
                 Guest Email Address <span className="text-red-500">*</span>
               </label>
-              <Input
+              <Input id="meeting-detail-page-external-email"
                 type="email"
                 value={externalEmail}
                 onChange={(e) => setExternalEmail(e.target.value)}
@@ -3126,10 +3133,10 @@ export function MeetingDetailPage({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-attendee-role" className="block text-sm font-medium text-slate-700 mb-1">
               Role
             </label>
-            <select
+            <select id="meeting-detail-page-attendee-role"
               value={attendeeRole}
               onChange={(e) => setAttendeeRole(e.target.value as AttendeeRole)}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -3160,16 +3167,16 @@ export function MeetingDetailPage({
         isOpen={isAddActionOpen}
         onClose={() => setIsAddActionOpen(false)}
         title="Add Action Item"
-        description="Assign a clear post-meeting action item to an active organisation member."
+        description="Choose who will follow up and when the work is due."
       >
         <form onSubmit={handleAddActionItem} className="space-y-4 pt-2">
           {itemError && <Alert variant="error">{itemError}</Alert>}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-action-title" className="block text-sm font-medium text-slate-700 mb-1">
               Title <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="meeting-detail-page-action-title"
               value={actionTitle}
               onChange={(e) => setActionTitle(e.target.value)}
               placeholder="e.g. Prepare client onboarding roadmap"
@@ -3179,10 +3186,10 @@ export function MeetingDetailPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-action-assignee-id" className="block text-sm font-medium text-slate-700 mb-1">
               Assignee <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="meeting-detail-page-action-assignee-id"
               value={actionAssigneeId}
               onChange={(e) => setActionAssigneeId(e.target.value)}
               required
@@ -3219,10 +3226,10 @@ export function MeetingDetailPage({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="meeting-detail-page-action-priority" className="block text-sm font-medium text-slate-700 mb-1">
                 Priority
               </label>
-              <select
+              <select id="meeting-detail-page-action-priority"
                 value={actionPriority}
                 onChange={(e) => setActionPriority(e.target.value as ActionItemPriority)}
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -3235,10 +3242,10 @@ export function MeetingDetailPage({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="meeting-detail-page-action-due-date" className="block text-sm font-medium text-slate-700 mb-1">
                 Due Date
               </label>
-              <Input
+              <Input id="meeting-detail-page-action-due-date"
                 type="date"
                 value={actionDueDate}
                 onChange={(e) => setActionDueDate(e.target.value)}
@@ -3289,10 +3296,10 @@ export function MeetingDetailPage({
 
           {agendaItems.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="meeting-detail-page-action-agenda-item-id" className="block text-sm font-medium text-slate-700 mb-1">
                 Linked Agenda Topic (Optional)
               </label>
-              <select
+              <select id="meeting-detail-page-action-agenda-item-id"
                 value={actionAgendaItemId}
                 onChange={(e) => setActionAgendaItemId(e.target.value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -3308,15 +3315,15 @@ export function MeetingDetailPage({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-action-description" className="block text-sm font-medium text-slate-700 mb-1">
               Description / Notes
             </label>
-            <textarea
+            <textarea id="meeting-detail-page-action-description"
               value={actionDescription}
               onChange={(e) => setActionDescription(e.target.value)}
               rows={3}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              placeholder="Context, requirements, deliverables..."
+              placeholder="Add details for the person doing the work."
               maxLength={2000}
             />
           </div>
@@ -3347,10 +3354,10 @@ export function MeetingDetailPage({
           {discussionError && <Alert variant="error">{discussionError}</Alert>}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-discussion-title" className="block text-sm font-medium text-slate-700 mb-1">
               Title <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="meeting-detail-page-discussion-title"
               value={discussionTitle}
               onChange={(e) => setDiscussionTitle(e.target.value)}
               placeholder="e.g. Hackathon scoring & evaluation criteria"
@@ -3360,10 +3367,10 @@ export function MeetingDetailPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-discussion-body" className="block text-sm font-medium text-slate-700 mb-1">
               Notes / Body (Optional)
             </label>
-            <textarea
+            <textarea id="meeting-detail-page-discussion-body"
               value={discussionBody}
               onChange={(e) => setDiscussionBody(e.target.value)}
               rows={4}
@@ -3400,10 +3407,10 @@ export function MeetingDetailPage({
             {editDiscussionError && <Alert variant="error">{editDiscussionError}</Alert>}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="meeting-detail-page-edit-discussion-title" className="block text-sm font-medium text-slate-700 mb-1">
                 Title <span className="text-red-500">*</span>
               </label>
-              <Input
+              <Input id="meeting-detail-page-edit-discussion-title"
                 value={editDiscussionTitle}
                 onChange={(e) => setEditDiscussionTitle(e.target.value)}
                 required
@@ -3412,10 +3419,10 @@ export function MeetingDetailPage({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="meeting-detail-page-edit-discussion-body" className="block text-sm font-medium text-slate-700 mb-1">
                 Notes / Body
               </label>
-              <textarea
+              <textarea id="meeting-detail-page-edit-discussion-body"
                 value={editDiscussionBody}
                 onChange={(e) => setEditDiscussionBody(e.target.value)}
                 rows={4}
@@ -3445,16 +3452,16 @@ export function MeetingDetailPage({
         isOpen={isAddDecisionOpen}
         onClose={() => setIsAddDecisionOpen(false)}
         title="Add Decision"
-        description="Record an agreed resolution, consensus, or ratified decision."
+        description="Write down what the group decided and why."
       >
         <form onSubmit={handleAddDecision} className="space-y-4 pt-2">
           {decisionError && <Alert variant="error">{decisionError}</Alert>}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-decision-title" className="block text-sm font-medium text-slate-700 mb-1">
               Decision / Summary <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="meeting-detail-page-decision-title"
               value={decisionTitle}
               onChange={(e) => setDecisionTitle(e.target.value)}
               placeholder="e.g. Approved criteria weighting for final round judging"
@@ -3464,10 +3471,10 @@ export function MeetingDetailPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="meeting-detail-page-decision-details" className="block text-sm font-medium text-slate-700 mb-1">
               Details (Optional)
             </label>
-            <textarea
+            <textarea id="meeting-detail-page-decision-details"
               value={decisionDetails}
               onChange={(e) => setDecisionDetails(e.target.value)}
               rows={3}
@@ -3504,10 +3511,10 @@ export function MeetingDetailPage({
             {editDecisionError && <Alert variant="error">{editDecisionError}</Alert>}
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="meeting-detail-page-edit-decision-title" className="block text-sm font-medium text-slate-700 mb-1">
                 Decision / Summary <span className="text-red-500">*</span>
               </label>
-              <Input
+              <Input id="meeting-detail-page-edit-decision-title"
                 value={editDecisionTitle}
                 onChange={(e) => setEditDecisionTitle(e.target.value)}
                 required
@@ -3516,10 +3523,10 @@ export function MeetingDetailPage({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="meeting-detail-page-edit-decision-details" className="block text-sm font-medium text-slate-700 mb-1">
                 Details
               </label>
-              <textarea
+              <textarea id="meeting-detail-page-edit-decision-details"
                 value={editDecisionDetails}
                 onChange={(e) => setEditDecisionDetails(e.target.value)}
                 rows={3}
@@ -3576,7 +3583,7 @@ export function MeetingDetailPage({
           isOpen={true}
           onClose={() => setPromotingItem(null)}
           title="Promote Action Item to Project Task"
-          description={`Convert "${promotingItem.title}" into a formal task tracked inside a project.`}
+          description={`Choose the project for “${promotingItem.title}”.`}
         >
           <div className="space-y-4 pt-2">
             {promoteError && <Alert variant="error">{promoteError}</Alert>}

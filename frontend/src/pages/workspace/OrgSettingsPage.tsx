@@ -144,7 +144,7 @@ export function OrgSettingsPage() {
       return;
     }
     if (!stepUpPassword) {
-      setTransferError('Please enter your current password for step-up verification.');
+      setTransferError('Enter your current password to confirm the transfer.');
       return;
     }
 
@@ -211,7 +211,7 @@ export function OrgSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Organisation Settings</h1>
         <p className="text-xs text-slate-500 mt-1">
-          Manage organisation profile details, ownership credentials, and workspace membership.
+          Update the workspace name, manage ownership and connect meeting tools.
         </p>
       </div>
 
@@ -223,7 +223,7 @@ export function OrgSettingsPage() {
           className={cn(
             'pb-3 text-sm font-medium border-b-2 transition-colors',
             activeTab === 'general'
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           )}
         >
@@ -235,7 +235,7 @@ export function OrgSettingsPage() {
           className={cn(
             'pb-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5',
             activeTab === 'integrations'
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-brand-600 text-brand-600'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           )}
         >
@@ -321,10 +321,10 @@ export function OrgSettingsPage() {
         <CardHeader className="p-5 pb-3 bg-red-50/40 border-b border-red-100">
           <div className="flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-red-600" />
-            <CardTitle className="text-base text-red-950">Danger Zone & Lifecycle Actions</CardTitle>
+            <CardTitle className="text-base text-red-950">Ownership and membership</CardTitle>
           </div>
           <CardDescription className="text-xs text-red-700/80">
-            High-impact administrative actions requiring elevated privileges and protected by strict safety invariants.
+            Manage who owns this workspace or leave the team.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-5 space-y-6">
@@ -333,7 +333,7 @@ export function OrgSettingsPage() {
             <div>
               <div className="font-semibold text-slate-900 text-xs sm:text-sm">Transfer Organisation Ownership</div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Designate another active member as primary Owner. Requires step-up password reauthentication. Your role will become Organisation Admin.
+                Choose an active member to take ownership and confirm with your password. You will become an organisation admin.
               </p>
             </div>
             {isOwner ? (
@@ -356,7 +356,7 @@ export function OrgSettingsPage() {
             <div>
               <div className="font-semibold text-slate-900 text-xs sm:text-sm">Leave Organisation</div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Relinquish your membership and access to this workspace. Final-owner protection prevents leaving if you are the sole active Owner.
+                Leaving ends your access to this workspace. If you are its only active owner, transfer ownership first.
               </p>
             </div>
             <Button
@@ -421,7 +421,7 @@ export function OrgSettingsPage() {
               </FormField>
 
               <FormField
-                label="Reauthenticate Password"
+                label="Current password"
                 required
                 htmlFor="stepup-password"
                 helperText="Enter your current account password to authorize this sensitive transfer."

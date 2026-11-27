@@ -117,7 +117,7 @@ describe('MeetingsPage — Workspace Meetings List & Filters', () => {
     );
 
     expect(html).toContain('No meetings found');
-    expect(html).toContain('No meetings match your selected filters');
+    expect(html).toContain('Try a different date range, status or meeting title.');
   });
 
   it('3. Renders meeting cards with title, status, badges, and metadata', () => {

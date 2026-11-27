@@ -1,69 +1,45 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/Card';
-import { ShieldAlert, AlertTriangle, FileQuestion } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
+import { Brand } from '@/components/ui/Brand';
+import { Button, buttonStyles } from '@/components/ui/Button';
+
+function RecoveryPage({ title, message, children }: { title: string; message: string; children: ReactNode }) {
+  return (
+    <main className="min-h-screen bg-brand-50 px-5 py-8 text-slate-900">
+      <div className="mx-auto max-w-5xl">
+        <Link to="/" aria-label="ManageX home"><Brand /></Link>
+        <div className="mx-auto mt-[16vh] max-w-xl rounded-2xl border border-brand-100 bg-white p-7 shadow-subtle sm:p-12">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{title}</h1>
+          <p className="mt-4 text-base leading-relaxed text-slate-600">{message}</p>
+          <div className="mt-7 flex flex-wrap gap-3">{children}</div>
+        </div>
+      </div>
+    </main>
+  );
+}
 
 export function NotFoundPage() {
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md text-center p-6 shadow-card">
-        <CardHeader className="space-y-3">
-          <div className="mx-auto h-12 w-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500">
-            <FileQuestion className="h-6 w-6 text-slate-600" />
-          </div>
-          <CardTitle className="text-2xl font-bold">404 - Page Not Found</CardTitle>
-          <CardDescription>
-            The page you are looking for does not exist or may have been moved.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter className="flex justify-center pt-2">
-          <Link to="/">
-            <Button>Return to Home</Button>
-          </Link>
-        </CardFooter>
-      </Card>
-    </div>
+    <RecoveryPage title="Page not found" message="This link may be out of date. You can find your team’s work in your workspace or browse public events.">
+      <Link to="/app" className={buttonStyles()}>Go to workspace <ArrowRight size={16} aria-hidden="true" /></Link>
+      <Link to="/events" className={buttonStyles({ variant: 'outline' })}>Browse events</Link>
+    </RecoveryPage>
   );
 }
 
 export function ForbiddenPage() {
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md text-center p-6 shadow-card">
-        <CardHeader className="space-y-3">
-          <div className="mx-auto h-12 w-12 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
-            <ShieldAlert className="h-6 w-6" />
-          </div>
-          <CardTitle className="text-2xl font-bold">403 - Access Denied</CardTitle>
-          <CardDescription>
-            You do not have permission to view this page, or this feature is currently disabled for your organisation.
-          </CardDescription>
-        </CardHeader>
-        <CardFooter className="flex justify-center gap-3 pt-2">
-          <Link to="/app">
-            <Button variant="outline">Back to Workspace</Button>
-          </Link>
-        </CardFooter>
-      </Card>
-    </div>
+    <RecoveryPage title="Access is restricted" message="Ask your workspace administrator to check your role and access to this tool.">
+      <Link to="/app" className={buttonStyles()}>Back to workspace</Link>
+    </RecoveryPage>
   );
 }
 
-export function ErrorPage({ message = 'An unexpected application error occurred.' }: { message?: string }) {
+export function ErrorPage({ message = 'Try loading the page again.' }: { message?: string }) {
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md text-center p-6 shadow-card">
-        <CardHeader className="space-y-3">
-          <div className="mx-auto h-12 w-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
-            <AlertTriangle className="h-6 w-6" />
-          </div>
-          <CardTitle className="text-2xl font-bold">Application Error</CardTitle>
-          <CardDescription>{message}</CardDescription>
-        </CardHeader>
-        <CardFooter className="flex justify-center gap-3 pt-2">
-          <Button onClick={() => window.location.reload()}>Reload Application</Button>
-        </CardFooter>
-      </Card>
-    </div>
+    <RecoveryPage title="We couldn’t load this page" message={message}>
+      <Button onClick={() => window.location.reload()}>Reload page</Button>
+    </RecoveryPage>
   );
 }

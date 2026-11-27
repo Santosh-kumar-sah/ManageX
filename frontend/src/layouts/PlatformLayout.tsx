@@ -17,12 +17,13 @@ export function PlatformLayout() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
+      <a href="#platform-content" className="mx-skip">Skip to content</a>
       <ColdStartBanner />
 
       {/* Platform Header with Distinct Visual Identity */}
       <header className="bg-[#172a24] text-white border-b border-[#31473d]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-4">
             <Link to="/platform" className="flex items-center gap-2.5 font-bold text-base tracking-tight text-white">
               <Brand />
             </Link>
@@ -62,7 +63,7 @@ export function PlatformLayout() {
       </header>
 
       {/* Platform Content Area */}
-      <main className="platform-content flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      <main id="platform-content" tabIndex={-1} className="platform-content flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
         <Outlet />
       </main>
     </div>

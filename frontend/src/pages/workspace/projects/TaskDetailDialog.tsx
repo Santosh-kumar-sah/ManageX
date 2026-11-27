@@ -1,17 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
+import { Dialog, ConfirmDialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import {
-  X,
   Calendar,
   User,
   Clock,
   Trash2,
   ArrowRight,
-  AlertCircle,
   Edit2,
   Check,
   MessageSquare,
@@ -29,8 +27,9 @@ import {
   TASK_STATUS_VARIANTS,
   TASK_PRIORITY_LABELS,
   TASK_PRIORITY_VARIANTS,
-  TASK_ALLOWED_TRANSITIONS,
 } from '@/types/projects';
+
+import { availableTaskMoves } from './TaskStatusControl';
 
 interface TaskDetailDialogProps {
   isOpen: boolean;
@@ -40,6 +39,9 @@ interface TaskDetailDialogProps {
   projectId: string;
   projectMembers: ProjectMember[];
   isProjectArchived: boolean;
+  canUpdate: boolean;
+  canReopen: boolean;
+  canDelete: boolean;
   onTaskUpdated: (updatedTask: TaskItem) => void;
   onTaskDeleted: (taskId: string) => void;
 }
@@ -52,6 +54,9 @@ export function TaskDetailDialog({
   projectId,
   projectMembers,
   isProjectArchived,
+  canUpdate,
+  canReopen,
+  canDelete,
   onTaskUpdated,
   onTaskDeleted,
 }: TaskDetailDialogProps) {
@@ -69,6 +74,8 @@ export function TaskDetailDialog({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState<string | null>(null);
+  const [isDeletingComment, setIsDeletingComment] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -171,6 +178,7 @@ export function TaskDetailDialog({
 
   async function handleDeleteComment(commentId: string) {
     try {
+      setIsDeletingComment(true);
       setCommentError(null);
       await apiClient(
         `/organisations/${organisationId}/projects/${projectId}/tasks/${task.id}/comments/${commentId}`,
@@ -191,12 +199,15 @@ export function TaskDetailDialog({
       } else {
         setCommentError('Failed to delete comment.');
       }
+    } finally {
+      setIsDeletingComment(false);
+      setCommentToDelete(null);
     }
   }
 
   if (!isOpen) return null;
 
-  const allowedNextStatuses = TASK_ALLOWED_TRANSITIONS[task.status] || [];
+  const allowedNextStatuses = availableTaskMoves(task, canUpdate, canReopen);
 
   async function handleStatusTransition(targetStatus: TaskStatus) {
     setErrorMsg(null);
@@ -295,61 +306,16 @@ export function TaskDetailDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="task-detail-title"
-    >
-      <Card className="w-full max-w-2xl shadow-xl border-neutral-200 max-h-[90vh] flex flex-col">
-        <CardHeader className="flex flex-row items-start justify-between border-b border-neutral-100 pb-4">
-          <div className="flex-1 pr-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <Badge variant={TASK_STATUS_VARIANTS[task.status]}>
-                {TASK_STATUS_LABELS[task.status]}
-              </Badge>
-              <Badge variant={TASK_PRIORITY_VARIANTS[task.priority]}>
-                {TASK_PRIORITY_LABELS[task.priority]}
-              </Badge>
-              {task.isOverdue && (
-                <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-800 font-medium">
-                  <AlertCircle className="w-3 h-3 mr-1" /> Overdue
-                </span>
-              )}
-              {task.isDueSoon && (
-                <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
-                  <Clock className="w-3 h-3 mr-1" /> Due Soon
-                </span>
-              )}
-            </div>
-            <CardTitle id="task-detail-title" className="text-xl leading-snug">
-              {task.title}
-            </CardTitle>
-          </div>
-          <div className="flex items-center space-x-2">
-            {!isEditing && !isProjectArchived && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-                className="flex items-center space-x-1"
-              >
-                <Edit2 className="w-3.5 h-3.5" />
-                <span>Edit</span>
-              </Button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-neutral-400 hover:text-neutral-600 p-1 rounded-md transition-colors"
-              aria-label="Close dialog"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </CardHeader>
-
-        <CardContent className="pt-5 overflow-y-auto space-y-6">
+    <Dialog isOpen={isOpen} onClose={() => !isSubmitting && !isDeleting && onClose()} title={task.title} className="project-dialog max-w-2xl">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
+        <div className="project-status-row">
+          <Badge variant={TASK_STATUS_VARIANTS[task.status]}>{TASK_STATUS_LABELS[task.status]}</Badge>
+          <Badge variant={TASK_PRIORITY_VARIANTS[task.priority]}>{TASK_PRIORITY_LABELS[task.priority]} priority</Badge>
+          {task.isOverdue ? <Badge variant="danger">Overdue</Badge> : task.isDueSoon && <Badge variant="warning">Due soon</Badge>}
+        </div>
+        {!isEditing && canUpdate && <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}><Edit2 size={15} className="mr-1.5" />Edit task</Button>}
+      </div>
+        <div className="pt-5 space-y-6">
           {errorMsg && (
             <Alert variant="error" title="Error">
               {errorMsg}
@@ -360,7 +326,7 @@ export function TaskDetailDialog({
           {!isProjectArchived && allowedNextStatuses.length > 0 && (
             <div className="p-3 bg-neutral-50 rounded-lg border border-neutral-200">
               <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500 block mb-2">
-                Available Transitions (PRJ-005)
+                Change status
               </span>
               <div className="flex flex-wrap gap-2">
                 {allowedNextStatuses.map((nextStatus) => (
@@ -384,10 +350,10 @@ export function TaskDetailDialog({
             /* Editing Form */
             <form onSubmit={handleSaveEdit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                <label htmlFor="project-field-editTitle" className="block text-sm font-medium text-neutral-700 mb-1">
                   Title
                 </label>
-                <Input
+                <Input id="project-field-editTitle"
                   type="text"
                   required
                   value={editTitle}
@@ -397,28 +363,28 @@ export function TaskDetailDialog({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                <label htmlFor="project-field-editDescription" className="block text-sm font-medium text-neutral-700 mb-1">
                   Description
                 </label>
-                <textarea
+                <textarea id="project-field-editDescription"
                   rows={4}
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   disabled={isSubmitting}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  <label htmlFor="project-field-editPriority" className="block text-sm font-medium text-neutral-700 mb-1">
                     Priority
                   </label>
-                  <select
+                  <select id="project-field-editPriority"
                     value={editPriority}
                     onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
                     disabled={isSubmitting}
-                    className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
                   >
                     {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map((p) => (
                       <option key={p} value={p}>
@@ -429,14 +395,14 @@ export function TaskDetailDialog({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  <label htmlFor="project-field-editAssigneeId" className="block text-sm font-medium text-neutral-700 mb-1">
                     Assignee
                   </label>
-                  <select
+                  <select id="project-field-editAssigneeId"
                     value={editAssigneeId}
                     onChange={(e) => setEditAssigneeId(e.target.value)}
                     disabled={isSubmitting}
-                    className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                    className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white"
                   >
                     <option value="">Unassigned</option>
                     {projectMembers.map((m) => (
@@ -450,10 +416,10 @@ export function TaskDetailDialog({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  <label htmlFor="project-field-editStartDate" className="block text-sm font-medium text-neutral-700 mb-1">
                     Start Date
                   </label>
-                  <Input
+                  <Input id="project-field-editStartDate"
                     type="date"
                     value={editStartDate}
                     onChange={(e) => setEditStartDate(e.target.value)}
@@ -462,10 +428,10 @@ export function TaskDetailDialog({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  <label htmlFor="project-field-editDueDate" className="block text-sm font-medium text-neutral-700 mb-1">
                     Due Date
                   </label>
-                  <Input
+                  <Input id="project-field-editDueDate"
                     type="date"
                     value={editDueDate}
                     onChange={(e) => setEditDueDate(e.target.value)}
@@ -551,9 +517,9 @@ export function TaskDetailDialog({
               <div className="pt-6 border-t border-neutral-100 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <MessageSquare className="w-4 h-4 text-indigo-600" />
+                    <MessageSquare className="w-4 h-4 text-brand-600" />
                     <h4 className="text-sm font-semibold text-neutral-900">
-                      Comments & Discussion
+                      Comments
                     </h4>
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
                       {comments.length}
@@ -575,7 +541,7 @@ export function TaskDetailDialog({
                     </div>
                   ) : comments.length === 0 ? (
                     <div className="text-center py-4 text-xs text-neutral-400 bg-neutral-50 rounded-lg">
-                      No comments yet. Start the conversation below.
+                      No comments yet.
                     </div>
                   ) : (
                     comments.map((comment) => (
@@ -591,7 +557,7 @@ export function TaskDetailDialog({
                           <span className="font-semibold text-neutral-900">
                             {comment.authorName || comment.authorEmail || 'Team Member'}
                           </span>
-                          <span className="text-[11px] text-neutral-400">
+                          <span className="text-xs text-neutral-400">
                             {new Date(comment.createdAt).toLocaleString()}
                           </span>
                         </div>
@@ -599,11 +565,12 @@ export function TaskDetailDialog({
                         {editingCommentId === comment.id ? (
                           <div className="space-y-2 mt-2">
                             <textarea
+                              aria-label="Edit comment"
                               value={editingCommentBody}
                               onChange={(e) => setEditingCommentBody(e.target.value)}
                               maxLength={2000}
                               rows={2}
-                              className="w-full text-xs p-2 rounded border border-neutral-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              className="w-full text-xs p-2 rounded border border-neutral-300 focus:outline-none focus:ring-1 focus:ring-brand-500"
                             />
                             <div className="flex items-center justify-end space-x-2">
                               <Button
@@ -631,7 +598,7 @@ export function TaskDetailDialog({
                         )}
 
                         {!comment.isDeleted && !isProjectArchived && editingCommentId !== comment.id && (
-                          <div className="mt-2 flex items-center justify-end space-x-2 text-[11px]">
+                          <div className="mt-2 flex items-center justify-end space-x-2 text-xs">
                             {comment.authorId === user?.id && (
                               <button
                                 type="button"
@@ -639,14 +606,14 @@ export function TaskDetailDialog({
                                   setEditingCommentId(comment.id);
                                   setEditingCommentBody(comment.body);
                                 }}
-                                className="text-neutral-500 hover:text-indigo-600 font-medium"
+                                className="text-neutral-500 hover:text-brand-600 font-medium"
                               >
                                 Edit
                               </button>
                             )}
                             <button
                               type="button"
-                              onClick={() => handleDeleteComment(comment.id)}
+                              onClick={() => setCommentToDelete(comment.id)}
                               className="text-neutral-400 hover:text-red-600 font-medium"
                             >
                               Delete
@@ -665,14 +632,15 @@ export function TaskDetailDialog({
                       <textarea
                         value={newCommentBody}
                         onChange={(e) => setNewCommentBody(e.target.value)}
-                        placeholder="Write a comment (plain text, max 2000 chars)..."
+                        aria-label="New comment"
+                        placeholder="Write a comment"
                         maxLength={2000}
                         rows={2}
-                        className="w-full text-xs p-2.5 rounded-lg border border-neutral-300 bg-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                        className="w-full text-xs p-2.5 rounded-lg border border-neutral-300 bg-white placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-brand-500 focus:border-brand-500"
                       />
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-neutral-400">
+                      <span className="text-xs text-neutral-400">
                         {newCommentBody.length}/2000 characters
                       </span>
                       <Button
@@ -695,12 +663,12 @@ export function TaskDetailDialog({
               </div>
 
               {/* Destructive Action: Soft Delete */}
-              {!isProjectArchived && (
-                <div className="pt-6 border-t border-neutral-100 flex items-center justify-between">
+              {canDelete && (
+                <div className="pt-6 border-t border-neutral-100 flex flex-wrap gap-2 items-center justify-between">
                   {confirmDelete ? (
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-red-600 font-medium">
-                        Are you sure you want to soft-delete this task?
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm text-red-700 font-medium">
+                        Delete this task from the project?
                       </span>
                       <Button
                         size="sm"
@@ -726,7 +694,7 @@ export function TaskDetailDialog({
                       className="text-red-600 hover:text-red-700 hover:bg-red-50 border-neutral-200"
                     >
                       <Trash2 className="w-4 h-4 mr-1.5" />
-                      <span>Soft Delete Task</span>
+                      <span>Delete task</span>
                     </Button>
                   )}
                   <Button variant="outline" onClick={onClose}>
@@ -736,8 +704,10 @@ export function TaskDetailDialog({
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        <ConfirmDialog isOpen={commentToDelete !== null} onClose={() => !isDeletingComment && setCommentToDelete(null)}
+          onConfirm={() => { if (commentToDelete) void handleDeleteComment(commentToDelete); }} title="Delete this comment?"
+          description="The comment text will be removed from the discussion." confirmLabel="Delete comment" variant="destructive" isLoading={isDeletingComment} />
+    </Dialog>
   );
 }

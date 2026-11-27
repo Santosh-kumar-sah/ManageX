@@ -70,7 +70,7 @@ export interface RequestOptions extends RequestInit {
   skipColdStartHandling?: boolean;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 
 /**
  * Polls the unauthenticated health endpoint up to 60 seconds with bounded intervals.

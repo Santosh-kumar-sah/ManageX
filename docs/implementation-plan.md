@@ -8,4 +8,6 @@
 
 ## Repeatable local checks
 
+For signed-in review, use a disposable database populated by the repository migrations and demo seeder. Sign in as the organiser, create a task, move it on the board and reopen it from the list. Add a meeting agenda item and download both minutes formats. Register as a participant and check the event dashboard. Open an assigned round as a judge. As a platform administrator, review the overview, accounts, organisations, tools and audit log at mobile width. Use dedicated review provider accounts for live Google, email and AI checks before release.
+
 From the repository root, run `npm --prefix frontend ci`, `npm run typecheck:frontend`, `npm run lint:frontend`, `npm run test:frontend` and `npm run build:frontend`. Run `npm run dev:frontend` for interactive review. Local API-backed actions use the configured API or the existing Vite proxy to the backend on port 4000. Use an authorised review account for write flows.

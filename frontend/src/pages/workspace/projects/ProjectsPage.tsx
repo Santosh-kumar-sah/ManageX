@@ -10,11 +10,11 @@ import {
   FolderKanban,
   Plus,
   Search,
-  Calendar,
+
   ArrowRight,
-  Users,
-  Tag,
-  Shield,
+
+
+
   ShieldAlert,
 } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
@@ -26,6 +26,7 @@ import {
   PROJECT_PRIORITY_LABELS,
   PROJECT_PRIORITY_VARIANTS,
 } from '@/types/projects';
+import './projects.css';
 import { CreateProjectDialog } from './CreateProjectDialog';
 
 export function ProjectsPage() {
@@ -99,7 +100,7 @@ export function ProjectsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="projects-page space-y-6">
       <Breadcrumbs
         items={[
           { label: 'Workspace', href: '/app' },
@@ -109,7 +110,7 @@ export function ProjectsPage() {
       />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="project-heading flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             Projects & Tasks
@@ -141,11 +142,7 @@ export function ProjectsPage() {
               <p className="text-xs text-slate-600 max-w-md mx-auto">{accessDenied}</p>
             </div>
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Link to="/app">
-                <Button size="sm" variant="outline">
-                  Return to Workspace
-                </Button>
-              </Link>
+              <Link className="workspace-text-link" to="/app">Return to workspace</Link>
             </div>
           </CardContent>
         </Card>
@@ -153,20 +150,20 @@ export function ProjectsPage() {
         <>
           {errorMsg && (
             <Alert variant="error" className="text-sm">
-              {errorMsg}
+              {errorMsg} <button type="button" className="workspace-text-link" onClick={fetchProjects}>Try again</button>
             </Alert>
           )}
 
           {/* Filters Bar */}
-      <Card className="border border-slate-200 shadow-sm bg-white">
-        <CardContent className="p-3 sm:p-4 space-y-3">
+      <div className="py-1">
           <div className="flex flex-col md:flex-row gap-3">
             {/* Search */}
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <Input
                 type="text"
-                placeholder="Search projects by name or description..."
+                aria-label="Search projects"
+                placeholder="Search projects"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 text-sm w-full"
@@ -176,9 +173,10 @@ export function ProjectsPage() {
             {/* Priority Selector */}
             <div className="w-full md:w-48">
               <select
+                aria-label="Filter by priority"
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 <option value="all">All Priorities</option>
                 <option value="low">Low Priority</option>
@@ -203,10 +201,11 @@ export function ProjectsPage() {
               <button
                 key={tab.id}
                 type="button"
+                aria-pressed={statusFilter === tab.id}
                 onClick={() => setStatusFilter(tab.id)}
                 className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
                   statusFilter === tab.id
-                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-xs'
+                    ? 'bg-brand-50 text-brand-700 border border-brand-200 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
@@ -214,16 +213,15 @@ export function ProjectsPage() {
               </button>
             ))}
           </div>
-        </CardContent>
-      </Card>
+      </div>
 
       {/* Projects Grid */}
       {isLoading ? (
         <div className="py-16 text-center">
-          <div className="inline-block animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full mb-3" />
+          <div className="inline-block animate-spin w-8 h-8 border-2 border-brand-600 border-t-transparent rounded-full mb-3" />
           <p className="text-sm text-slate-500">Loading projects...</p>
         </div>
-      ) : projects.length === 0 ? (
+      ) : errorMsg ? null : projects.length === 0 ? (
         <Card className="border border-dashed border-slate-200 bg-slate-50/50">
           <CardContent className="py-16 text-center space-y-3">
             <div className="w-12 h-12 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
@@ -233,12 +231,12 @@ export function ProjectsPage() {
               <CardTitle className="text-base text-slate-800">
                 {searchQuery || statusFilter !== 'all' || priorityFilter !== 'all'
                   ? 'No matching projects found'
-                  : 'No projects created yet'}
+                  : 'No projects to show'}
               </CardTitle>
               <CardDescription className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
                 {searchQuery || statusFilter !== 'all' || priorityFilter !== 'all'
                   ? 'Try adjusting your search keywords, priority, or status filters.'
-                  : 'Start tracking work by initiating your first project in this organisation.'}
+                  : 'Projects you can access will appear here.'}
               </CardDescription>
             </div>
             {canCreateProject && !searchQuery && statusFilter === 'all' && (
@@ -254,95 +252,29 @@ export function ProjectsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((project) => (
-            <Link
-              key={project.id}
-              to={`/app/organisations/${effectiveOrgId}/projects/${project.id}`}
-              className="group block"
-            >
-              <Card className="h-full border border-slate-200/80 hover:border-indigo-300 hover:shadow-md transition-all duration-150 bg-white flex flex-col justify-between">
-                <CardContent className="p-5 space-y-4">
-                  {/* Top Badges */}
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge variant={PROJECT_STATUS_VARIANTS[project.status]}>
-                      {PROJECT_STATUS_LABELS[project.status]}
-                    </Badge>
-                    <Badge variant={PROJECT_PRIORITY_VARIANTS[project.priority]}>
-                      {PROJECT_PRIORITY_LABELS[project.priority]} Priority
-                    </Badge>
+        <ul className="project-directory" aria-label="Projects">
+          {projects.map(project => (
+            <li key={project.id}>
+              <Link to={`/app/organisations/${effectiveOrgId}/projects/${project.id}`}>
+                <div className="min-w-0">
+                  <div className="project-status-row mb-2">
+                    <Badge variant={PROJECT_STATUS_VARIANTS[project.status]}>{PROJECT_STATUS_LABELS[project.status]}</Badge>
+                    <Badge variant={PROJECT_PRIORITY_VARIANTS[project.priority]}>{PROJECT_PRIORITY_LABELS[project.priority]} priority</Badge>
                   </div>
-
-                  {/* Title & Description */}
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-1">
-                      {project.name}
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                      {project.description || 'No description provided.'}
-                    </p>
-                  </div>
-
-                  {/* Metadata List */}
-                  <div className="space-y-1.5 text-xs text-slate-600 pt-2 border-t border-slate-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400 flex items-center gap-1">
-                        <Shield className="w-3.5 h-3.5" /> Owner:
-                      </span>
-                      <span className="font-medium text-slate-800 truncate max-w-[150px]">
-                        {project.ownerName || 'Unassigned'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400 flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5" /> Members:
-                      </span>
-                      <span className="font-medium text-slate-800">
-                        {project.memberCount ?? 1}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400 flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5" /> Target:
-                      </span>
-                      <span className="font-medium text-slate-800">
-                        {formatDate(project.targetDate)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Labels */}
-                  {project.labels && project.labels.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {project.labels.slice(0, 3).map((lbl, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600"
-                        >
-                          <Tag className="w-2.5 h-2.5 mr-0.5 text-slate-400" />
-                          {lbl}
-                        </span>
-                      ))}
-                      {project.labels.length > 3 && (
-                        <span className="text-[10px] text-slate-400 self-center">
-                          +{project.labels.length - 3} more
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-
-                {/* Footer action */}
-                <div className="px-5 py-2.5 bg-slate-50/60 border-t border-slate-100 rounded-b-xl flex items-center justify-between text-xs text-slate-500 group-hover:text-indigo-600 transition-colors">
-                  <span>View Project Details</span>
-                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                  <h2>{project.name}</h2>
+                  {project.description && <p className="line-clamp-2">{project.description}</p>}
+                  {project.labels?.length > 0 && <p className="text-sm">{project.labels.join(' · ')}</p>}
                 </div>
-              </Card>
-            </Link>
+                <dl>
+                  <div><dt>Owner</dt><dd>{project.ownerName || 'Unassigned'}</dd></div>
+                  <div><dt>Target date</dt><dd>{formatDate(project.targetDate)}</dd></div>
+                  {project.memberCount != null && <div><dt>Members</dt><dd>{project.memberCount}</dd></div>}
+                </dl>
+                <ArrowRight size={18} aria-hidden="true" />
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
       {/* Create Dialog */}

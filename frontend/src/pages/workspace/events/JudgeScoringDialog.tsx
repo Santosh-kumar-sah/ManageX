@@ -1,3 +1,4 @@
+import './events.css';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
@@ -326,7 +327,7 @@ export function JudgeScoringDialog({
   const dialogTitle = session ? `Evaluate: ${session.teamName}` : 'Evaluation Session';
   const dialogDescription = session
     ? `Panel: ${session.panelName} · Slot ${session.slotIndex + 1}`
-    : 'Assigned evaluation scoring';
+    : 'Review the submission and score each criterion.';
 
   return (
     <Dialog
@@ -334,7 +335,7 @@ export function JudgeScoringDialog({
       onClose={isSubmitting ? () => {} : onClose}
       title={dialogTitle}
       description={dialogDescription}
-      className="max-w-2xl max-h-[90vh] overflow-y-auto"
+      className="mx-event-dialog max-w-2xl"
     >
       <div className="space-y-4">
         {/* Load error state */}
@@ -356,7 +357,7 @@ export function JudgeScoringDialog({
 
         {/* Loading skeleton state */}
         {isLoading && (
-          <div className="space-y-4 py-2" data-testid="scoring-loading-skeleton">
+          <div className="space-y-4 py-2" role="status" data-testid="scoring-loading-skeleton">
             <div className="space-y-2">
               <Skeleton className="h-5 w-48" />
               <Skeleton className="h-4 w-full" />
@@ -415,7 +416,7 @@ export function JudgeScoringDialog({
                   </a>
                 )}
                 {!work.session.submission?.repositoryUrl && !work.session.submission?.demoUrl && (
-                  <span className="text-slate-400 italic">No repository or demo URL provided</span>
+                  <span className="text-slate-400 italic">No project links provided</span>
                 )}
               </div>
             </div>
@@ -483,7 +484,7 @@ export function JudgeScoringDialog({
                         </div>
                         <div className="sm:col-span-2">
                           <FormField
-                            label="Private Notes / Feedback (optional)"
+                            label="Private feedback (optional)"
                             htmlFor={`feedback-${criterion.id}`}
                           >
                             <Textarea
@@ -506,7 +507,7 @@ export function JudgeScoringDialog({
 
               {/* Total calculated score banner */}
               <div className="flex items-center justify-between rounded-md bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-800">
-                <span>Total Score:</span>
+                <span>Total score</span>
                 <span className="font-mono text-base font-bold text-slate-900">
                   {totalCalculatedScore} / {totalMaxPossibleScore} pts
                 </span>
@@ -523,7 +524,7 @@ export function JudgeScoringDialog({
               {submitSuccess && (
                 <Alert variant="success" title="Scores submitted successfully">
                   <p className="text-xs">
-                    Your evaluation scores have been recorded. You can update them before the round concludes or close this view.
+                    Your scores are saved. You can make changes while scoring is open.
                   </p>
                 </Alert>
               )}

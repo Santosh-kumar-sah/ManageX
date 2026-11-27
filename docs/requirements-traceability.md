@@ -12,3 +12,5 @@ The baseline checkout omits `docs/PRD.md`. The reference for this branch is the 
 | UI-009, honest content | Real-data workspace catalogue, explicit loading/empty states, removal of static activity and service-health claims | Workspace overview and portal tests |
 
 Production adoption, authenticated verification on the chosen preview host, and resolution of the pre-existing registration close-time discrepancy are separate from visual acceptance. No migrations were added.
+
+The workspace follow-up covers event management and judging (EVT), meeting detail and minutes (MTG), project task views (PRJ-005), and organisation activity (AUD-004). Board and list share the permitted status choices and keep the existing task update endpoint. The audit screen uses the actor and item returned by the server. Its action filter explicitly covers the displayed page because the endpoint paginates without filtering by action. The original and redesigned routers contain the same 43 route declarations, including layouts and guards.

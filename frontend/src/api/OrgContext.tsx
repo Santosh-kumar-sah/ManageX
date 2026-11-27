@@ -37,6 +37,7 @@ export interface ActiveOrgDetails {
   membership: {
     id: string;
     role: OrganisationRole;
+    roles?: OrganisationRole[];
     permissions: string[];
   };
 }

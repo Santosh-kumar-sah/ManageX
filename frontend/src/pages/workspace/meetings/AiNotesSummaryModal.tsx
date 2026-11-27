@@ -263,10 +263,10 @@ export function AiNotesSummaryModal({
         {!draftSummary ? (
           <form onSubmit={handleGenerate} className="space-y-4" data-testid="ai-summary-form">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="ai-notes-summary-modal-focus-areas" className="block text-sm font-medium text-slate-700 mb-1">
                 Focus Areas (Optional, one per line)
               </label>
-              <textarea
+              <textarea id="ai-notes-summary-modal-focus-areas"
                 value={focusAreas}
                 onChange={(e) => setFocusAreas(e.target.value)}
                 placeholder="e.g.&#10;Key architecture decisions&#10;Staging deployment timelines&#10;Budget allocations"
@@ -281,10 +281,10 @@ export function AiNotesSummaryModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="ai-notes-summary-modal-additional-context" className="block text-sm font-medium text-slate-700 mb-1">
                 Additional Instructions (Optional)
               </label>
-              <Input
+              <Input id="ai-notes-summary-modal-additional-context"
                 type="text"
                 placeholder="e.g. Keep executive summary under 3 sentences."
                 value={additionalContext}
@@ -337,10 +337,10 @@ export function AiNotesSummaryModal({
 
             {/* Section 1: Executive Summary */}
             <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
+              <label htmlFor="ai-notes-summary-modal-draft-summary-executive-summary" className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
                 Executive Summary
               </label>
-              <textarea
+              <textarea id="ai-notes-summary-modal-draft-summary-executive-summary"
                 value={draftSummary.executiveSummary}
                 onChange={(e) => handleUpdateExecutiveSummary(e.target.value)}
                 rows={4}
@@ -366,7 +366,7 @@ export function AiNotesSummaryModal({
                   >
                     <div className="flex items-start gap-2">
                       <div className="flex-1 space-y-1">
-                        <Input
+                        <Input aria-label={`Topic for item ${index + 1}`}
                           type="text"
                           value={point.topic}
                           onChange={(e) => handleUpdateDiscussionPoint(index, 'topic', e.target.value)}
@@ -375,7 +375,7 @@ export function AiNotesSummaryModal({
                           disabled={isSaving}
                           data-testid={`point-topic-${index}`}
                         />
-                        <Input
+                        <Input aria-label={`Discussion summary for item ${index + 1}`}
                           type="text"
                           value={point.summary}
                           onChange={(e) => handleUpdateDiscussionPoint(index, 'summary', e.target.value)}
@@ -417,7 +417,7 @@ export function AiNotesSummaryModal({
                   >
                     <div className="flex items-start gap-2">
                       <div className="flex-1 space-y-1">
-                        <Input
+                        <Input aria-label={`Decision for item ${index + 1}`}
                           type="text"
                           value={dec.decision}
                           onChange={(e) => handleUpdateDecision(index, 'decision', e.target.value)}
@@ -426,7 +426,7 @@ export function AiNotesSummaryModal({
                           disabled={isSaving}
                           data-testid={`decision-text-${index}`}
                         />
-                        <Input
+                        <Input aria-label={`Reason for this decision for item ${index + 1}`}
                           type="text"
                           value={dec.rationale || ''}
                           onChange={(e) => handleUpdateDecision(index, 'rationale', e.target.value)}

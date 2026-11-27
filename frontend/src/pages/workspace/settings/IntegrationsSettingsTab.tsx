@@ -6,7 +6,7 @@ import { Alert } from '@/components/ui/Alert';
 import { Badge } from '@/components/ui/Badge';
 import { Dialog } from '@/components/ui/Dialog';
 import { Video, CheckCircle2, AlertTriangle, Unlink, RefreshCw, ExternalLink, ShieldCheck } from 'lucide-react';
-import { apiClient, ApiError } from '@/api/client';
+import { apiClient, ApiError, API_BASE_URL } from '@/api/client';
 
 export interface GoogleIntegrationStatus {
   isConnected: boolean;
@@ -54,7 +54,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
       setSearchParams(nextParams, { replace: true });
     } else if (statusParam === 'error') {
       setUrlErrorMessage(
-        messageParam ? decodeURIComponent(messageParam) : 'Failed to connect Google integration.'
+        messageParam || 'Failed to connect Google integration.'
       );
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('status');
@@ -92,7 +92,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
   function handleConnect() {
     if (!effectiveOrgId || !canEdit) return;
     // Standard full-page browser navigation to authorize endpoint initiates Google redirect
-    window.location.href = `/api/v1/organisations/${effectiveOrgId}/integrations/google/authorize`;
+    window.location.href = `${API_BASE_URL}/organisations/${effectiveOrgId}/integrations/google/authorize`;
   }
 
   // Handle disconnect
@@ -150,7 +150,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
         <CardHeader className="p-5 pb-4 border-b border-slate-100 bg-white">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
-              <div className="p-2.5 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 shrink-0">
+              <div className="p-2.5 rounded-lg bg-brand-50 border border-brand-100 text-brand-700 shrink-0">
                 <Video className="h-5 w-5" />
               </div>
               <div>
@@ -160,6 +160,8 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
                   </CardTitle>
                   {isLoading ? (
                     <Badge variant="neutral">Checking...</Badge>
+                  ) : fetchError ? (
+                    <Badge variant="warning">Status unavailable</Badge>
                   ) : status?.isConnected ? (
                     <Badge variant="success" className="gap-1">
                       <CheckCircle2 className="h-3 w-3" />
@@ -181,7 +183,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
             </div>
 
             {/* Quick action button in header */}
-            {!isLoading && (
+            {!isLoading && !fetchError && (
               <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
                 {status?.isConnected ? (
                   canEdit && (
@@ -203,7 +205,7 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
                     <Button
                       variant="primary"
                       size="sm"
-                      className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                      className="gap-1.5 bg-brand-600 hover:bg-brand-700 text-white"
                       onClick={handleConnect}
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
@@ -222,6 +224,8 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
               <RefreshCw className="h-5 w-5 animate-spin text-slate-400" />
               <p className="text-xs">Loading integration details...</p>
             </div>
+          ) : fetchError ? (
+            <Button variant="outline" onClick={loadStatus}>Check connection again</Button>
           ) : status?.isConnected ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -279,20 +283,20 @@ export function IntegrationsSettingsTab({ effectiveOrgId, canEdit }: Integration
               )}
 
               <p className="text-xs text-slate-600 leading-relaxed">
-                Connecting your organisation to Google Workspace allows meeting organisers to automatically generate Google Meet video conferencing links for all virtual and hybrid meetings scheduled in ManageX.
+                Connect a Google account to let organisers add a Meet link when they schedule a meeting.
               </p>
 
               <div className="p-3.5 bg-slate-100 border border-slate-200 rounded-lg space-y-2">
                 <div className="text-xs font-semibold text-slate-800">What permissions are requested?</div>
                 <ul className="text-xs text-slate-600 space-y-1 list-disc list-inside">
-                  <li><strong>Google Calendar Events:</strong> Create, reschedule, and delete meeting calendar containers for Google Meet rooms.</li>
+                  <li><strong>Google Calendar Events:</strong> Create, reschedule and delete the calendar events used for meeting links.</li>
                   <li><strong>Account Email:</strong> Display the connected administrator address in workspace settings.</li>
                 </ul>
               </div>
 
               {!canEdit && (
                 <p className="text-xs text-slate-400 italic">
-                  Organisation Admin privileges (<code className="font-mono text-[11px]">org.update</code>) are required to connect or disconnect integrations.
+                  Ask a workspace administrator to connect or disconnect this account.
                 </p>
               )}
             </div>

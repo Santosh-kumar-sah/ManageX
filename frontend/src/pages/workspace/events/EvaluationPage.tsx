@@ -1,3 +1,5 @@
+import './events.css';
+import { sessionStatusLabels } from './sessionStatusLabels';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -286,7 +288,7 @@ export function EvaluationPage({
         }),
       });
       setShowConfigDialog(false);
-    }, 'Evaluation configuration saved.');
+    }, 'Round settings saved.');
   }
 
   async function savePanel(event: FormEvent) {
@@ -557,42 +559,38 @@ export function EvaluationPage({
   const tabs = [
     {
       id: 'config' as const,
-      label: 'Round evaluation configuration',
-      shortLabel: 'Overview & Config',
+      label: 'Round setup',
       icon: Settings2,
       badge: configuration?.configured ? (configuration.evaluation?.status || 'configured') : 'Not configured',
     },
     {
       id: 'panels' as const,
       label: 'Evaluation panels',
-      shortLabel: 'Panels & Judges',
       icon: Users,
       count: panels.length,
     },
     {
       id: 'schedule' as const,
       label: 'Session schedule',
-      shortLabel: 'Session Schedule',
       icon: CalendarClock,
       count: sessions.length,
     },
     {
       id: 'invitations' as const,
-      label: 'Invitations and completion',
-      shortLabel: 'Invitations & Lifecycle',
+      label: 'Invitations & completion',
       icon: Gavel,
       count: invitations.length,
     },
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="mx-events space-y-6">
+      <header className="mx-event-heading">
         <div>
           <Link to={`/app/organisations/${orgId}/events/${eventId}`} className="inline-flex items-center gap-1 text-xs text-brand-600 hover:underline">
             <ArrowLeft className="h-3.5 w-3.5" /> Back to event
           </Link>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">Evaluation &amp; Judging</h1>
+          <h1 className="mx-event-title">Evaluation &amp; Judging</h1>
           <p className="mt-1 text-sm text-slate-500">
             Round {configuration?.roundNumber ?? '—'} · {configuration?.roundName ?? 'Evaluation configuration'}
           </p>
@@ -600,7 +598,7 @@ export function EvaluationPage({
         <Button variant="outline" size="sm" onClick={fetchData} disabled={isLoading}>
           <RefreshCw className="h-4 w-4" /> Refresh
         </Button>
-      </div>
+      </header>
 
       {errorMessage && <Alert variant="error">{errorMessage}</Alert>}
       {mutationError && <Alert variant="error">{mutationError}</Alert>}
@@ -615,13 +613,14 @@ export function EvaluationPage({
       ) : (
         <div className="space-y-6">
           <div className="border-b border-slate-200">
-            <nav className="flex space-x-2 sm:space-x-4 overflow-x-auto pb-px" aria-label="Evaluation sections">
+            <nav className="mx-event-tabs" aria-label="Evaluation sections">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
                     type="button"
+                    aria-current={isActive ? 'page' : undefined}
                     onClick={() => handleTabClick(tab.id)}
                     className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
                       isActive
@@ -649,7 +648,7 @@ export function EvaluationPage({
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : tab.badge === 'completed'
                             ? 'bg-slate-100 text-slate-700 border border-slate-200'
-                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                            : 'bg-brand-50 text-brand-700 border border-brand-200'
                         }`}
                       >
                         {tab.badge}
@@ -664,26 +663,26 @@ export function EvaluationPage({
           {activeTab === 'config' && (
             <div className="space-y-6">
               <Card>
-                <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
+                <CardHeader className="flex-col items-start gap-3 border-b border-slate-100 md:flex-row md:justify-between">
                   <div>
-                    <CardTitle className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-brand-600" /> Round evaluation configuration</CardTitle>
-                    <CardDescription className="mt-2">Evaluation is optional per round and does not publish results or advance the round.</CardDescription>
+                    <CardTitle className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-brand-600" /> Round setup</CardTitle>
+                    <CardDescription className="mt-2">Choose how judges review teams in this round.</CardDescription>
                   </div>
                   {canManage && (
                     <Button size="sm" onClick={() => setShowConfigDialog(true)}>
-                      {configuration?.configured ? 'Edit configuration' : 'Configure evaluation'}
+                      {configuration?.configured ? 'Edit settings' : 'Set up judging'}
                     </Button>
                   )}
                 </CardHeader>
                 <CardContent className="pt-5">
                   {!configuration?.configured || !configuration.evaluation ? (
-                    <EmptyState title="Evaluation is not configured" description="Create a round evaluation to manage panels and appointments." />
+                    <EmptyState title="Set up judging for this round" description="Choose the judging format and session times before scheduling teams." />
                   ) : (
                     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 text-sm">
                       <div><span className="text-xs text-slate-500">Mode</span><p className="font-semibold text-slate-900">{configuration.evaluation.evaluationMode.replace('_', ' ')}</p></div>
                       <div><span className="text-xs text-slate-500">Status</span><p><Badge variant={configuration.evaluation.status === 'published' ? 'success' : 'brand'}>{configuration.evaluation.status}</Badge></p></div>
                       <div><span className="text-xs text-slate-500">Session</span><p className="font-semibold text-slate-900">{configuration.evaluation.sessionDurationMinutes}m + {configuration.evaluation.bufferMinutes}m buffer</p></div>
-                      <div><span className="text-xs text-slate-500">Coverage</span><p className="font-semibold text-slate-900">{configuration.evaluation.evaluationsPerTeam} evaluation(s) per team</p></div>
+                      <div><span className="text-xs text-slate-500">Evaluations per team</span><p className="font-semibold text-slate-900">{configuration.evaluation.evaluationsPerTeam} per team</p></div>
                       <div><span className="text-xs text-slate-500">Panels</span><p className="font-semibold text-slate-900">{configuration.evaluation.panelsCount}</p></div>
                       <div><span className="text-xs text-slate-500">Sessions</span><p className="font-semibold text-slate-900">{configuration.evaluation.sessionsCount}</p></div>
                       <div className="sm:col-span-2"><span className="text-xs text-slate-500">Schedule window</span><p className="font-semibold text-slate-900">{formatDate(configuration.evaluation.scheduleStartsAt)} – {formatDate(configuration.evaluation.scheduleEndsAt)}</p></div>
@@ -748,7 +747,7 @@ export function EvaluationPage({
 
           {activeTab === 'panels' && (
             <Card>
-              <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
+              <CardHeader className="flex-col items-start gap-3 border-b border-slate-100 md:flex-row md:justify-between">
                 <div><CardTitle className="flex items-center gap-2"><Users className="h-4 w-4 text-brand-600" /> Evaluation panels</CardTitle><CardDescription className="mt-2">Choose the judges for each evaluation panel.</CardDescription></div>
                 {canManageJudges && (
                   <div className="flex flex-wrap items-center gap-2">
@@ -756,11 +755,11 @@ export function EvaluationPage({
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                        className="border-brand-200 text-brand-700 hover:bg-brand-50"
                         onClick={handleBulkGeneratePanelsMeet}
                         isLoading={isGeneratingBulkMeet}
                       >
-                        <Video className="h-4 w-4 mr-1.5 text-indigo-600" />
+                        <Video className="h-4 w-4 mr-1.5 text-brand-600" />
                         Auto-Generate Meet for All Panels
                       </Button>
                     )}
@@ -769,7 +768,7 @@ export function EvaluationPage({
                 )}
               </CardHeader>
               <CardContent className="pt-5">
-                {panels.length === 0 ? <EmptyState title="No panels configured" description="Create a panel before generating an evaluation schedule." /> : (
+                {panels.length === 0 ? <EmptyState title="No judging panels yet" description="Create a panel before generating an evaluation schedule." /> : (
                   <div className="space-y-4">
                     {panels.map((panel) => (
                       <div key={panel.id} className="rounded-lg border border-slate-200 p-4">
@@ -824,24 +823,24 @@ export function EvaluationPage({
 
           {activeTab === 'schedule' && (
             <Card>
-              <CardHeader className="flex-row items-start justify-between border-b border-slate-100">
-                <div><CardTitle className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-brand-600" /> Session schedule</CardTitle><CardDescription className="mt-2">Schedule publication is separate from result publication.</CardDescription></div>
+              <CardHeader className="flex-col items-start gap-3 border-b border-slate-100 md:flex-row md:justify-between">
+                <div><CardTitle className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-brand-600" /> Session schedule</CardTitle><CardDescription className="mt-2">Publish the schedule when participants can see their appointments. Results are published separately.</CardDescription></div>
                 <div className="flex flex-wrap gap-2">{canManageSchedule && <Button size="sm" onClick={() => setShowSessionDialog(true)} disabled={!configuration?.configured}><Plus className="h-4 w-4" /> Add session</Button>}{canManageSchedule && <Button size="sm" variant="outline" onClick={() => scheduleOverwrite ? setConfirmOverwrite(true) : generateSchedule()} disabled={!configuration?.configured || !scheduleStart || isMutating}>Generate schedule</Button>}</div>
               </CardHeader>
               <CardContent className="pt-5 space-y-4">
-                <div className="flex flex-col gap-3 sm:flex-row"><FormField label="Schedule start" htmlFor="schedule-start" helperText="Uses the configured duration, buffer, panels, and team coverage."><Input id="schedule-start" type="datetime-local" value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} /></FormField><FormField label="Status filter" htmlFor="session-status"><Select id="session-status" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}><option value="">All statuses</option>{sessionStatuses.map((status) => <option key={status} value={status}>{status}</option>)}</Select></FormField><FormField label="Panel filter" htmlFor="session-panel"><Select id="session-panel" value={filterPanel} onChange={(event) => setFilterPanel(event.target.value)}><option value="">All panels</option>{panels.map((panel) => <option key={panel.id} value={panel.id}>Panel {panel.panelNumber}: {panel.name}</option>)}</Select></FormField><label className="flex items-center gap-2 self-end pb-2 text-xs text-slate-600"><input type="checkbox" checked={scheduleOverwrite} onChange={(event) => setScheduleOverwrite(event.target.checked)} /> Replace scheduled sessions</label></div>
-                {filteredSessions.length === 0 ? <EmptyState title="No evaluation sessions" description="Create a session manually or generate a schedule after panels and teams are ready." /> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Team</TableHead><TableHead>Panel</TableHead><TableHead>Time</TableHead><TableHead>Status</TableHead><TableHead>Meeting</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{filteredSessions.map((session) => <TableRow key={session.id}><TableCell className="font-medium">{session.teamName}</TableCell><TableCell>{session.panelName}</TableCell><TableCell className="whitespace-nowrap">{formatDate(session.startsAt)}<br /><span className="text-xs text-slate-500">to {formatDate(session.endsAt)}</span></TableCell><TableCell><Badge variant={session.status === 'completed' ? 'success' : session.status === 'cancelled' ? 'danger' : 'brand'}>{session.status}</Badge></TableCell><TableCell>{session.meetingUrl ? <a href={session.meetingUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Open link</a> : 'Not set'}</TableCell><TableCell><div className="flex flex-wrap gap-1">{canManageSchedule && !['completed', 'cancelled'].includes(session.status) && <><Select aria-label={`Update status for ${session.teamName}`} value={session.status} onChange={(event) => updateSessionStatus(session, event.target.value as EvaluationSessionStatus)}><option value={session.status}>{session.status}</option>{sessionStatuses.filter((status) => status !== session.status).map((status) => <option key={status} value={status}>{status}</option>)}</Select><Button size="sm" variant="outline" onClick={() => openReschedule(session)}>Reschedule</Button><Button size="sm" variant="destructive" onClick={() => setSessionToCancel(session)}>Cancel</Button></>}</div></TableCell></TableRow>)}</TableBody></Table></div>}
+                <div className="mx-session-filters"><FormField label="Schedule start" htmlFor="schedule-start" helperText="Sessions use this round’s timing and panel assignments."><Input id="schedule-start" type="datetime-local" value={scheduleStart} onChange={(event) => setScheduleStart(event.target.value)} /></FormField><FormField label="Status filter" htmlFor="session-status"><Select id="session-status" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}><option value="">All statuses</option>{sessionStatuses.map((status) => <option key={status} value={status}>{sessionStatusLabels[status]}</option>)}</Select></FormField><FormField label="Panel filter" htmlFor="session-panel"><Select id="session-panel" value={filterPanel} onChange={(event) => setFilterPanel(event.target.value)}><option value="">All panels</option>{panels.map((panel) => <option key={panel.id} value={panel.id}>Panel {panel.panelNumber}: {panel.name}</option>)}</Select></FormField><label className="flex items-center gap-2 self-end pb-2 text-xs text-slate-600"><input type="checkbox" checked={scheduleOverwrite} onChange={(event) => setScheduleOverwrite(event.target.checked)} /> Replace scheduled sessions</label></div>
+                {filteredSessions.length === 0 ? <EmptyState title="No evaluation sessions" description={filterStatus || filterPanel ? "Try a different status or panel." : canManageSchedule ? "Add a session or generate a schedule when your panels and teams are ready." : "Scheduled sessions will appear here."} /> : <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Team</TableHead><TableHead>Panel</TableHead><TableHead>Time</TableHead><TableHead>Status</TableHead><TableHead>Meeting</TableHead><TableHead>Actions</TableHead></TableRow></TableHeader><TableBody>{filteredSessions.map((session) => <TableRow key={session.id}><TableCell className="font-medium">{session.teamName}</TableCell><TableCell>{session.panelName}</TableCell><TableCell className="whitespace-nowrap">{formatDate(session.startsAt)}<br /><span className="text-xs text-slate-500">to {formatDate(session.endsAt)}</span></TableCell><TableCell><Badge variant={session.status === 'completed' ? 'success' : session.status === 'cancelled' ? 'danger' : 'brand'}>{sessionStatusLabels[session.status]}</Badge></TableCell><TableCell>{session.meetingUrl ? <a href={session.meetingUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">Open link</a> : 'Not set'}</TableCell><TableCell><div className="flex flex-wrap gap-1">{canManageSchedule && !['completed', 'cancelled'].includes(session.status) && <><Select aria-label={`Update status for ${session.teamName}`} value={session.status} onChange={(event) => updateSessionStatus(session, event.target.value as EvaluationSessionStatus)}><option value={session.status}>{sessionStatusLabels[session.status]}</option>{sessionStatuses.filter((status) => status !== session.status).map((status) => <option key={status} value={status}>{sessionStatusLabels[status]}</option>)}</Select><Button size="sm" variant="outline" onClick={() => openReschedule(session)}>Reschedule</Button><Button size="sm" variant="destructive" onClick={() => setSessionToCancel(session)}>Cancel</Button></>}</div></TableCell></TableRow>)}</TableBody></Table></div>}
               </CardContent>
             </Card>
           )}
 
           {activeTab === 'invitations' && (
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Gavel className="h-4 w-4 text-brand-600" /> Invitations and completion</CardTitle><CardDescription className="mt-2">Judges need a verified account with the invited email. Acceptance does not create organisation membership.</CardDescription></CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Gavel className="h-4 w-4 text-brand-600" /> Invitations & completion</CardTitle><CardDescription className="mt-2">Judges need a verified account with the invited email. Invitations give judges access to their assigned panels.</CardDescription></CardHeader>
               <CardContent className="space-y-5">
                 {canManageJudges && <Button size="sm" variant="outline" onClick={() => setShowInviteDialog(true)}><Mail className="h-4 w-4" /> Invite judge</Button>}
                 {invitations.length > 0 && <div className="space-y-2">{invitations.map((invitation) => <div key={invitation.id} className="flex flex-col gap-2 rounded-md border border-slate-200 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"><span>{invitation.invitedEmail} · expires {formatDate(invitation.expiresAt)}</span>{canManageJudges && <Button size="sm" variant="ghost" onClick={() => revokeInvitation(invitation)}>Revoke</Button>}</div>)}</div>}
-                <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-slate-900">Complete evaluation</p><p className="text-xs text-slate-500">All sessions must be terminal, criteria and required compatible submissions must exist, and required scores must be complete.</p></div>{canManage && <Button onClick={() => setConfirmComplete(true)} disabled={configuration?.evaluation?.status === 'completed' || isMutating}><CheckCircle2 className="h-4 w-4" /> Mark complete</Button>}</div>
+                <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-semibold text-slate-900">Complete evaluation</p><p className="text-xs text-slate-500">Finish or close every session and make sure the required submissions, criteria and scores are in place.</p></div>{canManage && <Button onClick={() => setConfirmComplete(true)} disabled={configuration?.evaluation?.status === 'completed' || isMutating}><CheckCircle2 className="h-4 w-4" /> Mark complete</Button>}</div>
                 {canPublish && <div className="flex gap-2 border-t border-slate-100 pt-4"><Button size="sm" onClick={() => setConfirmPublish('publish')} disabled={configuration?.evaluation?.status === 'published'}>Publish schedule</Button><Button size="sm" variant="outline" onClick={() => setConfirmPublish('unpublish')} disabled={configuration?.evaluation?.status !== 'published'}>Unpublish schedule</Button></div>}
               </CardContent>
             </Card>
@@ -849,12 +848,12 @@ export function EvaluationPage({
         </div>
       )}
 
-      <Dialog isOpen={showConfigDialog} onClose={() => setShowConfigDialog(false)} title={configuration?.configured ? 'Edit evaluation configuration' : 'Configure evaluation'}>
+      <Dialog isOpen={showConfigDialog} onClose={() => setShowConfigDialog(false)} title={configuration?.configured ? 'Edit round settings' : 'Set up judging'}>
         <form onSubmit={saveConfiguration} className="space-y-4">
-          <FormField label="Evaluation mode" htmlFor="evaluation-mode" helperText="Live showcase and hybrid modes retain the existing scoring workflow."><Select id="evaluation-mode" value={configForm.evaluationMode} onChange={(event) => setConfigForm({ ...configForm, evaluationMode: event.target.value as EvaluationMode })}><option value="submission_based">Submission based</option><option value="live_showcase">Live showcase</option><option value="hybrid">Hybrid</option></Select></FormField>
-          <div className="grid gap-4 sm:grid-cols-2"><FormField label="Session duration (minutes)" htmlFor="duration"><Input id="duration" type="number" min={5} max={180} value={configForm.sessionDurationMinutes} onChange={(event) => setConfigForm({ ...configForm, sessionDurationMinutes: Number(event.target.value) })} /></FormField><FormField label="Transition buffer (minutes)" htmlFor="buffer"><Input id="buffer" type="number" min={0} max={60} value={configForm.bufferMinutes} onChange={(event) => setConfigForm({ ...configForm, bufferMinutes: Number(event.target.value) })} /></FormField><FormField label="Judges per panel" htmlFor="judges"><Input id="judges" type="number" min={1} max={20} value={configForm.judgesPerPanel} onChange={(event) => setConfigForm({ ...configForm, judgesPerPanel: Number(event.target.value) })} /></FormField><FormField label="Evaluations per team" htmlFor="evaluations"><Input id="evaluations" type="number" min={1} max={10} value={configForm.evaluationsPerTeam} onChange={(event) => setConfigForm({ ...configForm, evaluationsPerTeam: Number(event.target.value) })} /></FormField></div>
+          <FormField label="Evaluation mode" htmlFor="evaluation-mode" helperText="Choose how teams present their work."><Select id="evaluation-mode" value={configForm.evaluationMode} onChange={(event) => setConfigForm({ ...configForm, evaluationMode: event.target.value as EvaluationMode })}><option value="submission_based">Submission based</option><option value="live_showcase">Live showcase</option><option value="hybrid">Hybrid</option></Select></FormField>
+          <div className="grid gap-4 sm:grid-cols-2"><FormField label="Session duration (minutes)" htmlFor="duration"><Input id="duration" type="number" min={5} max={180} value={configForm.sessionDurationMinutes} onChange={(event) => setConfigForm({ ...configForm, sessionDurationMinutes: Number(event.target.value) })} /></FormField><FormField label="Break between sessions (minutes)" htmlFor="buffer"><Input id="buffer" type="number" min={0} max={60} value={configForm.bufferMinutes} onChange={(event) => setConfigForm({ ...configForm, bufferMinutes: Number(event.target.value) })} /></FormField><FormField label="Judges per panel" htmlFor="judges"><Input id="judges" type="number" min={1} max={20} value={configForm.judgesPerPanel} onChange={(event) => setConfigForm({ ...configForm, judgesPerPanel: Number(event.target.value) })} /></FormField><FormField label="Evaluations per team" htmlFor="evaluations"><Input id="evaluations" type="number" min={1} max={10} value={configForm.evaluationsPerTeam} onChange={(event) => setConfigForm({ ...configForm, evaluationsPerTeam: Number(event.target.value) })} /></FormField></div>
           <div className="grid gap-4 sm:grid-cols-2"><FormField label="Schedule starts" htmlFor="schedule-starts"><Input id="schedule-starts" type="datetime-local" value={configForm.scheduleStartsAt} onChange={(event) => setConfigForm({ ...configForm, scheduleStartsAt: event.target.value })} /></FormField><FormField label="Schedule ends" htmlFor="schedule-ends"><Input id="schedule-ends" type="datetime-local" value={configForm.scheduleEndsAt} onChange={(event) => setConfigForm({ ...configForm, scheduleEndsAt: event.target.value })} /></FormField></div>
-          <FormField label="Default meeting URL" htmlFor="default-meeting-url" helperText="Fallback room for all evaluation sessions.">
+          <FormField label="Default meeting URL" htmlFor="default-meeting-url" helperText="Used for sessions without their own meeting link.">
             <div className="flex gap-2">
               <Input
                 id="default-meeting-url"
@@ -866,11 +865,11 @@ export function EvaluationPage({
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                className="shrink-0 text-xs border-brand-200 text-brand-700 hover:bg-brand-50"
                 onClick={handleGenerateDefaultMeet}
                 isLoading={isGeneratingDefaultMeet}
               >
-                <Video className="h-3.5 w-3.5 mr-1 text-indigo-600" /> Generate Meet
+                <Video className="h-3.5 w-3.5 mr-1 text-brand-600" /> Generate Meet
               </Button>
             </div>
           </FormField>
@@ -893,11 +892,11 @@ export function EvaluationPage({
               <Button
                 type="button"
                 variant="outline"
-                className="shrink-0 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                className="shrink-0 text-xs border-brand-200 text-brand-700 hover:bg-brand-50"
                 onClick={handleGenerateModalMeet}
                 isLoading={isGeneratingModalMeet}
               >
-                <Video className="h-3.5 w-3.5 mr-1 text-indigo-600" /> Generate Meet
+                <Video className="h-3.5 w-3.5 mr-1 text-brand-600" /> Generate Meet
               </Button>
             </div>
           </FormField>
@@ -926,7 +925,7 @@ export function EvaluationPage({
           </div>
         </div>
       </Dialog>
-      <Dialog isOpen={Boolean(sessionToReschedule)} onClose={() => setSessionToReschedule(null)} title="Reschedule evaluation session?" description="The server will validate panel, team, and schedule conflicts before updating this session.">
+      <Dialog isOpen={Boolean(sessionToReschedule)} onClose={() => setSessionToReschedule(null)} title="Reschedule evaluation session?" description="Choose a time when both the panel and team are available.">
         <form onSubmit={saveReschedule} className="space-y-4">
           <FormField label="Panel" htmlFor="reschedule-panel" required><Select id="reschedule-panel" required value={rescheduleForm.panelId} onChange={(event) => setRescheduleForm({ ...rescheduleForm, panelId: event.target.value })}><option value="">Select a panel</option>{panels.map((panel) => <option key={panel.id} value={panel.id}>{panel.name}</option>)}</Select></FormField>
           <div className="grid gap-4 sm:grid-cols-2"><FormField label="Starts" htmlFor="reschedule-starts" required><Input id="reschedule-starts" required type="datetime-local" value={rescheduleForm.startsAt} onChange={(event) => setRescheduleForm({ ...rescheduleForm, startsAt: event.target.value })} /></FormField><FormField label="Ends" htmlFor="reschedule-ends" required><Input id="reschedule-ends" required type="datetime-local" value={rescheduleForm.endsAt} onChange={(event) => setRescheduleForm({ ...rescheduleForm, endsAt: event.target.value })} /></FormField></div>
@@ -934,9 +933,9 @@ export function EvaluationPage({
           <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setSessionToReschedule(null)}>Keep schedule</Button><Button type="submit" isLoading={isMutating}>Save reschedule</Button></div>
         </form>
       </Dialog>
-      <ConfirmDialog isOpen={confirmOverwrite} onClose={() => setConfirmOverwrite(false)} onConfirm={generateSchedule} title="Replace scheduled sessions?" description="Overwrite will replace existing scheduled sessions for this evaluation. Completed and cancelled history is not treated as ordinary editable schedule data." confirmLabel="Generate and replace" variant="destructive" isLoading={isMutating} />
+      <ConfirmDialog isOpen={confirmOverwrite} onClose={() => setConfirmOverwrite(false)} onConfirm={generateSchedule} title="Replace scheduled sessions?" description="Replace the scheduled sessions for this round? Completed and cancelled sessions stay in the history." confirmLabel="Generate and replace" variant="destructive" isLoading={isMutating} />
       <ConfirmDialog isOpen={Boolean(confirmPublish)} onClose={() => setConfirmPublish(null)} onConfirm={() => confirmPublish && publishSchedule(confirmPublish)} title={confirmPublish === 'publish' ? 'Publish evaluation schedule?' : 'Unpublish evaluation schedule?'} description={confirmPublish === 'publish' ? 'Participants will be able to see their released evaluation sessions.' : 'Unpublishing hides participant sessions and meeting links.'} confirmLabel={confirmPublish === 'publish' ? 'Publish schedule' : 'Unpublish schedule'} isLoading={isMutating} />
-      <ConfirmDialog isOpen={confirmComplete} onClose={() => setConfirmComplete(false)} onConfirm={completeEvaluation} title="Complete evaluation?" description="The server will verify terminal sessions, criteria, compatible submissions, and required scores. This does not publish results or advance the round." confirmLabel="Complete evaluation" isLoading={isMutating} />
+      <ConfirmDialog isOpen={confirmComplete} onClose={() => setConfirmComplete(false)} onConfirm={completeEvaluation} title="Complete evaluation?" description="Finish or close all sessions and submit the required scores first. You can publish results or advance the round separately." confirmLabel="Complete evaluation" isLoading={isMutating} />
     </div>
   );
 }

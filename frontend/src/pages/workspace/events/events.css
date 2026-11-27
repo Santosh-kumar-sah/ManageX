@@ -1,0 +1,55 @@
+﻿.mx-events { min-width: 0; color: #15231e; }
+.mx-event-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 1.5rem; border-bottom: 1px solid #cad5d0; padding-bottom: clamp(1rem, 3vw, 2rem); }
+.mx-event-heading > div { min-width: 0; }
+.mx-event-title { color: #15231e; font-size: clamp(1.875rem, 3.4vw, 3.15rem); font-weight: 650; line-height: 1.08; letter-spacing: -.055em; overflow-wrap: anywhere; }
+.mx-event-heading nav + .mx-event-title, .mx-event-heading a + .mx-event-title { margin-top: .6rem; }
+.mx-event-intro { color: #465752; font-size: 1rem; line-height: 1.5; margin-top: .45rem; }
+.mx-event-index-heading { position: relative; padding: clamp(1.25rem, 3vw, 2.5rem); border: 1px solid #c9d7d1; border-radius: .9rem; background: #edf3f0; overflow: hidden; }
+.mx-event-index-cover { align-self: stretch; width: 31%; min-height: 8.8rem; border-radius: .5rem; background: #d7e6e0 url('/art/events-small.webp') center / cover no-repeat; }
+.mx-event-list { border-block: 1px solid #c4d2cb; background: white; }
+.mx-event-list > li + li, .mx-judge-sessions > li + li { border-top: 1px solid #dbe3de; }
+.mx-event-list-row { display: grid; grid-template-columns: minmax(12rem, 1.4fr) minmax(10rem, 1fr) auto 1rem; gap: 1rem; align-items: center; padding: 1.15rem clamp(.85rem, 2.4vw, 1.75rem); }
+.mx-event-list-row:hover { background: #f0f6f3; }
+.mx-event-list-title { min-width: 0; }
+.mx-event-list-title h2, .mx-judge-sessions h3 { margin-top: .25rem; font-weight: 650; color: #142820; font-size: 1.16rem; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.mx-event-list-title p, .mx-judge-sessions p { font-size: .875rem; color: #4b5a52; margin-top: .25rem; }
+.mx-event-kind { color: #366559; font-size: .825rem; font-weight: 600; }
+.mx-event-list-logistics { display: grid; gap: .4rem; font-size: .875rem; color: #43534c; }
+.mx-event-list-logistics span { display: flex; align-items: center; gap: .4rem; overflow-wrap: anywhere; }
+.mx-event-list-logistics svg { width: 1rem; height: 1rem; flex-shrink: 0; color: #547163; }
+.mx-event-row-arrow { width: 1rem; }
+.mx-event-detail-heading { align-items: start; }
+.mx-event-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: .1rem .85rem; }
+.mx-event-tabs > button { min-height: 44px; }
+.mx-event-progress { border: 1px solid #c9d5cf; border-radius: .65rem; background: white; padding: 0 1rem; }
+.mx-event-progress summary { cursor: pointer; padding: .8rem 0; font-size: .95rem; font-weight: 600; }
+.mx-event-progress summary span { margin-left: .7rem; font-weight: 500; color: #135f50; }
+.mx-event-stages { max-width: 62rem; overflow: auto; padding: .75rem 0; }
+.mx-event-stages > div { min-width: 30rem; padding-inline: .4rem; }
+.mx-event-progress > button { margin-bottom: .7rem; }
+.mx-session-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); align-items: start; gap: .85rem; }
+.mx-judge-intro { max-width: 46rem; margin-inline: auto; }
+.mx-judge-sessions > li { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(9rem, 1fr) minmax(8rem, 1fr) auto; align-items: center; gap: .85rem; padding-block: 1rem; }
+.mx-judge-sessions time { font-size: .9rem; }
+.mx-event-link { display: block; margin-top: .3rem; font-size: .9rem; color: #126452; text-decoration: underline; text-underline-offset: .18em; }
+.mx-event-dialog h2 { color: #173028; font-size: clamp(1.3rem, 3.5vw, 1.8rem); letter-spacing: -.04em; }
+.mx-event-dialog fieldset { min-width: 0; border-top: 1px solid #d8e1dd; margin-top: 1rem; padding-top: .8rem; }
+.mx-event-dialog legend { padding-right: .75rem; font-size: 1rem; font-weight: 650; color: #1c554b; }
+.mx-event-dialog .text-\[10px\], .mx-event-dialog .text-\[11px\] { font-size: .8rem; }
+.mx-event-dialog input:not([type=checkbox]), .mx-event-dialog select { min-height: 2.6rem; }
+.mx-event-dialog .flex.justify-end { flex-wrap: wrap; }
+@media (max-width: 800px) {
+  .mx-event-list-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .mx-event-list-row > :nth-child(3) { grid-row: 1; grid-column: 2; }
+  .mx-event-row-arrow { justify-self: end; }
+  .mx-judge-sessions > li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mx-judge-sessions button { justify-self: start; }
+}
+@media (max-width: 640px) {
+  .mx-event-index-cover { display: none; }
+  .mx-event-tabs { gap: .1rem .4rem; }
+  .mx-event-tabs button { font-size: .875rem; }
+  .mx-event-dialog { padding: 1rem; }
+  .mx-event-dialog input:not([type=checkbox]), .mx-event-dialog select, .mx-event-dialog textarea { font-size: 1rem; }
+  .mx-events .overflow-x-auto { max-width: 100%; }
+}
