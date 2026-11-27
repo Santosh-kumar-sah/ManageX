@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -6,13 +6,10 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
 import { Input } from '@/components/ui/Input';
-import { ConfirmDialog } from '@/components/ui/Dialog';
+import { ConfirmDialog, Dialog } from '@/components/ui/Dialog';
 import {
   FolderKanban,
   Users,
-  Calendar,
-  Clock,
-  Shield,
   Edit3,
   Play,
   Pause,
@@ -20,9 +17,7 @@ import {
   Archive,
   UserPlus,
   Trash2,
-  Tag,
   CheckSquare,
-  X,
   LayoutList,
   Kanban,
   Search,
@@ -100,6 +95,16 @@ export function ProjectDetailPage() {
 
   const isArchived = project?.status === 'archived';
 
+  const membership = activeDetails && activeDetails.organisation.id === effectiveOrgId ? activeDetails.membership : undefined;
+  const roles = membership?.roles ?? (membership ? [membership.role] : []);
+  const isProjectAdmin = roles.some(role => ['organisation_owner', 'organisation_admin', 'project_admin'].includes(role.slug));
+  const projectRole = project?.members?.find(member => member.userId === user?.id)?.role;
+  const managesTasks = isProjectAdmin || Boolean(user && project?.ownerId === user.id) || projectRole === 'manager';
+  const writableProject = Boolean(project && !isArchived && (managesTasks || projectRole === 'member'));
+  const canUpdateTasks = writableProject && !!membership?.permissions.includes('task.update');
+  const canCreateTasks = writableProject && !!membership?.permissions.includes('task.create');
+  const canDeleteTasks = writableProject && !!membership?.permissions.includes('task.delete');
+
   const canManageProject =
     !isArchived &&
     (activeDetails?.membership?.permissions?.includes('project.edit') ||
@@ -114,6 +119,9 @@ export function ProjectDetailPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
   const [tasksError, setTasksError] = useState<string | null>(null);
+  const movingTasks = useRef(new Set<string>());
+  const [pendingTaskIds, setPendingTaskIds] = useState<ReadonlySet<string>>(new Set());
+  const [confirmArchive, setConfirmArchive] = useState(false);
   const [taskViewMode, setTaskViewMode] = useState<'list' | 'kanban'>('kanban');
   const [taskStatusFilter, setTaskStatusFilter] = useState<string>('all');
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<string>('all');
@@ -286,7 +294,10 @@ export function ProjectDetailPage() {
   }, [activeTab, fetchTasks]);
 
   async function handleTaskStatusChange(task: TaskItem, newStatus: TaskStatus) {
-    if (!effectiveOrgId || !projectId) return;
+    if (!effectiveOrgId || !projectId || !canUpdateTasks || movingTasks.current.has(task.id)) return;
+    movingTasks.current.add(task.id);
+    setPendingTaskIds(new Set(movingTasks.current));
+    setTasksError(null);
     try {
       const res = await apiClient<{ task: TaskItem }>(
         `/organisations/${effectiveOrgId}/projects/${projectId}/tasks/${task.id}`,
@@ -311,7 +322,9 @@ export function ProjectDetailPage() {
       } else {
         setTasksError('Failed to update task status.');
       }
-      throw err;
+    } finally {
+      movingTasks.current.delete(task.id);
+      setPendingTaskIds(new Set(movingTasks.current));
     }
   }
 
@@ -529,7 +542,7 @@ export function ProjectDetailPage() {
   if (isLoading) {
     return (
       <div className="py-20 text-center">
-        <div className="inline-block animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full mb-3" />
+        <div className="inline-block animate-spin w-8 h-8 border-2 border-brand-600 border-t-transparent rounded-full mb-3" />
         <p className="text-sm text-slate-500">Loading project details...</p>
       </div>
     );
@@ -541,17 +554,13 @@ export function ProjectDetailPage() {
         <Alert variant="error">
           {errorMsg || 'Project not found or you lack permission to view it.'}
         </Alert>
-        <Link to={`/app/organisations/${effectiveOrgId}/projects`}>
-          <Button variant="outline" size="sm">
-            Back to Projects
-          </Button>
-        </Link>
+        <Link className="workspace-text-link" to={`/app/organisations/${effectiveOrgId}/projects`}>Back to projects</Link>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="projects-page space-y-6">
       <Breadcrumbs
         items={[
           { label: 'Workspace', href: '/app' },
@@ -567,9 +576,8 @@ export function ProjectDetailPage() {
         </Alert>
       )}
 
-      {/* Project Overview Header Card */}
-      <Card className="border border-slate-200 shadow-sm bg-white">
-        <CardContent className="p-6 space-y-5">
+      {/* Project header */}
+      <header className="project-headline">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -581,7 +589,7 @@ export function ProjectDetailPage() {
                 </Badge>
                 {isArchived && (
                   <Badge variant="neutral" className="bg-slate-100 text-slate-600">
-                    Read-Only (Archived)
+                    Read only
                   </Badge>
                 )}
               </div>
@@ -589,7 +597,7 @@ export function ProjectDetailPage() {
                 {project.name}
               </h1>
               <p className="text-sm text-slate-600 max-w-3xl">
-                {project.description || 'No description provided for this project.'}
+                {project.description}
               </p>
             </div>
 
@@ -624,7 +632,7 @@ export function ProjectDetailPage() {
                         variant="outline"
                         size="sm"
                         disabled={isTransitioning}
-                        onClick={() => handleStatusTransition('archived')}
+                        onClick={() => setConfirmArchive(true)}
                         className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
                       >
                         <Archive className="w-3.5 h-3.5" />
@@ -659,7 +667,7 @@ export function ProjectDetailPage() {
                         variant="outline"
                         size="sm"
                         disabled={isTransitioning}
-                        onClick={() => handleStatusTransition('archived')}
+                        onClick={() => setConfirmArchive(true)}
                         className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
                       >
                         <Archive className="w-3.5 h-3.5" />
@@ -694,7 +702,7 @@ export function ProjectDetailPage() {
                         variant="outline"
                         size="sm"
                         disabled={isTransitioning}
-                        onClick={() => handleStatusTransition('archived')}
+                        onClick={() => setConfirmArchive(true)}
                         className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
                       >
                         <Archive className="w-3.5 h-3.5" />
@@ -708,7 +716,7 @@ export function ProjectDetailPage() {
                       variant="outline"
                       size="sm"
                       disabled={isTransitioning}
-                      onClick={() => handleStatusTransition('archived')}
+                      onClick={() => setConfirmArchive(true)}
                       className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900"
                     >
                       <Archive className="w-3.5 h-3.5" />
@@ -720,76 +728,26 @@ export function ProjectDetailPage() {
             </div>
           </div>
 
-          {/* Quick Metrics Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4 border-t border-slate-100 text-xs">
-            <div>
-              <span className="text-slate-400 block mb-0.5">Project Owner</span>
-              <span className="font-semibold text-slate-800 flex items-center gap-1">
-                <Shield className="w-3.5 h-3.5 text-indigo-600" />
-                {project.ownerName || 'Unassigned'}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 block mb-0.5">Start Date</span>
-              <span className="font-medium text-slate-800 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                {formatDate(project.startDate)}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 block mb-0.5">Target Completion</span>
-              <span className="font-medium text-slate-800 flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                {formatDate(project.targetDate)}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-slate-400 block mb-0.5">Team Members</span>
-              <span className="font-semibold text-slate-800 flex items-center gap-1">
-                <Users className="w-3.5 h-3.5 text-indigo-600" />
-                {project.members?.length || 1} assigned
-              </span>
-            </div>
-          </div>
-
-          {/* Labels */}
-          {project.labels && project.labels.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
-              <span className="text-slate-400 mr-1">Labels:</span>
-              {project.labels.map((lbl, idx) => (
-                <span
-                  key={idx}
-                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700"
-                >
-                  <Tag className="w-3 h-3 mr-1 text-slate-400" />
-                  {lbl}
-                </span>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      </header>
 
       {/* Tabs Bar */}
-      <div className="border-b border-slate-200 flex space-x-6">
+      <div className="project-tabs" aria-label="Project sections" role="group">
         {[
-          { id: 'overview', label: 'Project Overview', icon: FolderKanban },
+          { id: 'overview', label: 'Overview', icon: FolderKanban },
           { id: 'members', label: `Members (${project.members?.length || 0})`, icon: Users },
-          { id: 'tasks', label: 'Tasks & Kanban', icon: CheckSquare },
-          { id: 'activity', label: 'Activity Timeline', icon: History },
+          { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+          { id: 'activity', label: 'Activity', icon: History },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
             <button
               key={tab.id}
+              type="button" aria-pressed={isActive}
               onClick={() => setActiveTab(tab.id as 'overview' | 'members' | 'tasks' | 'activity')}
               className={`flex items-center space-x-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 isActive
-                  ? 'border-indigo-600 text-indigo-600'
+                  ? 'border-brand-600 text-brand-600'
                   : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
               }`}
             >
@@ -802,78 +760,18 @@ export function ProjectDetailPage() {
 
       {/* Tab 1: Project Overview */}
       {activeTab === 'overview' && (
-        <Card className="border border-slate-200 bg-white">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold text-slate-900">
-              Project Specification & Status
-            </CardTitle>
-            <CardDescription className="text-xs text-slate-500">
-              Resource-scoped project attributes, lifecycle timeline, and owner assignments.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-lg bg-slate-50/60 border border-slate-100 space-y-2">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-                  Delivery Details
-                </span>
-                <div className="text-xs space-y-1.5 text-slate-700">
-                  <p>
-                    <strong className="text-slate-900">Priority:</strong>{' '}
-                    {PROJECT_PRIORITY_LABELS[project.priority]}
-                  </p>
-                  <p>
-                    <strong className="text-slate-900">Current Status:</strong>{' '}
-                    {PROJECT_STATUS_LABELS[project.status]}
-                  </p>
-                  <p>
-                    <strong className="text-slate-900">Start Date:</strong>{' '}
-                    {formatDate(project.startDate)}
-                  </p>
-                  <p>
-                    <strong className="text-slate-900">Target Completion:</strong>{' '}
-                    {formatDate(project.targetDate)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-lg bg-slate-50/60 border border-slate-100 space-y-2">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-                  Governance & Ownership
-                </span>
-                <div className="text-xs space-y-1.5 text-slate-700">
-                  <p>
-                    <strong className="text-slate-900">Responsible Owner:</strong>{' '}
-                    {project.ownerName} ({project.ownerEmail})
-                  </p>
-                  <p>
-                    <strong className="text-slate-900">Created At:</strong>{' '}
-                    {new Date(project.createdAt).toLocaleString()}
-                  </p>
-                  <p>
-                    <strong className="text-slate-900">Last Updated:</strong>{' '}
-                    {new Date(project.updatedAt).toLocaleString()}
-                  </p>
-                  <p>
-                    <strong className="text-slate-900">Resource Scoping:</strong> Project-level
-                    membership enforced
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {project.description && (
-              <div className="p-4 rounded-lg border border-slate-100 bg-white">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-2">
-                  Project Description
-                </span>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                  {project.description}
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <section aria-label="Project details">
+          <dl className="project-overview-data">
+            <div><dt>Project owner</dt><dd>{project.ownerName || project.ownerEmail || 'Unassigned'}</dd>
+              {project.ownerName && project.ownerEmail && <dd className="text-sm text-slate-600">{project.ownerEmail}</dd>}</div>
+            <div><dt>Start date</dt><dd>{formatDate(project.startDate)}</dd></div>
+            <div><dt>Target date</dt><dd>{formatDate(project.targetDate)}</dd></div>
+            {project.members && <div><dt>Team members</dt><dd>{project.members.length}</dd></div>}
+            <div><dt>Created</dt><dd>{new Date(project.createdAt).toLocaleString()}</dd></div>
+            <div><dt>Last updated</dt><dd>{new Date(project.updatedAt).toLocaleString()}</dd></div>
+            {project.labels?.length > 0 && <div><dt>Labels</dt><dd>{project.labels.join(' · ')}</dd></div>}
+          </dl>
+        </section>
       )}
 
       {/* Tab 2: Members Management */}
@@ -882,10 +780,10 @@ export function ProjectDetailPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <div>
               <CardTitle className="text-base font-semibold text-slate-900">
-                Project Team Members
+                Team members
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Resource-scoped members assigned to collaborate on this project.
+                People with access to this project.
               </CardDescription>
             </div>
             {canManageProject && (
@@ -925,7 +823,7 @@ export function ProjectDetailPage() {
                               <div className="font-medium text-slate-900 flex items-center gap-1.5">
                                 <span>{member.userName || 'Unnamed User'}</span>
                                 {isProjectOwner && (
-                                  <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200">
+                                  <span className="text-xs font-semibold bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded border border-brand-200">
                                     Project Owner
                                   </span>
                                 )}
@@ -938,6 +836,7 @@ export function ProjectDetailPage() {
                         <td className="px-6 py-3.5">
                           {canManageProject && !isProjectOwner ? (
                             <select
+                              aria-label={'Project role for ' + (member.userName || member.userEmail || 'member')}
                               value={member.role}
                               onChange={(e) =>
                                 handleUpdateMemberRole(
@@ -945,11 +844,11 @@ export function ProjectDetailPage() {
                                   e.target.value as ProjectMemberRole
                                 )
                               }
-                              className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                              className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                             >
                               <option value="manager">Project Manager</option>
                               <option value="member">Team Member</option>
-                              <option value="viewer">Viewer (Read-Only)</option>
+                              <option value="viewer">Viewer</option>
                             </select>
                           ) : (
                             <Badge variant={member.role === 'manager' ? 'brand' : 'neutral'}>
@@ -965,15 +864,15 @@ export function ProjectDetailPage() {
                         {canManageProject && (
                           <td className="px-6 py-3.5 text-right">
                             {isProjectOwner ? (
-                              <span className="text-[11px] text-slate-400 italic">
-                                Responsible owner
+                              <span className="text-xs text-slate-400 italic">
+                                Project owner
                               </span>
                             ) : (
                               <button
                                 type="button"
                                 onClick={() => handleRemoveMember(member.userId)}
                                 className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-slate-50 transition-colors"
-                                title="Remove member from project"
+                                aria-label={'Remove ' + (member.userName || member.userEmail || 'member') + ' from project'}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -1006,22 +905,24 @@ export function ProjectDetailPage() {
               <div className="flex rounded-lg border border-slate-200 p-0.5 bg-slate-50">
                 <button
                   type="button"
+                  aria-pressed={taskViewMode === 'kanban'}
                   onClick={() => setTaskViewMode('kanban')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                     taskViewMode === 'kanban'
-                      ? 'bg-white text-indigo-600 shadow-sm'
+                      ? 'bg-white text-brand-600 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   <Kanban className="w-3.5 h-3.5" />
-                  Kanban
+                  Board
                 </button>
                 <button
                   type="button"
+                  aria-pressed={taskViewMode === 'list'}
                   onClick={() => setTaskViewMode('list')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                     taskViewMode === 'list'
-                      ? 'bg-white text-indigo-600 shadow-sm'
+                      ? 'bg-white text-brand-600 shadow-sm'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -1031,7 +932,7 @@ export function ProjectDetailPage() {
               </div>
 
               {/* Special View Filters */}
-              <div className="flex items-center gap-1 text-xs">
+              <div className="flex flex-wrap items-center gap-1 text-sm">
                 {(
                   [
                     { id: 'all', label: 'All Tasks' },
@@ -1043,10 +944,11 @@ export function ProjectDetailPage() {
                   <button
                     key={tab.id}
                     type="button"
+                    aria-pressed={taskSpecialView === tab.id}
                     onClick={() => setTaskSpecialView(tab.id)}
                     className={`px-2.5 py-1.5 rounded-md font-medium transition-colors ${
                       taskSpecialView === tab.id
-                        ? 'bg-indigo-50 text-indigo-700'
+                        ? 'bg-brand-50 text-brand-700'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     }`}
                   >
@@ -1065,7 +967,7 @@ export function ProjectDetailPage() {
                   setCreateTaskInitialStatus('backlog');
                   setIsCreateTaskOpen(true);
                 }}
-                disabled={isArchived}
+                disabled={!canCreateTasks}
                 className="gap-1.5"
               >
                 <Plus className="w-4 h-4" />
@@ -1080,6 +982,7 @@ export function ProjectDetailPage() {
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <Input
                 placeholder="Search tasks..."
+                aria-label="Search tasks"
                 value={taskSearch}
                 onChange={(e) => setTaskSearch(e.target.value)}
                 className="pl-9 h-9 text-xs bg-white"
@@ -1088,9 +991,10 @@ export function ProjectDetailPage() {
 
             <div>
               <select
+                aria-label="Task status"
                 value={taskStatusFilter}
                 onChange={(e) => setTaskStatusFilter(e.target.value)}
-                className="w-full h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 <option value="all">All Statuses</option>
                 <option value="backlog">Backlog</option>
@@ -1103,9 +1007,10 @@ export function ProjectDetailPage() {
 
             <div>
               <select
+                aria-label="Task priority"
                 value={taskPriorityFilter}
                 onChange={(e) => setTaskPriorityFilter(e.target.value)}
-                className="w-full h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 <option value="all">All Priorities</option>
                 <option value="urgent">Urgent</option>
@@ -1117,9 +1022,10 @@ export function ProjectDetailPage() {
 
             <div>
               <select
+                aria-label="Task assignee"
                 value={taskAssigneeFilter}
                 onChange={(e) => setTaskAssigneeFilter(e.target.value)}
-                className="w-full h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full h-9 rounded-md border border-slate-200 bg-white px-2.5 text-xs text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               >
                 <option value="all">All Assignees</option>
                 <option value="unassigned">Unassigned</option>
@@ -1135,25 +1041,29 @@ export function ProjectDetailPage() {
           {/* Task Content: Kanban or List */}
           {isLoadingTasks ? (
             <div className="flex items-center justify-center py-16 bg-white rounded-xl border border-slate-200">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
             </div>
           ) : taskViewMode === 'kanban' ? (
             <TaskKanbanView
               tasks={tasks}
               onTaskClick={(t) => setSelectedTask(t)}
               onStatusChange={handleTaskStatusChange}
-              onCreateInColumn={(col) => {
+              pendingTaskIds={pendingTaskIds}
+              onCreateInColumn={canCreateTasks ? (col) => {
                 setCreateTaskInitialStatus(col);
                 setIsCreateTaskOpen(true);
-              }}
-              isProjectArchived={isArchived}
+              } : undefined}
+              canUpdate={canUpdateTasks}
+              canReopen={managesTasks}
             />
           ) : (
             <TaskListView
               tasks={tasks}
               onTaskClick={(t) => setSelectedTask(t)}
               onStatusChange={handleTaskStatusChange}
-              isProjectArchived={isArchived}
+              pendingTaskIds={pendingTaskIds}
+              canUpdate={canUpdateTasks}
+              canReopen={managesTasks}
             />
           )}
         </div>
@@ -1165,15 +1075,15 @@ export function ProjectDetailPage() {
           <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
             <div>
               <CardTitle className="text-base font-semibold text-slate-900">
-                Activity Timeline
+                Project activity
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Chronological stream of material project, membership, task, and comment events.
+                Updates to project details, team members and tasks.
               </CardDescription>
             </div>
             {isArchived && (
               <Badge variant="neutral" className="text-xs">
-                Archived History Preserved
+                Archived
               </Badge>
             )}
           </CardHeader>
@@ -1187,7 +1097,7 @@ export function ProjectDetailPage() {
 
             {isLoadingActivities ? (
               <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
               </div>
             ) : activities.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
@@ -1201,29 +1111,18 @@ export function ProjectDetailPage() {
               <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
                 {activities.map((item) => (
                   <div key={item.id} className="relative flex items-start space-x-3 text-xs">
-                    <div className="absolute -left-6 mt-1 w-2.5 h-2.5 rounded-full bg-indigo-600 ring-4 ring-white" />
+                    <div className="absolute -left-6 mt-1 w-2.5 h-2.5 rounded-full bg-brand-600 ring-4 ring-white" />
                     <div className="flex-1 bg-slate-50/70 p-3 rounded-lg border border-slate-200/80">
                       <div className="flex items-center justify-between">
                         <span className="font-semibold text-slate-900">
                           {item.actorName || item.actorEmail || 'System'}
                         </span>
-                        <span className="text-[11px] text-slate-400">
+                        <span className="text-xs text-slate-400">
                           {new Date(item.createdAt).toLocaleString()}
                         </span>
                       </div>
                       <p className="text-slate-700 mt-1 font-medium">{item.summary}</p>
-                      {item.metadata && Object.keys(item.metadata).length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {Object.entries(item.metadata).map(([k, v]) => (
-                            <span
-                              key={k}
-                              className="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[10px] text-slate-500 font-mono"
-                            >
-                              {k}: {String(v)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+
                     </div>
                   </div>
                 ))}
@@ -1234,28 +1133,15 @@ export function ProjectDetailPage() {
       )}
 
       {/* Edit Project Dialog */}
-      {isEditOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <Card className="w-full max-w-lg bg-white shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
-              <CardTitle className="text-base font-semibold text-slate-900">
-                Edit Project Specifications
-              </CardTitle>
-              <button
-                type="button"
-                onClick={() => setIsEditOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-50"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </CardHeader>
+      <Dialog isOpen={isEditOpen} onClose={() => !isSubmittingEdit && setIsEditOpen(false)} title="Edit project" className="project-dialog">
             <form onSubmit={handleEditSubmit}>
-              <CardContent className="space-y-4 pt-4">
+              <div className="space-y-4 pt-4">
+                {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label htmlFor="project-field-editName" className="block text-xs font-medium text-slate-700 mb-1">
                     Project Name
                   </label>
-                  <Input
+                  <Input id="project-field-editName"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     required
@@ -1263,26 +1149,26 @@ export function ProjectDetailPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label htmlFor="project-field-editDesc" className="block text-xs font-medium text-slate-700 mb-1">
                     Description
                   </label>
-                  <textarea
+                  <textarea id="project-field-editDesc"
                     value={editDesc}
                     onChange={(e) => setEditDesc(e.target.value)}
                     rows={3}
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="project-field-editPriority" className="block text-xs font-medium text-slate-700 mb-1">
                       Priority
                     </label>
-                    <select
+                    <select id="project-field-editPriority"
                       value={editPriority}
                       onChange={(e) => setEditPriority(e.target.value as ProjectPriority)}
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -1292,13 +1178,13 @@ export function ProjectDetailPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
-                      Responsible Owner
+                    <label htmlFor="project-field-editOwnerId" className="block text-xs font-medium text-slate-700 mb-1">
+                      Project owner
                     </label>
-                    <select
+                    <select id="project-field-editOwnerId"
                       value={editOwnerId}
                       onChange={(e) => setEditOwnerId(e.target.value)}
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                     >
                       {orgMembers.map((m) => (
                         <option key={m.userId} value={m.userId}>
@@ -1309,12 +1195,12 @@ export function ProjectDetailPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="project-field-editStartDate" className="block text-xs font-medium text-slate-700 mb-1">
                       Start Date
                     </label>
-                    <Input
+                    <Input id="project-field-editStartDate"
                       type="date"
                       value={editStartDate}
                       onChange={(e) => setEditStartDate(e.target.value)}
@@ -1322,10 +1208,10 @@ export function ProjectDetailPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label htmlFor="project-field-editTargetDate" className="block text-xs font-medium text-slate-700 mb-1">
                       Target Completion
                     </label>
-                    <Input
+                    <Input id="project-field-editTargetDate"
                       type="date"
                       value={editTargetDate}
                       onChange={(e) => setEditTargetDate(e.target.value)}
@@ -1334,15 +1220,15 @@ export function ProjectDetailPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label htmlFor="project-field-editLabels" className="block text-xs font-medium text-slate-700 mb-1">
                     Labels (comma-separated)
                   </label>
-                  <Input
+                  <Input id="project-field-editLabels"
                     value={editLabels}
                     onChange={(e) => setEditLabels(e.target.value)}
                   />
                 </div>
-              </CardContent>
+              </div>
 
               <div className="flex items-center justify-end space-x-2 p-4 border-t border-slate-100 bg-slate-50/50 rounded-b-xl">
                 <Button
@@ -1364,37 +1250,22 @@ export function ProjectDetailPage() {
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
-      )}
+      </Dialog>
 
       {/* Add Member Dialog */}
-      {isAddMemberOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <Card className="w-full max-w-md bg-white shadow-xl animate-in fade-in zoom-in-95 duration-150">
-            <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
-              <CardTitle className="text-base font-semibold text-slate-900">
-                Add Team Member to Project
-              </CardTitle>
-              <button
-                type="button"
-                onClick={() => setIsAddMemberOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-50"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </CardHeader>
+      <Dialog isOpen={isAddMemberOpen} onClose={() => !isSubmittingMember && setIsAddMemberOpen(false)} title="Add a team member" className="project-dialog">
             <form onSubmit={handleAddMember}>
-              <CardContent className="space-y-4 pt-4">
+              <div className="space-y-4 pt-4">
+                {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label htmlFor="project-field-newMemberUserId" className="block text-xs font-medium text-slate-700 mb-1">
                     Select Organisation Member <span className="text-rose-500">*</span>
                   </label>
-                  <select
+                  <select id="project-field-newMemberUserId"
                     value={newMemberUserId}
                     onChange={(e) => setNewMemberUserId(e.target.value)}
                     required
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   >
                     <option value="">Select a member...</option>
                     {orgMembers
@@ -1408,20 +1279,20 @@ export function ProjectDetailPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label htmlFor="project-field-newMemberRole" className="block text-xs font-medium text-slate-700 mb-1">
                     Project Role
                   </label>
-                  <select
+                  <select id="project-field-newMemberRole"
                     value={newMemberRole}
                     onChange={(e) => setNewMemberRole(e.target.value as ProjectMemberRole)}
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                   >
                     <option value="member">Team Member</option>
                     <option value="manager">Project Manager</option>
-                    <option value="viewer">Viewer (Read-Only)</option>
+                    <option value="viewer">Viewer</option>
                   </select>
                 </div>
-              </CardContent>
+              </div>
 
               <div className="flex items-center justify-end space-x-2 p-4 border-t border-slate-100 bg-slate-50/50 rounded-b-xl">
                 <Button
@@ -1443,9 +1314,7 @@ export function ProjectDetailPage() {
                 </Button>
               </div>
             </form>
-          </Card>
-        </div>
-      )}
+      </Dialog>
 
       {/* Create Task Dialog (PRJ-003) */}
       {effectiveOrgId && projectId && (
@@ -1470,10 +1339,17 @@ export function ProjectDetailPage() {
           projectId={projectId}
           projectMembers={project?.members || []}
           isProjectArchived={isArchived}
+          canUpdate={canUpdateTasks}
+          canReopen={managesTasks}
+          canDelete={canDeleteTasks}
           onTaskUpdated={handleTaskUpdated}
           onTaskDeleted={handleTaskDeleted}
         />
       )}
+      <ConfirmDialog isOpen={confirmArchive} onClose={() => !isTransitioning && setConfirmArchive(false)}
+        onConfirm={async () => { await handleStatusTransition('archived'); setConfirmArchive(false); }}
+        title="Archive this project?" description="The project and its tasks will become read-only. Your team can still view its history."
+        confirmLabel="Archive project" isLoading={isTransitioning} variant="destructive" />
       {/* Remove Member Confirmation Dialog */}
       <ConfirmDialog
         isOpen={!!memberToRemove}

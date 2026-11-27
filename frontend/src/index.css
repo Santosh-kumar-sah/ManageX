@@ -5,10 +5,28 @@
 @layer base {
   :root {
     color-scheme: light;
+    --ink: #15231e;
+    --teal: #115e52;
+    --public-header-height: 68px;
   }
 
-  /* Accessible focus indicator defaults */
   *:focus-visible {
     @apply outline-none ring-2 ring-brand-600 ring-offset-2 ring-offset-white;
+  }
+
+  ::selection { background: #b4e7d7; color: #0d332b; }
+  body { font-optical-sizing: auto; }
+  body.mx-dialog-open { overflow: hidden; }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  @media (max-width: 700px) {
+    :root { --public-header-height: 60px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      scroll-behavior: auto !important;
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+    }
   }
 }

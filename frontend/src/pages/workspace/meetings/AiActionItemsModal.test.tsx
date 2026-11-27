@@ -32,7 +32,8 @@ describe('AiActionItemsModal (Phase 02C SSR / Unit)', () => {
     expect(html).toContain('Focus Areas (Optional, one per line)');
     expect(html).toContain('Additional Instructions (Optional)');
     expect(html).toContain('Extract Action Items');
-    expect(html).toContain('Zero Data Retention &amp; Member Matching');
+    expect(html).toContain('How suggestions are made');
+    expect(html).toContain('zero data retention requirement');
   });
 
   it('renders closed modal as empty/hidden', () => {
@@ -94,7 +95,7 @@ describe('AiActionItemsModal (Phase 02C SSR / Unit)', () => {
           // Confirmed successful save: remove item from working list
           itemsToSave.shift();
         }
-      } catch (err) {
+      } catch {
         errorOccurred = true;
       }
 

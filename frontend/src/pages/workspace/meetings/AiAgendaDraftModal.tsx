@@ -177,11 +177,11 @@ export function AiAgendaDraftModal({
         {!draftItems ? (
           <form onSubmit={handleGenerate} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="ai-agenda-draft-modal-focus-topics" className="block text-sm font-medium text-slate-700 mb-1">
                 Focus Topics (One per line, optional)
               </label>
-              <textarea
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              <textarea id="ai-agenda-draft-modal-focus-topics"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 rows={3}
                 placeholder="e.g. Q4 Release Roadmap&#10;Architecture Modernization&#10;Team Retrospective"
                 value={focusTopics}
@@ -193,10 +193,10 @@ export function AiAgendaDraftModal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="ai-agenda-draft-modal-target-duration" className="block text-sm font-medium text-slate-700 mb-1">
                   Target Duration (Minutes, optional)
                 </label>
-                <Input
+                <Input id="ai-agenda-draft-modal-target-duration"
                   type="number"
                   min={5}
                   max={1440}
@@ -209,10 +209,10 @@ export function AiAgendaDraftModal({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="ai-agenda-draft-modal-additional-context" className="block text-sm font-medium text-slate-700 mb-1">
                   Additional Context (Optional)
                 </label>
-                <Input
+                <Input id="ai-agenda-draft-modal-additional-context"
                   type="text"
                   placeholder="e.g. Reserve last 10m for Q&A"
                   value={additionalContext}
@@ -223,11 +223,11 @@ export function AiAgendaDraftModal({
               </div>
             </div>
 
-            <div className="p-3 bg-indigo-50/70 border border-indigo-100 rounded-md text-xs text-indigo-900 flex items-start gap-2">
-              <Sparkles className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+            <div className="p-3 bg-brand-50/70 border border-brand-100 rounded-md text-xs text-brand-900 flex items-start gap-2">
+              <Sparkles className="h-4 w-4 text-brand-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">Human-in-the-Loop AI Draft</p>
-                <p className="text-indigo-700">
+                <p className="text-brand-700">
                   ManageX analyzes the scheduled meeting title, description, and attendee roles.
                   Draft agenda items are returned to you for review and editing before anything is saved.
                 </p>
@@ -274,7 +274,7 @@ export function AiAgendaDraftModal({
                       {index + 1}.
                     </span>
                     <div className="flex-1 space-y-1.5">
-                      <Input
+                      <Input aria-label={`Title for item ${index + 1}`}
                         type="text"
                         value={item.title}
                         onChange={(e) => handleUpdateItem(index, 'title', e.target.value)}
@@ -283,7 +283,7 @@ export function AiAgendaDraftModal({
                         disabled={isSaving}
                         data-testid={`draft-title-input-${index}`}
                       />
-                      <Input
+                      <Input aria-label={`Description for item ${index + 1}`}
                         type="text"
                         value={item.description}
                         onChange={(e) => handleUpdateItem(index, 'description', e.target.value)}
@@ -294,7 +294,7 @@ export function AiAgendaDraftModal({
                       />
                     </div>
                     <div className="w-20 shrink-0 flex items-center gap-1">
-                      <Input
+                      <Input aria-label={`Duration in minutes for item ${index + 1}`}
                         type="number"
                         min={1}
                         max={1440}

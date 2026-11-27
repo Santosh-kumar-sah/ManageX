@@ -151,7 +151,7 @@ export function MembersPage() {
         }),
       });
 
-      setSuccessMsg(`Invitation dispatched to ${inviteEmail}.`);
+      setSuccessMsg(`Invitation created for ${inviteEmail}.`);
       setInviteEmail('');
       setIsInviteOpen(false);
       await fetchMembers();
@@ -283,7 +283,7 @@ export function MembersPage() {
         }
       );
 
-      setSuccessMsg(`Role ${roleSlug} revoked from ${selectedMember.fullName}.`);
+      setSuccessMsg(`Role removed from ${selectedMember.fullName}.`);
       await fetchMembers();
 
       // Refresh target in modal
@@ -322,7 +322,7 @@ export function MembersPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Members & Roles</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Manage teammates, scoped roles, and pending invitations for <strong className="text-slate-700">{activeOrg?.name || 'this organisation'}</strong>.
+            Manage members, roles and pending invitations for <strong className="text-slate-700">{activeOrg?.name || 'this organisation'}</strong>.
           </p>
         </div>
 
@@ -360,7 +360,7 @@ export function MembersPage() {
         <CardHeader className="p-5 pb-4 border-b border-border">
           <CardTitle className="text-base">Active Members ({members.length})</CardTitle>
           <CardDescription className="text-xs">
-            Members authenticated with active workspace access and assigned scoped RBAC roles.
+            People who can access this workspace and their roles.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -535,7 +535,7 @@ export function MembersPage() {
         isOpen={isInviteOpen}
         onClose={() => !isSubmitting && setIsInviteOpen(false)}
         title="Invite New Member"
-        description="A single-use 7-day invitation link will be dispatched to the recipient's email address."
+        description="The invitation is for one person and expires in seven days."
       >
         <form onSubmit={handleSendInvite} className="space-y-4 mt-2">
           {inviteError && (
@@ -599,7 +599,7 @@ export function MembersPage() {
         isOpen={isRoleModalOpen}
         onClose={() => !isAssigningRole && setIsRoleModalOpen(false)}
         title={`Manage Roles — ${selectedMember?.fullName}`}
-        description="Assign scoped module roles or organization privileges. Least privilege and anti-escalation rules apply."
+        description="Choose the roles this person needs for their work."
       >
         <div className="space-y-5 mt-2">
           {roleModalError && (
@@ -631,12 +631,9 @@ export function MembersPage() {
                     >
                       <div>
                         <span className="font-medium text-slate-800">{r.name}</span>
-                        <span className="font-mono text-[10px] text-slate-400 ml-2">
-                          ({r.slug})
-                        </span>
                       </div>
                       {isSoleOwner ? (
-                        <span className="text-[10px] text-slate-400 italic">
+                        <span className="text-xs text-slate-400 italic">
                           Protected Owner
                         </span>
                       ) : (
@@ -701,7 +698,7 @@ export function MembersPage() {
               </Button>
             </div>
             <p className="text-[11px] text-slate-400">
-              Only roles within your authorized permission scope can be assigned (anti-escalation check enforced).
+              You can assign only the roles available to you.
             </p>
           </form>
 

@@ -125,8 +125,9 @@ describe('App Routing — Event Portal & Platform Navigation', () => {
 
     // Platform marketing navbar and content
     expect(html).toContain('ManageX');
-    expect(html).toContain('Overview');
-    expect(html).toContain('Security &amp; Privacy');
+    expect(html).toContain('href="/modules"');
+    expect(html).toContain('href="/security"');
+    expect(html).toContain('Browse events');
   });
 
   it('5. Static /events/dashboard route takes precedence before dynamic /events/:eventId', () => {

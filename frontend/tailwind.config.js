@@ -4,31 +4,39 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Clean Enterprise design system palette
         brand: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
+          50: '#eef8f5',
+          100: '#d8eee6',
+          200: '#b4dcd1',
+          300: '#8ac8bb',
+          400: '#4fa89a',
+          500: '#218273',
+          600: '#176c60',
+          700: '#11584f',
+          800: '#10463f',
+          900: '#103933',
+          950: '#092b26',
+        },
+        slate: {
+          50: '#f6f8f7', 100: '#eef2f0', 200: '#dce3df', 300: '#becac5',
+          400: '#77867f', 500: '#586961', 600: '#46574f', 700: '#34443c',
+          800: '#24342d', 900: '#15231e', 950: '#0c1511',
         },
         surface: {
-          subtle: '#f8fafc',
+          subtle: '#f6f8f7',
           DEFAULT: '#ffffff',
           card: '#ffffff',
-          overlay: 'rgba(15, 23, 42, 0.4)',
+          overlay: 'rgba(15, 30, 26, 0.45)',
         },
         border: {
-          subtle: '#f1f5f9',
-          DEFAULT: '#e2e8f0',
-          strong: '#cbd5e1',
+          subtle: '#edf0ee',
+          DEFAULT: '#d5dfda',
+          strong: '#b0bfb7',
         },
       },
       fontFamily: {
         sans: [
-          'Inter',
+          'Instrument Sans Variable',
           '-apple-system',
           'BlinkMacSystemFont',
           'Segoe UI',

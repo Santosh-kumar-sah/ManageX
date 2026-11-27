@@ -119,13 +119,10 @@ export function PlatformOrganisationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Customer Workspaces</h1>
-            <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              Workspace Directory
-            </Badge>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Organisations</h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Enterprise organization directory and status controls with strict workspace privacy isolation.
+            Find an organisation and review its access and available tools.
           </p>
         </div>
 
@@ -148,7 +145,8 @@ export function PlatformOrganisationsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Search workspaces by name or slug..."
+                aria-label="Search workspaces by name or handle"
+                placeholder="Search workspaces by name or handle"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 text-xs"
@@ -156,6 +154,7 @@ export function PlatformOrganisationsPage() {
             </div>
 
             <Select
+              aria-label="Workspace status"
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
@@ -179,7 +178,7 @@ export function PlatformOrganisationsPage() {
       <Card>
         <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
           <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <Building className="h-4 w-4 text-indigo-600" />
+            <Building className="h-4 w-4 text-brand-600" />
             <span>Workspaces ({total})</span>
           </CardTitle>
           <span className="text-xs text-slate-400">
@@ -191,7 +190,7 @@ export function PlatformOrganisationsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Workspace Name</TableHead>
-                <TableHead>Slug</TableHead>
+                <TableHead>Workspace address</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Active Members</TableHead>
                 <TableHead>Active Modules</TableHead>
@@ -232,7 +231,7 @@ export function PlatformOrganisationsPage() {
                       {org.memberCount} members
                     </TableCell>
                     <TableCell className="text-xs text-slate-600">
-                      {org.activeModulesCount} / 3 modules
+                      {org.activeModulesCount} active
                     </TableCell>
                     <TableCell className="text-xs text-slate-500 whitespace-nowrap">
                       {new Date(org.createdAt).toLocaleDateString()}
@@ -306,7 +305,7 @@ export function PlatformOrganisationsPage() {
       <Dialog
         isOpen={inspectOrg !== null}
         onClose={() => setInspectOrg(null)}
-        title="Workspace Operational Metadata"
+        title="Workspace details"
         className="sm:max-w-lg"
       >
         {inspectOrg && (
@@ -317,7 +316,7 @@ export function PlatformOrganisationsPage() {
                 <strong className="text-slate-800 text-sm">{inspectOrg.name}</strong>
               </div>
               <div>
-                <span className="text-slate-400 block mb-0.5">Workspace Slug</span>
+                <span className="text-slate-400 block mb-0.5">Workspace address</span>
                 <code className="text-slate-700 font-mono text-xs">{inspectOrg.slug}</code>
               </div>
               <div>
@@ -337,15 +336,14 @@ export function PlatformOrganisationsPage() {
             {/* Module Entitlement Inspection */}
             <div>
               <h4 className="font-semibold text-slate-800 flex items-center gap-1.5 mb-2">
-                <Boxes className="h-4 w-4 text-indigo-600" />
-                <span>Module Entitlements</span>
+                <Boxes className="h-4 w-4 text-brand-600" />
+                <span>Workspace tools</span>
               </h4>
               <div className="divide-y divide-slate-100 border border-slate-100 rounded">
                 {inspectOrg.modules?.map((m) => (
                   <div key={m.slug} className="p-2.5 flex items-center justify-between text-xs">
                     <div>
                       <span className="font-medium text-slate-800">{m.name}</span>
-                      <code className="text-[10px] text-slate-400 ml-1.5 font-mono">({m.slug})</code>
                     </div>
                     <div className="flex items-center gap-2">
                       {m.isEnabled ? (
@@ -362,10 +360,8 @@ export function PlatformOrganisationsPage() {
               </div>
             </div>
 
-            <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded text-[11px] text-slate-600">
-              <strong>Privacy Boundary:</strong> Platform operators inspect operational configuration only.
-              Private workspace content (events, submissions, meeting notes, project tasks, comments) is
-              protected by organisation-level access controls and Row-Level Security.
+            <div className="p-3 bg-brand-50/50 border border-brand-100 rounded text-[11px] text-slate-600">
+              This view shows workspace settings and tool availability. Team content is private to the workspace.
             </div>
           </div>
         )}
@@ -402,9 +398,8 @@ export function PlatformOrganisationsPage() {
           {actionType === 'suspended' ? (
             <p className="leading-relaxed">
               Suspending workspace <strong>{selectedOrg?.name}</strong> will{' '}
-              <strong>block all member access immediately</strong> with HTTP 403.
-              All underlying projects, events, meetings, tasks, and audit history are{' '}
-              <strong>safely preserved intact</strong> (non-destructive).
+              <strong>immediately end member access</strong>.
+              Projects, events, meetings, tasks and audit history stay in the workspace.
             </p>
           ) : (
             <p className="leading-relaxed">
@@ -413,11 +408,12 @@ export function PlatformOrganisationsPage() {
           )}
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              Operational Reason (Recorded in Platform Audit Log)
+            <label htmlFor="change-reason" className="block font-medium text-slate-700 mb-1">
+              Reason for this change (saved to the audit log)
             </label>
             <Input
-              placeholder="Optional reason for audit log..."
+              id="change-reason"
+              placeholder="Optional reason"
               value={actionReason}
               onChange={(e) => setActionReason(e.target.value)}
               maxLength={500}

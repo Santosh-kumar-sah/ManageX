@@ -296,10 +296,10 @@ export function AiActionItemsModal({
         {!draftItems ? (
           <form onSubmit={handleGenerate} className="space-y-4" data-testid="ai-actions-form">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="ai-action-items-modal-focus-areas" className="block text-sm font-medium text-slate-700 mb-1">
                 Focus Areas (Optional, one per line)
               </label>
-              <textarea
+              <textarea id="ai-action-items-modal-focus-areas"
                 value={focusAreas}
                 onChange={(e) => setFocusAreas(e.target.value)}
                 placeholder="e.g.&#10;Database migration deliverables&#10;Frontend review tasks&#10;Client follow-ups"
@@ -314,13 +314,13 @@ export function AiActionItemsModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="ai-action-items-modal-additional-instructions" className="block text-sm font-medium text-slate-700 mb-1">
                 Additional Instructions (Optional)
               </label>
-              <textarea
+              <textarea id="ai-action-items-modal-additional-instructions"
                 value={additionalInstructions}
                 onChange={(e) => setAdditionalInstructions(e.target.value)}
-                placeholder="e.g. Default due dates to next Monday unless specified. Ensure Sarah is assigned database tasks."
+                placeholder="For example, suggest next Monday for items without a due date."
                 rows={2}
                 disabled={isGenerating}
                 className="w-full text-sm rounded-md border border-slate-300 p-2 text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
@@ -331,12 +331,11 @@ export function AiActionItemsModal({
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-md text-xs text-slate-600 space-y-1">
               <p className="font-semibold text-slate-700 flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-                Zero Data Retention & Member Matching
+                How suggestions are made
               </p>
               <p>
-                ManageX AI analyzes confidential notes, discussion points, and recorded decisions. Candidate assignees
-                are deterministically matched against active members in your organisation. All extracted items are
-                ephemeral drafts and require explicit review before saving.
+                ManageX sends meeting notes, discussion points and decisions to an AI provider with a zero data
+                retention requirement. Suggested owners are matched to current members. Review each item before saving it.
               </p>
             </div>
 
@@ -441,7 +440,7 @@ export function AiActionItemsModal({
                       <div className="flex-1 space-y-2.5">
                         {/* Title and Delete */}
                         <div className="flex items-center gap-2">
-                          <Input
+                          <Input aria-label={`Title for item ${index + 1}`}
                             value={item.title}
                             onChange={(e) => handleUpdateItem(item.id, 'title', e.target.value)}
                             placeholder="Action item title (required)"
@@ -463,7 +462,7 @@ export function AiActionItemsModal({
 
                         {/* Description */}
                         <div>
-                          <input
+                          <input aria-label={`Description for item ${index + 1}`}
                             type="text"
                             value={item.description}
                             onChange={(e) => handleUpdateItem(item.id, 'description', e.target.value)}
@@ -504,8 +503,8 @@ export function AiActionItemsModal({
 
                           {/* Assignee Selector (Required) */}
                           <div className="flex items-center gap-1 ml-auto">
-                            <label className="text-slate-500 font-medium">Assignee:</label>
-                            <select
+                            <label htmlFor={`ai-action-items-modal-item-assignee-id-${index}`} className="text-slate-500 font-medium">Assignee:</label>
+                            <select id={`ai-action-items-modal-item-assignee-id-${index}`}
                               value={item.assigneeId}
                               onChange={(e) => handleUpdateItem(item.id, 'assigneeId', e.target.value)}
                               className={`text-xs rounded border px-2 py-1 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-brand-500 ${
@@ -524,8 +523,8 @@ export function AiActionItemsModal({
 
                           {/* Priority Selector */}
                           <div className="flex items-center gap-1">
-                            <label className="text-slate-500 font-medium">Priority:</label>
-                            <select
+                            <label htmlFor={`ai-action-items-modal-item-priority-${index}`} className="text-slate-500 font-medium">Priority:</label>
+                            <select id={`ai-action-items-modal-item-priority-${index}`}
                               value={item.priority}
                               onChange={(e) => handleUpdateItem(item.id, 'priority', e.target.value as any)}
                               className="text-xs rounded border border-slate-300 px-2 py-1 bg-white text-slate-800 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -540,8 +539,8 @@ export function AiActionItemsModal({
 
                           {/* Due Date Input */}
                           <div className="flex items-center gap-1">
-                            <label className="text-slate-500 font-medium">Due:</label>
-                            <input
+                            <label htmlFor={`ai-action-items-modal-item-due-date-${index}`} className="text-slate-500 font-medium">Due:</label>
+                            <input id={`ai-action-items-modal-item-due-date-${index}`}
                               type="date"
                               value={item.dueDate}
                               onChange={(e) => handleUpdateItem(item.id, 'dueDate', e.target.value)}

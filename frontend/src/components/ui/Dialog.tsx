@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 import { Button } from './Button';
@@ -12,6 +12,8 @@ export interface DialogProps {
   className?: string;
 }
 
+const openDialogs: HTMLDivElement[] = [];
+
 export function Dialog({
   isOpen,
   onClose,
@@ -20,21 +22,48 @@ export function Dialog({
   children,
   className,
 }: DialogProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  const dialogId = useId();
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
   useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
+    const dialog = dialogRef.current;
+    if (!isOpen || !dialog) return;
+
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    openDialogs.push(dialog);
+    document.body.classList.add('mx-dialog-open');
+    dialog.focus({ preventScroll: true });
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (openDialogs[openDialogs.length - 1] !== dialog || !dialog) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeRef.current();
+      } else if (event.key === 'Tab') {
+        const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+          'a[href], button, input, select, textarea, [tabindex]'
+        )).filter(element => element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length > 0);
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
       }
     }
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleKeyDown);
-    }
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.body.style.overflow = '';
-      window.removeEventListener('keydown', handleKeyDown);
+      const wasTop = openDialogs[openDialogs.length - 1] === dialog;
+      openDialogs.splice(openDialogs.indexOf(dialog), 1);
+      document.body.classList.toggle('mx-dialog-open', openDialogs.length > 0);
+      document.removeEventListener('keydown', handleKeyDown);
+      if (wasTop && opener?.isConnected) opener.focus({ preventScroll: true });
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -42,9 +71,11 @@ export function Dialog({
     <div
       className="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
       role="dialog"
+      ref={dialogRef}
+      tabIndex={-1}
       aria-modal="true"
-      aria-labelledby={title ? 'dialog-title' : undefined}
-      aria-describedby={description ? 'dialog-description' : undefined}
+      aria-labelledby={title ? dialogId + '-title' : undefined}
+      aria-describedby={description ? dialogId + '-description' : undefined}
     >
       <div className="flex min-h-full items-center justify-center py-2 sm:py-4">
         <div
@@ -62,12 +93,12 @@ export function Dialog({
           </button>
 
           {title && (
-            <h2 id="dialog-title" className="text-lg font-semibold text-slate-900 mb-1 pr-6 shrink-0">
+            <h2 id={dialogId + '-title'} className="text-lg font-semibold text-slate-900 mb-1 pr-6 shrink-0">
               {title}
             </h2>
           )}
           {description && (
-            <p id="dialog-description" className="text-sm text-slate-500 mb-4 shrink-0">{description}</p>
+            <p id={dialogId + '-description'} className="text-sm text-slate-500 mb-4 shrink-0">{description}</p>
           )}
 
           <div className="mt-2 overflow-y-auto min-h-0 flex-1 pr-1">{children}</div>

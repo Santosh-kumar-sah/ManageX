@@ -1,354 +1,118 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Calendar,
-  Video,
-  CheckSquare,
-  ShieldCheck,
-  ArrowRight,
-  CheckCircle2,
-  Users,
-  Lock,
-  ChevronDown,
-  Building2,
-  Layers,
-  FileText,
-} from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
+import { ArrowUpRight, Plus } from 'lucide-react';
+import { useAuth } from '@/api/AuthContext';
+import { useOrg } from '@/api/OrgContext';
+import './HomePage.css';
 
-export function HomePage() {
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+const chapters = [
+  {
+    id: 'events', label: 'Events', heading: 'From sign-up to submission.',
+    description: 'Open registration, bring teams together and give judges a clear place to review their work.',
+    link: 'Explore events & hackathons',
+  },
+  {
+    id: 'meetings', label: 'Meetings', heading: 'Make the meeting count.',
+    description: 'Share an agenda, record the decisions and give each follow-up a person and a due date.',
+    link: 'Explore meetings',
+  },
+  {
+    id: 'projects', label: 'Projects', heading: 'See the work through.',
+    description: 'Give every task an owner. Follow deadlines in a list or move between stages on your project board.',
+    link: 'Explore projects & tasks',
+  },
+] as const;
 
-  const toggleFaq = (index: number) => {
-    setOpenFaq(openFaq === index ? null : index);
-  };
+const questions = [
+  ['Can we start with just one tool?', 'Yes. Your organisation can use events, meetings or projects on their own. An administrator can enable the other tools when your team needs them.'],
+  ['How do I join a public event?', 'Browse events, open the event you want and check its registration dates. Sign in with your verified account to register while places are available.'],
+  ['How are hackathon entries judged?', 'Organisers assign judges to review submissions. Judges score the work against the event criteria, and organisers decide when to publish results.'],
+  ['Does joining an event give me access to the organiser’s workspace?', 'Your registration gives you access to activities for that event. Joining the organiser’s workspace requires a separate membership.'],
+  ['Who can see meeting minutes?', 'Meeting visibility and your access determine which records you can open. Organisers can restrict access to confidential minutes.'],
+];
 
-  const modules = [
-    {
-      title: 'Events & Hackathons',
-      badge: 'Events & Challenges',
-      description: 'End-to-end event and challenge orchestration. Manage participant registrations, team formation, project link submissions, and blind scoring with verified leaderboards.',
-      icon: Calendar,
-      features: [
-        'Custom team formation with flexible member limits',
-        'Structured submission links (GitHub, live demo, slides)',
-        'Independent judge scoring with custom evaluation rubrics',
-        'Automated leaderboard rankings and verified results',
-      ],
-      route: '/modules',
-    },
-    {
-      title: 'Meetings & Minutes',
-      badge: 'Agendas & Minutes',
-      description: 'Structured organizational meetings. Build ordered agendas, manage attendee confirmations across timezones, write confidential minutes, and assign tracked action items.',
-      icon: Video,
-      features: [
-        'Timezone-aware scheduling & notifications',
-        'Real-time RSVP and attendee tracking',
-        'Confidential minutes with role-based access',
-        'Tracked action items with assignees and due dates',
-      ],
-      route: '/modules',
-    },
-    {
-      title: 'Projects & Tasks',
-      badge: 'Workflows & Delivery',
-      description: 'Flexible agile delivery workspaces. Organize member rosters, track project lifecycles, and switch seamlessly between interactive Kanban boards and structured List views.',
-      icon: CheckSquare,
-      features: [
-        'Interactive Drag & Drop Kanban & List views',
-        'Priority tagging (Urgent, High, Medium, Low)',
-        'Structured task workflows with deadlines',
-        'Team assignments with delivery activity tracking',
-      ],
-      route: '/modules',
-    },
-  ];
+function ChapterNavigation() {
+  const [current, setCurrent] = useState('events');
 
-  const steps = [
-    {
-      step: '01',
-      title: 'Create Your Workspace',
-      description: 'Set up your organization or institution in seconds with dedicated access controls and customizable workspace settings.',
-      icon: Building2,
-    },
-    {
-      step: '02',
-      title: 'Enable Your Modules',
-      description: 'Choose only the modules your teams need. Whether hosting hackathons, coordinating meetings, or managing engineering sprints, activate modules on demand.',
-      icon: Layers,
-    },
-    {
-      step: '03',
-      title: 'Invite Team & Participants',
-      description: 'Invite organizers, managers, and members with tailored roles and permissions. Share public registration links for events and hackathons.',
-      icon: Users,
-    },
-    {
-      step: '04',
-      title: 'Collaborate with Confidence',
-      description: 'Collect project submissions, run structured agendas, and deliver projects with enterprise-grade data protection and complete audit trails.',
-      icon: ShieldCheck,
-    },
-  ];
-
-  const faqs = [
-    {
-      q: 'Can my organization use only one module (e.g. only Events or only Meetings)?',
-      a: 'Yes. ManageX is fully modular. You can enable only Events & Hackathons, only Meetings, or only Projects & Tasks. Your workspace dashboard and navigation automatically adapt to only the modules your organization enables.',
-    },
-    {
-      q: 'How do students and external participants register for hackathons?',
-      a: 'Once an event is published, organizers can share its public registration page. Participants sign up, join or create teams within capacity limits, and submit project links (GitHub repos, demo URLs, documentation) directly through the portal.',
-    },
-    {
-      q: 'How does judge evaluation work in hackathons?',
-      a: 'Organizers assign specific judges to submissions. Evaluators log in, review the submitted project artifacts, score each team on pre-set weighted criteria, and submit private scores. The platform automatically aggregates rankings for organizers before winners are publicly announced.',
-    },
-    {
-      q: 'Is our organization data separated and secure from other organizations?',
-      a: 'Yes, absolutely. ManageX is engineered with enterprise-grade data privacy. Each organization operates in a dedicated, isolated workspace, ensuring your records, meetings, and projects are strictly confidential and never accessible by other organizations.',
-    },
-    {
-      q: 'Can confidential meeting minutes be restricted from general members?',
-      a: 'Yes. Meeting organizers can mark minutes as confidential, restricting access strictly to designated attendees and organization administrators while ensuring general organization members cannot access sensitive discussions.',
-    },
-  ];
+  useEffect(() => {
+    if (!('IntersectionObserver' in window)) return;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) setCurrent(entry.target.id);
+      }
+    }, { rootMargin: '-23% 0px -69% 0px' });
+    for (const { id } of chapters) {
+      const section = document.getElementById(id);
+      if (section) observer.observe(section);
+    }
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <div className="space-y-24 py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-      {/* Hero Section */}
-      <section className="text-center space-y-8 max-w-4xl mx-auto pt-8">
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-slate-900 tracking-tight leading-[1.12]">
-          The modern operations platform for <br className="hidden sm:inline" />
-          <span className="text-brand-600">Hackathons, Meetings & Projects.</span>
-        </h1>
-        <p className="text-base sm:text-lg lg:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto font-normal">
-          ManageX gives universities, tech communities, and growing teams a unified workspace to host competitive events, run productive meetings, and deliver agile projects.
-        </p>
+    <nav className="tour-nav" aria-label="Explore ManageX">
+      <div className="tour-nav-inner">
+        {chapters.map(({ id, label }) => (
+          <a key={id} href={`#${id}`} aria-current={current === id ? 'location' : undefined} onClick={() => setCurrent(id)}>{label}</a>
+        ))}
+      </div>
+    </nav>
+  );
+}
 
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-          <Link to="/auth/register">
-            <Button size="lg" className="gap-2 px-7 py-3 text-sm font-semibold shadow-sm hover:shadow transition-all">
-              <span>Get Started Free</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <Link to="/auth/login">
-            <Button variant="outline" size="lg" className="px-7 py-3 text-sm font-semibold border-slate-200 text-slate-700 hover:bg-slate-50 transition-all">
-              Sign In to Workspace
-            </Button>
-          </Link>
+export function HomePage() {
+  const { isAuthenticated, user } = useAuth();
+  const { organisations } = useOrg();
+  const [openQuestion, setOpenQuestion] = useState<number | null>(null);
+  const hasWorkspace = organisations.length > 0 || user?.isPlatformAdmin;
+  const accountPath = isAuthenticated ? (hasWorkspace ? '/app' : '/events/dashboard') : '/auth/register';
+  const accountLabel = isAuthenticated ? (hasWorkspace ? 'Open workspace' : 'My events') : 'Create account';
+
+  return (
+    <div className="mx-home">
+      <section className="mx-hero" aria-labelledby="home-heading">
+        <div className="hero-art" aria-hidden="true">
+          <img src="/art/hero.webp" srcSet="/art/hero-small.webp 720w, /art/hero.webp 1440w" sizes="(max-width: 730px) 100vw, 70vw" width="1440" height="960" fetchPriority="high" alt="" />
         </div>
-      </section>
-
-      {/* Core Modules Grid */}
-      <section id="modules" className="space-y-12 scroll-mt-20">
-        <div className="text-center space-y-3 max-w-2xl mx-auto">
-          <Badge variant="neutral" className="px-3 py-1 text-xs font-medium tracking-wide">
-            Modular Workspace
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            Modular tools built to adapt to your organization
-          </h2>
-          <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
-            Enable only the capabilities your teams need today—from campus-wide hackathons to leadership syncs and sprint tracking.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {modules.map((mod) => (
-            <Card key={mod.title} className="hover:border-slate-300 transition-all flex flex-col justify-between border-slate-200/80 bg-white rounded-2xl p-2 shadow-xs hover:shadow-sm">
-              <CardHeader className="p-6">
-                <div className="flex items-center justify-between mb-5">
-                  <div className="h-12 w-12 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-600">
-                    <mod.icon className="h-6 w-6" />
-                  </div>
-                  <Badge variant="brand" className="text-xs font-semibold px-2.5 py-0.5">{mod.badge}</Badge>
-                </div>
-                <CardTitle className="text-xl font-bold text-slate-900 tracking-tight">{mod.title}</CardTitle>
-                <CardDescription className="pt-2.5 text-sm leading-relaxed text-slate-600">
-                  {mod.description}
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-5 px-6 pb-6 pt-0">
-                <div className="border-t border-slate-100 pt-5">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Key Highlights</p>
-                  <ul className="space-y-2.5">
-                    {mod.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-2.5 text-xs text-slate-600">
-                        <CheckCircle2 className="h-4 w-4 text-brand-600 shrink-0 mt-0.5" />
-                        <span className="leading-normal">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="pt-3">
-                  <Link
-                    to={mod.route}
-                    className="text-xs font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1.5 group transition-colors"
-                  >
-                    <span>View module details</span>
-                    <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="rounded-3xl border border-slate-200/80 bg-white p-8 sm:p-14 space-y-12 shadow-xs">
-        <div className="text-center space-y-3 max-w-2xl mx-auto">
-          <Badge variant="brand" className="px-3 py-1 text-xs font-medium tracking-wide">
-            Simple 4-Step Onboarding
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
-            How ManageX Works
-          </h2>
-          <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
-            From setup to live execution, launch your organization workspace in minutes.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {steps.map((st) => (
-            <div key={st.step} className="p-6 rounded-2xl bg-slate-50/70 border border-slate-200/60 flex flex-col justify-between space-y-5">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-bold text-brand-600 bg-brand-50 px-2.5 py-1 rounded-md">
-                    {st.step}
-                  </span>
-                  <st.icon className="h-5 w-5 text-slate-400" />
-                </div>
-                <h3 className="text-base font-bold text-slate-900 tracking-tight">{st.title}</h3>
-                <p className="text-xs text-slate-600 leading-relaxed">{st.description}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Trust & Enterprise Security Pillars */}
-      <section className="space-y-8">
-        <div className="text-center space-y-3 max-w-2xl mx-auto">
-          <Badge variant="neutral" className="px-3 py-1 text-xs font-medium tracking-wide">
-            Enterprise Reliability
-          </Badge>
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
-            Security & Governance You Can Rely On
-          </h2>
-          <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
-            Built with dedicated workspace privacy, granular role permissions, and full audit transparency.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <div className="p-7 rounded-2xl border border-slate-200/80 bg-white shadow-xs space-y-3.5">
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
-              <Lock className="h-5 w-5" />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base tracking-tight">Dedicated Workspace Privacy</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Every organization operates within its own secure workspace. Enterprise-grade isolation ensures your team data remains strictly confidential and protected.
-            </p>
-          </div>
-
-          <div className="p-7 rounded-2xl border border-slate-200/80 bg-white shadow-xs space-y-3.5">
-            <div className="h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-              <Users className="h-5 w-5" />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base tracking-tight">Granular Role Governance</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Define clear roles for organization leaders, project contributors, event judges, and meeting attendees to ensure members only access what they need.
-            </p>
-          </div>
-
-          <div className="p-7 rounded-2xl border border-slate-200/80 bg-white shadow-xs space-y-3.5">
-            <div className="h-10 w-10 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
-              <FileText className="h-5 w-5" />
-            </div>
-            <h3 className="font-bold text-slate-900 text-base tracking-tight">Complete Audit Trails</h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Every critical action—from permission changes to evaluation scores and status updates—is recorded with timestamps and verified user details.
-            </p>
+        <div className="hero-content">
+          <h1 id="home-heading"><span>Bring people</span>{' '}<span>together. Move</span>{' '}<span>work <em>forward.</em></span></h1>
+          <p>Run events, plan meetings and keep team projects on track in one workspace.</p>
+          <div className="hero-actions">
+            <Link className="home-primary" to={accountPath}>{accountLabel}</Link>
+            <Link className="home-text-link" to="/events">Browse events <ArrowUpRight aria-hidden="true" /></Link>
           </div>
         </div>
       </section>
 
-      {/* Frequently Asked Questions (FAQ) */}
-      <section className="space-y-8 max-w-4xl mx-auto">
-        <div className="text-center space-y-3 max-w-2xl mx-auto">
-          <Badge variant="neutral" className="px-3 py-1 text-xs font-medium tracking-wide">
-            Got Questions?
-          </Badge>
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
-            Frequently Asked Questions
-          </h2>
-          <p className="text-sm sm:text-base text-slate-500 leading-relaxed">
-            Everything you need to know about setting up and running your ManageX workspace.
-          </p>
-        </div>
+      <div className="product-tour">
+        <ChapterNavigation />
+        {chapters.map(({ id, heading, description, link }) => (
+          <section key={id} id={id} className={`tour-chapter chapter-${id}`} aria-labelledby={`${id}-heading`}>
+            <div className="chapter-art" aria-hidden="true">
+              <img src={`/art/${id}.webp`} srcSet={`/art/${id}-small.webp 720w, /art/${id}.webp 1440w`} sizes="(max-width: 730px) 100vw, 57vw" width="1440" height="960" loading="lazy" decoding="async" alt="" />
+            </div>
+            <div className="chapter-content">
+              <h2 id={`${id}-heading`}>{heading}</h2>
+              <p>{description}</p>
+              <Link className="home-text-link" to={`/modules#${id}`}>{link} <ArrowUpRight aria-hidden="true" /></Link>
+            </div>
+          </section>
+        ))}
+      </div>
 
-        <div className="space-y-3 pt-2">
-          {faqs.map((faq, index) => {
-            const isOpen = openFaq === index;
-            return (
-              <div
-                key={index}
-                className="rounded-xl border border-slate-200/80 bg-white overflow-hidden transition-all shadow-xs"
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleFaq(index)}
-                  className="w-full px-6 py-4 text-left flex items-center justify-between gap-4 font-semibold text-slate-900 hover:bg-slate-50 transition-colors text-sm"
-                >
-                  <span className="tracking-tight">{faq.q}</span>
-                  <ChevronDown
-                    className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${
-                      isOpen ? 'rotate-180 text-brand-600' : ''
-                    }`}
-                  />
+      <section className="home-questions" aria-labelledby="faq-heading">
+        <h2 id="faq-heading">Common questions</h2>
+        <div className="question-list">
+          {questions.map(([question, answer], index) => (
+            <div key={question} className="home-question">
+              <h3>
+                <button type="button" onClick={() => setOpenQuestion(openQuestion === index ? null : index)}
+                  aria-controls={`answer-${index}`} aria-expanded={openQuestion === index}>
+                  {question}<Plus aria-hidden="true" />
                 </button>
-                {isOpen && (
-                  <div className="px-6 pb-5 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3.5 bg-slate-50/50">
-                    {faq.a}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Bottom Call to Action */}
-      <section className="rounded-3xl bg-slate-950 text-white p-8 sm:p-14 text-center space-y-8 shadow-md">
-        <div className="max-w-2xl mx-auto space-y-3">
-          <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
-            Ready to streamline your organization's operations?
-          </h2>
-          <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-            Create your organization workspace today. Activate only the modules you need and collaborate with total confidence.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
-          <Link to="/auth/register">
-            <Button size="lg" className="bg-brand-600 hover:bg-brand-700 text-white gap-2 px-8 py-3 text-sm font-semibold shadow-sm">
-              <span>Create Free Workspace</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <Link to="/auth/login">
-            <Button variant="outline" size="lg" className="border-slate-800 text-slate-200 hover:bg-slate-900 hover:text-white px-8 py-3 text-sm font-semibold">
-              Sign In
-            </Button>
-          </Link>
+              </h3>
+              <p id={`answer-${index}`} hidden={openQuestion !== index}>{answer}</p>
+            </div>
+          ))}
         </div>
       </section>
     </div>

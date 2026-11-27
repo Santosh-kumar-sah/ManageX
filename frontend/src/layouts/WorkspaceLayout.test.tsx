@@ -85,8 +85,8 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
 
     expect(html).toContain('Organisation Admin');
     expect(html).toContain('Members &amp; Roles');
-    expect(html).toContain('Modules &amp; Features');
-    expect(html).toContain('Security &amp; Audit Log');
+    expect(html).toContain('Workspace tools');
+    expect(html).toContain('Audit log');
     expect(html).toContain('Organisation Settings');
   });
 
@@ -151,8 +151,8 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
       </MemoryRouter>
     );
 
-    expect(html).not.toContain('Organisation Admin');
-    expect(html).not.toContain('Security &amp; Audit Log');
+    expect(html).not.toContain('href="/app/organisations/org-1/members"');
+    expect(html).not.toContain('Audit log');
     expect(html).not.toContain('Organisation Settings');
   });
 
@@ -188,7 +188,7 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
       </MemoryRouter>
     );
 
-    expect(html).toContain('Operator Console');
+    expect(html).toContain('Platform administration');
     expect(html).toContain('/platform');
   });
 
@@ -223,10 +223,10 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
       </MemoryRouter>
     );
 
-    expect(html).not.toContain('Operator Console');
+    expect(html).not.toContain('Platform administration');
   });
 
-  it('5. Does not mark module navigation items as active on /app/organisations when activeOrg is null', () => {
+  it('5. Does not mark module navigation items as active on the organisation directory', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       user: {
         id: 'member-1',
@@ -275,20 +275,16 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
       </MemoryRouter>
     );
 
-    // Module links should be rendered with inactive styling (text-slate-600), not active styling (bg-brand-50 text-brand-700)
     expect(html).toContain('Events &amp; Hackathons');
     expect(html).toContain('Meetings');
     expect(html).toContain('Projects &amp; Tasks');
-
-    // Confirm that the active class combination 'bg-brand-50 text-brand-700' is NOT applied to any module links
-    // Split on the module links and check their class lists
-    const eventLinkMatch = html.match(/<a[^>]*href="\/app\/organisations\/org-1\/events"[^>]*>[\s\S]*?Events &amp; Hackathons[\s\S]*?<\/a>/);
-    expect(eventLinkMatch).not.toBeNull();
-    expect(eventLinkMatch![0]).not.toContain('bg-brand-50');
-    expect(eventLinkMatch![0]).toContain('text-slate-600');
+    const eventLink = html.match(/<a[^>]+href="\/app\/organisations\/org-1\/events"[^>]*>/);
+    expect(eventLink).not.toBeNull();
+    expect(eventLink![0]).not.toContain('aria-current="page"');
+    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/app\/organisations"/);
   });
 
-  it('6. Renders dedicated Events module workspace branding, return link, and module nav when in events workspace', () => {
+  it('6. Renders the active Events link, overview and public portal when in events workspace', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       user: {
         id: 'member-1',
@@ -349,17 +345,14 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
       </MemoryRouter>
     );
 
-    // Module workspace title and subtitle
-    expect(html).toContain('ManageX Events');
-    expect(html).toContain('Organiser Workspace');
-    // Dedicated return link
-    expect(html).toContain('ManageX Dashboard');
-    expect(html).toContain('Events Overview');
-    // Module logo link points to module homepage
-    expect(html).toContain('href="/app/organisations/org-1/events"');
+    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/app\/organisations\/org-1\/events"/);
+    expect(html).toContain('href="/app"');
+    expect(html).toContain('Public events');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
   });
 
-  it('7. Renders dedicated Meetings module workspace branding when in meetings workspace', () => {
+  it('7. Renders the active Meetings link and an organisation switcher when in meetings workspace', () => {
     vi.spyOn(AuthContextModule, 'useAuth').mockReturnValue({
       user: {
         id: 'member-1',
@@ -408,10 +401,9 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
       </MemoryRouter>
     );
 
-    expect(html).toContain('ManageX Meetings');
-    expect(html).toContain('Meetings Workspace');
-    expect(html).toContain('ManageX Dashboard');
-    expect(html).toContain('Meetings Overview');
+    expect(html).toMatch(/<a[^>]*aria-current="page"[^>]*href="\/app\/organisations\/org-1\/meetings"/);
+    expect(html).toContain('aria-label="Switch organisation"');
+    expect(html).toContain('href="/app"');
   });
 
   it('8. Keeps module navigation within the same tab without target="_blank"', () => {
@@ -507,13 +499,13 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
     expect(html).not.toContain('<div class="text-[10px] text-slate-400">Member</div>');
 
     // 2. Header must indicate Participant View
-    expect(html).toContain('Workspace / Participant View');
+    expect(html).toContain('Personal workspace');
 
-    // 3. Navigation must show Participant Links and not Internal Modules
-    expect(html).toContain('Participant Links');
+    // 3. Navigation must show Personal and not Internal Modules
+    expect(html).toContain('Personal');
     expect(html).toContain('Participant Dashboard');
     expect(html).toContain('Browse Public Events');
-    expect(html).not.toContain('Modules &amp; Entitlements');
+    expect(html).not.toContain('Projects &amp; Tasks');
 
     // 4. If participant enters a route containing /meetings, module workspace must NOT activate without activeOrg
     const meetingRouteHtml = renderToStaticMarkup(
@@ -522,6 +514,6 @@ describe('WorkspaceLayout — Permission-based Navigation & Operator Shortcuts',
       </MemoryRouter>
     );
     expect(meetingRouteHtml).not.toContain('Meetings Workspace');
-    expect(meetingRouteHtml).toContain('Participant View');
+    expect(meetingRouteHtml).toContain('Personal workspace');
   });
 });

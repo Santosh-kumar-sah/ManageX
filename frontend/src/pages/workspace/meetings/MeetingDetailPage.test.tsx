@@ -552,7 +552,7 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
     );
 
     expect(html).toContain('Confidential Minutes');
-    expect(html).toContain('Meeting minutes are restricted to organisers and authorised administrative roles');
+    expect(html).toContain('Ask the organiser if you need access to these confidential minutes.');
     // The confidential content is NOT exposed
     expect(html).not.toContain('Executive Meeting Summary');
   });
@@ -621,7 +621,7 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
     );
 
     // Header & Mode
-    expect(html).toContain('Meeting Minutes (MOM)');
+    expect(html).toContain('Meeting minutes');
     expect(html).toContain('Edit Mode');
 
     // Section 1: Discussion Points
@@ -639,7 +639,7 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
     expect(html).toContain('No action items assigned for this meeting.');
 
     // Section 4: Additional Notes
-    expect(html).toContain('Additional Notes &amp; Historical Minutes');
+    expect(html).toContain('Additional notes');
     expect(html).toContain('Save Additional Notes');
   });
 
@@ -1093,7 +1093,7 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
 
     // Verify Export buttons
     expect(html).toContain('data-testid="export-md-btn"');
-    expect(html).toContain('Export .MD');
+    expect(html).toContain('Export Markdown');
     expect(html).toContain('data-testid="export-pdf-btn"');
     expect(html).toContain('Export PDF');
   });
@@ -1934,7 +1934,7 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
       );
 
       expect(html).toContain('data-testid="sync-pending-banner"');
-      expect(html).toContain('Generating Google Meet');
+      expect(html).toContain('Preparing the Google Meet link');
     });
 
     it('renders failed sync banner and retry CTA when googleSyncStatus is failed_create', () => {
@@ -1960,7 +1960,7 @@ describe('MeetingDetailPage — Remediation & Contract Alignment', () => {
       );
 
       expect(html).toContain('data-testid="sync-failed-banner"');
-      expect(html).toContain('Google Meet synchronization failed');
+      expect(html).toContain('Google Meet link unavailable');
       expect(html).toContain('data-testid="retry-sync-cta"');
     });
 

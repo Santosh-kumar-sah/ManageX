@@ -111,14 +111,14 @@ export function PlatformAccountsPage() {
   const renderRoleBadge = (account: PlatformAccount) => {
     if (account.platformRole === 'platform_super_admin' || account.isPlatformAdmin) {
       return (
-        <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800 text-[10px]">
+        <Badge variant="brand" className="bg-brand-950 text-brand-300 border-brand-800 text-xs">
           Super Admin
         </Badge>
       );
     }
     if (account.platformRole === 'platform_support_agent') {
       return (
-        <Badge variant="neutral" className="bg-sky-950 text-sky-300 border-sky-800 text-[10px]">
+        <Badge variant="neutral" className="bg-sky-950 text-sky-300 border-sky-800 text-xs">
           Support Agent
         </Badge>
       );
@@ -132,13 +132,10 @@ export function PlatformAccountsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Platform User Accounts</h1>
-            <Badge variant="brand" className="bg-indigo-950 text-indigo-300 border-indigo-800">
-              PLAT-002
-            </Badge>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">User accounts</h1>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Global account status inspection and operational suspension controls.
+            Find accounts, review their status and manage access.
           </p>
         </div>
 
@@ -161,7 +158,8 @@ export function PlatformAccountsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Search accounts by name or email address..."
+                aria-label="Search accounts by name or email address"
+                placeholder="Search accounts by name or email address"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 text-xs"
@@ -169,6 +167,7 @@ export function PlatformAccountsPage() {
             </div>
 
             <Select
+              aria-label="Account status"
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
@@ -193,7 +192,7 @@ export function PlatformAccountsPage() {
       <Card>
         <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
           <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-indigo-600" />
+            <Users className="h-4 w-4 text-brand-600" />
             <span>Total Accounts ({total})</span>
           </CardTitle>
           <span className="text-xs text-slate-400">
@@ -330,11 +329,12 @@ export function PlatformAccountsPage() {
           )}
 
           <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              Operational Reason (Recorded in Platform Audit Log)
+            <label htmlFor="change-reason" className="block font-medium text-slate-700 mb-1">
+              Reason for this change (saved to the audit log)
             </label>
             <Input
-              placeholder="Optional reason for audit log..."
+              id="change-reason"
+              placeholder="Optional reason"
               value={actionReason}
               onChange={(e) => setActionReason(e.target.value)}
               maxLength={500}

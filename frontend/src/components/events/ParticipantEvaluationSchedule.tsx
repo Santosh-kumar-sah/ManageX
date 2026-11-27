@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonStyles } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/api/client';
@@ -158,6 +158,8 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
       <div
         className={`p-4 rounded-lg border border-slate-200 bg-white space-y-3 ${className}`}
         data-testid="participant-schedule-loading"
+        role="status"
+        aria-label="Loading judging appointment"
       >
         <div className="flex items-center justify-between">
           <Skeleton className="h-4 w-40" />
@@ -205,7 +207,7 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
           <Presentation className="h-4 w-4 text-slate-400 shrink-0" />
           <span>
             {roundName ? `Round ${roundNumber || ''} (${roundName})` : 'Evaluation schedule'}: No
-            session appointment published yet.
+            judging time has been published yet.
           </span>
         </div>
         <Button
@@ -242,11 +244,11 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
             <Presentation className="h-4 w-4" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-              Evaluation Appointment
+            <h4 className="text-sm font-semibold text-slate-900">
+              Judging appointment
             </h4>
             {roundName && (
-              <p className="text-[11px] text-slate-500">
+              <p className="text-xs text-slate-500">
                 Round {roundNumber || ''}: {roundName}
               </p>
             )}
@@ -277,7 +279,7 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
         <div className="flex items-start gap-2.5">
           <Calendar className="h-4 w-4 text-brand-600 mt-0.5 shrink-0" />
           <div>
-            <span className="font-semibold text-slate-900 block">Appointment Time</span>
+            <span className="font-semibold text-slate-900 block">Time</span>
             <span className="text-slate-600 leading-relaxed">
               {formatDateTimeRange(session.startsAt, session.endsAt)}
             </span>
@@ -288,11 +290,11 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
         <div className="flex items-start gap-2.5">
           <Users className="h-4 w-4 text-brand-600 mt-0.5 shrink-0" />
           <div>
-            <span className="font-semibold text-slate-900 block">Evaluation Panel</span>
+            <span className="font-semibold text-slate-900 block">Judging panel</span>
             <span className="text-slate-600">
-              {session.panelName || `Panel ${session.panelNumber || 1}`}
+              {session.panelName || (session.panelNumber ? `Panel ${session.panelNumber}` : 'To be announced')}
               {session.slotIndex !== undefined && session.slotIndex !== null && (
-                <span className="text-slate-500 block text-[11px]">
+                <span className="text-slate-500 block text-xs">
                   Slot #{session.slotIndex + 1}
                 </span>
               )}
@@ -302,7 +304,7 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
       </div>
 
       {/* Team Context Note */}
-      <div className="text-[11px] text-slate-500 flex items-center justify-between">
+      <div className="text-xs text-slate-500 flex items-center justify-between">
         <span>
           Team:{' '}
           <span className="font-medium text-slate-700">
@@ -312,7 +314,7 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
         {session.status === 'in_progress' && (
           <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-xs">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Session is Live Now
+            Session in progress
           </span>
         )}
       </div>
@@ -324,30 +326,28 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-emerald-50/70 border border-emerald-200 text-xs">
               <div className="flex items-center gap-2 text-emerald-900 font-medium">
                 <Video className="h-4 w-4 text-emerald-700 shrink-0" />
-                <span>Evaluation meeting link is active and ready for your team.</span>
+                <span>Your team can join now.</span>
               </div>
               <a
                 href={session.meetingUrl!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="shrink-0"
+                className={buttonStyles({ size: 'sm', className: 'shrink-0' })}
               >
-                <Button size="sm" variant="primary" className="text-xs gap-1.5 w-full sm:w-auto">
                   <Video className="h-3.5 w-3.5" />
-                  <span>Join Evaluation Meeting</span>
+                  <span>Join judging meeting</span>
                   <ExternalLink className="h-3 w-3 ml-0.5" />
-                </Button>
               </a>
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-indigo-50/60 border border-indigo-200 text-xs text-indigo-900">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-brand-50/60 border border-brand-200 text-xs text-brand-900">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-brand-600 shrink-0" />
                 <div>
-                  <span className="font-semibold block text-indigo-950">
-                    Meeting link will unlock 10 minutes prior to session
+                  <span className="font-semibold block text-brand-950">
+                    The link opens 10 minutes before your appointment
                   </span>
-                  <span className="text-indigo-800 text-[11px]">
+                  <span className="text-brand-800 text-xs">
                     Available at:{' '}
                     <span className="font-medium">
                       {formatUnlockTime(session.meetingLinkAvailableAt)} ({timezone})
@@ -358,13 +358,13 @@ export const ParticipantEvaluationSchedule: React.FC<ParticipantEvaluationSchedu
               <Button
                 size="sm"
                 variant="outline"
-                className="text-xs h-7 px-2.5 bg-white border-indigo-300 text-indigo-900 hover:bg-indigo-50 shrink-0 gap-1.5"
+                className="text-xs h-7 px-2.5 bg-white border-brand-300 text-brand-900 hover:bg-brand-50 shrink-0 gap-1.5"
                 onClick={() => fetchSession(true)}
                 disabled={isRefreshing}
                 aria-label="Check meeting link availability"
               >
                 <RotateCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span>{isRefreshing ? 'Checking...' : 'Check Link'}</span>
+                <span>{isRefreshing ? 'Checking...' : 'Check link'}</span>
               </Button>
             </div>
           )}

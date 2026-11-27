@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -14,11 +14,9 @@ import { useOrg } from '@/api/OrgContext';
 export interface AuditRecord {
   id: string;
   action: string;
-  actorUserId: string | null;
-  actorName: string | null;
-  actorEmail: string | null;
-  targetType: string | null;
-  targetId: string | null;
+  actor: { name: string | null; email: string | null } | null;
+  entityType: string | null;
+  entityId: string | null;
   ipAddress: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
@@ -77,75 +75,63 @@ export function formatAuditAction(action: string): string {
 
 export function OrgAuditLogsPage() {
   const { orgId } = useParams<{ orgId: string }>();
-  const { activeOrg, activeDetails } = useOrg();
+  const { activeOrg, organisations } = useOrg();
+  const effectiveOrgId = orgId && orgId !== 'default' ? orgId : activeOrg?.id;
+  if (!effectiveOrgId) return null;
+  const name = organisations.find(org => org.id === effectiveOrgId)?.name || 'Organisation';
+  return <AuditHistory key={effectiveOrgId} orgId={effectiveOrgId} name={name} />;
+}
 
+function AuditHistory({ orgId, name }: { orgId: string; name: string }) {
   const [logs, setLogs] = useState<AuditRecord[]>([]);
-  const [pagination, setPagination] = useState<PaginationMeta>({
-    page: 1,
-    limit: 20,
-    totalRecords: 0,
-    totalPages: 1,
-  });
-  const [actionFilter, setActionFilter] = useState<string>('');
+  const [pagination, setPagination] = useState<PaginationMeta>({ page: 1, limit: 20, totalPages: 1, totalRecords: 0 });
+  const [page, setPage] = useState(1);
+  const [refresh, setRefresh] = useState(0);
+  const [actionFilter, setActionFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [denied, setDenied] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const effectiveOrgId = orgId && orgId !== 'default' ? orgId : activeOrg?.id;
-  const canViewAudit =
-    activeDetails?.membership?.permissions?.includes('org.audit.view') ||
-    activeDetails?.membership?.role?.slug === 'organisation_owner' ||
-    activeDetails?.membership?.role?.slug === 'organisation_admin';
-
-  const fetchLogs = useCallback(
-    async (pageToFetch = 1, currentFilter = actionFilter) => {
-      if (!effectiveOrgId || !canViewAudit) return;
-
+  useEffect(() => {
+    let current = true;
+    async function load() {
+      setIsLoading(true);
+      setErrorMsg(null);
       try {
-        setIsLoading(true);
-        setErrorMsg(null);
-
-        let query = `/organisations/${effectiveOrgId}/audit-logs?page=${pageToFetch}&limit=20`;
-        if (currentFilter) {
-          query += `&action=${encodeURIComponent(currentFilter)}`;
-        }
-
-        const res = await apiClient<{ logs?: AuditRecord[]; auditLogs?: AuditRecord[]; pagination?: Partial<PaginationMeta> & { total?: number } }>(query);
-        if (res.data) {
-          const list = res.data.auditLogs || res.data.logs || [];
-          const rawPag = (res.meta as any)?.pagination || res.data.pagination;
-          setLogs(list);
-          if (rawPag) {
-            setPagination({
-              page: rawPag.page ?? 1,
-              limit: rawPag.limit ?? 20,
-              totalRecords: rawPag.totalRecords ?? rawPag.total ?? 0,
-              totalPages: rawPag.totalPages ?? 1,
-            });
-          }
+        const response = await apiClient<{ auditLogs: AuditRecord[]; pagination: { page: number; limit: number; total: number; totalPages: number } }>(
+          `/organisations/${orgId}/audit-logs?page=${page}&limit=20`
+        );
+        if (current && response.data) {
+          const { auditLogs, pagination: result } = response.data;
+          setLogs(auditLogs);
+          setPagination({ ...result, totalRecords: result.total });
         }
       } catch (err) {
-        if (err instanceof ApiError) {
-          setErrorMsg(err.message);
-        } else {
-          setErrorMsg('Failed to load audit logs.');
-        }
+        if (!current) return;
+        setLogs([]);
+        if (err instanceof ApiError && err.statusCode === 403) setDenied(true);
+        else setErrorMsg(err instanceof ApiError ? err.message : 'Could not load the audit log.');
       } finally {
-        setIsLoading(false);
+        if (current) setIsLoading(false);
       }
-    },
-    [effectiveOrgId, canViewAudit, actionFilter]
-  );
+    }
+    void load();
+    return () => { current = false; };
+  }, [orgId, page, refresh]);
 
-  useEffect(() => {
-    fetchLogs(1, actionFilter);
-  }, [fetchLogs, actionFilter]);
+  const visibleLogs = actionFilter ? logs.filter(log => log.action === actionFilter) : logs;
+  const actions = [...new Set(logs.map(log => log.action))].sort();
+
+  if (denied) {
+    return <Alert variant="warning" title="Audit log access is restricted">Ask a workspace administrator if you need access to this history.</Alert>;
+  }
 
   return (
     <div className="space-y-6">
       <Breadcrumbs
         items={[
           { label: 'Workspace', href: '/app' },
-          { label: activeOrg?.name || 'Organisation', href: '/app' },
+          { label: name, href: '/app' },
           { label: 'Security & Audit Log' },
         ]}
       />
@@ -155,16 +141,15 @@ export function OrgAuditLogsPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Security & Audit Log</h1>
-            <Badge variant="neutral">Append-Only</Badge>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Immutable audit trail of administrative actions, membership lifecycles, and module toggles for{' '}
-            <strong className="text-slate-700">{activeOrg?.name || 'this organisation'}</strong>.
+            Review changes to membership, settings and tools for{' '}
+            <strong className="text-slate-700">{name}</strong>.
           </p>
         </div>
 
         <button
-          onClick={() => fetchLogs(pagination.page, actionFilter)}
+          onClick={() => setRefresh(value => value + 1)}
           disabled={isLoading}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 shadow-sm transition-colors self-start sm:self-auto disabled:opacity-50"
         >
@@ -185,7 +170,7 @@ export function OrgAuditLogsPage() {
           <div>
             <CardTitle className="text-base">Audit Trail</CardTitle>
             <CardDescription className="text-xs">
-              Showing records scoped strictly to this organisation. IP addresses and user agents recorded for compliance.
+              Filter the actions on this page of history.
             </CardDescription>
           </div>
 
@@ -195,20 +180,10 @@ export function OrgAuditLogsPage() {
               onChange={(e) => {
                 setActionFilter(e.target.value);
               }}
-              aria-label="Filter by Action"
+              aria-label="Filter actions on this page"
             >
-              <option value="">All Lifecycle Actions</option>
-              <option value="org.created">Organisation Created</option>
-              <option value="org.updated">Organisation Updated</option>
-              <option value="org.ownership_transferred">Ownership Transferred</option>
-              <option value="member.invited">Member Invited</option>
-              <option value="member.joined">Member Joined</option>
-              <option value="member.removed">Member Removed</option>
-              <option value="member.role_assigned">Role Assigned</option>
-              <option value="member.role_removed">Role Revoked</option>
-              <option value="invitation.revoked">Invitation Revoked</option>
-              <option value="module.enabled">Module Activated</option>
-              <option value="module.disabled">Module Deactivated</option>
+              <option value="">All actions</option>
+              {actions.map(action => <option key={action} value={action}>{formatAuditAction(action)}</option>)}
             </Select>
           </div>
         </CardHeader>
@@ -218,9 +193,9 @@ export function OrgAuditLogsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Timestamp</TableHead>
-                <TableHead>Event / Action</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Target Resource</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Changed by</TableHead>
+                <TableHead>Changed item</TableHead>
                 <TableHead>Origin / IP</TableHead>
               </TableRow>
             </TableHeader>
@@ -231,14 +206,14 @@ export function OrgAuditLogsPage() {
                     Loading audit trail...
                   </TableCell>
                 </TableRow>
-              ) : logs.length === 0 ? (
+              ) : visibleLogs.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-12 text-slate-400 text-xs">
                     No audit records found matching the current filter.
                   </TableCell>
                 </TableRow>
               ) : (
-                logs.map((log) => {
+                visibleLogs.map((log) => {
                   const badgeVariant = ACTION_BADGE_VARIANTS[log.action] || 'neutral';
                   return (
                     <TableRow key={log.id}>
@@ -260,23 +235,23 @@ export function OrgAuditLogsPage() {
                           <User className="h-3.5 w-3.5 text-slate-400" />
                           <div className="text-xs">
                             <span className="font-medium text-slate-800">
-                              {log.actorName || 'System'}
+                              {log.actor?.name || log.actor?.email || 'System'}
                             </span>
-                            {log.actorEmail && (
+                            {log.actor?.email && (
                               <span className="text-slate-400 block text-[11px]">
-                                {log.actorEmail}
+                                {log.actor?.email}
                               </span>
                             )}
                           </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-xs text-slate-600 font-mono">
-                        {log.targetType ? (
+                        {log.entityType ? (
                           <span>
-                            {log.targetType}
-                            {log.targetId && (
+                            {log.entityType}
+                            {log.entityId && (
                               <span className="text-slate-400 text-[11px] block">
-                                {log.targetId.substring(0, 8)}...
+                                {log.entityId.substring(0, 8)}...
                               </span>
                             )}
                           </span>
@@ -285,7 +260,7 @@ export function OrgAuditLogsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-xs text-slate-500 font-mono">
-                        {log.ipAddress || 'Internal'}
+                        {log.ipAddress || 'Not recorded'}
                       </TableCell>
                     </TableRow>
                   );
@@ -301,7 +276,7 @@ export function OrgAuditLogsPage() {
                 totalPages={pagination.totalPages}
                 totalItems={pagination.totalRecords}
                 limit={pagination.limit}
-                onPageChange={(newPage) => fetchLogs(newPage, actionFilter)}
+                onPageChange={(newPage) => { setActionFilter(''); setPage(newPage); }}
               />
             </div>
           )}
@@ -310,7 +285,7 @@ export function OrgAuditLogsPage() {
 
       <div className="flex items-center gap-2 text-[11px] text-slate-400 justify-end">
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-        <span>PostgreSQL Append-Only Audit Invariant Enforced (AUD-001)</span>
+        <span>Workspace members can’t edit or delete audit entries.</span>
       </div>
     </div>
   );

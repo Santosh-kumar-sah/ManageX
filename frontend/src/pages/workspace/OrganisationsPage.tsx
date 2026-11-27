@@ -61,7 +61,7 @@ export function OrganisationsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Your Organisations</h1>
           <p className="text-xs text-slate-500 mt-1">
-            Manage your organization workspaces, switch between teams, or create a new organisation.
+            Switch between your teams or create an organisation.
           </p>
         </div>
         <Button
@@ -123,7 +123,7 @@ export function OrganisationsPage() {
                   <CardTitle className="text-base text-slate-900">{org.name}</CardTitle>
                   <CardDescription className="text-xs flex items-center gap-2 mt-1">
                     <span>
-                      Slug: <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px]">{org.slug}</code>
+                      Workspace handle: <code className="bg-slate-100 px-1 py-0.5 rounded text-[11px]">{org.slug}</code>
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-1">
@@ -182,7 +182,7 @@ export function OrganisationsPage() {
           </FormField>
 
           <FormField
-            label="Workspace URL Slug (Optional)"
+            label="Workspace handle (optional)"
             htmlFor="org-slug"
             helperText="Unique URL identifier. If omitted, will be generated automatically from the name."
           >

@@ -16,7 +16,7 @@ import {
   Award,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonStyles } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Alert } from '@/components/ui/Alert';
@@ -179,7 +179,7 @@ export function StudentDashboardPage({
       if (err instanceof ApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Failed to load your participant dashboard. Please try again.');
+        setErrorMessage('We could not load your events. Please try again.');
       }
     } finally {
       setIsLoading(false);
@@ -208,29 +208,16 @@ export function StudentDashboardPage({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-      {/* Header Profile Greeting */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-8 border-b border-border">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-200 text-xs font-semibold mb-2">
-            <Trophy className="h-3.5 w-3.5" />
-            <span>Participant Dashboard</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Participant Dashboard
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Welcome back, <span className="font-semibold text-slate-700">{user?.fullName || user?.email}</span>. View your event registrations, hackathon teams, and project submissions.
-          </p>
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-8 sm:py-14">
+      <header className="flex flex-col items-start justify-between gap-5 border-b border-border pb-7 sm:flex-row sm:items-center">
+        <div className="min-w-0">
+          <h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">My events</h1>
+          <p className="mt-3 break-words text-base text-slate-600">Registrations, teams and submissions for {user?.fullName || user?.email}.</p>
         </div>
-
-        <Link to="/events">
-          <Button variant="outline" className="gap-2">
-            <span>Browse More Events</span>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <Link to="/events" className={buttonStyles({ variant: 'outline' })}>
+          Browse events <ChevronRight className="h-4 w-4" aria-hidden="true" />
         </Link>
-      </div>
+      </header>
 
       {/* Error state */}
       {errorMessage && (
@@ -244,74 +231,29 @@ export function StudentDashboardPage({
         </Alert>
       )}
 
-      {/* Quick Stats Overview */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
-        <div className="p-4 bg-white rounded-lg border border-border shadow-xs">
-          <div className="text-xs font-medium text-slate-500">Active Registrations</div>
-          <div className="text-2xl font-bold text-slate-900 mt-1">{activeRegistrations.length}</div>
-        </div>
-        <div className="p-4 bg-white rounded-lg border border-border shadow-xs">
-          <div className="text-xs font-medium text-slate-500">Withdrawn</div>
-          <div className="text-2xl font-bold text-slate-600 mt-1">{withdrawnRegistrations.length}</div>
-        </div>
-        <div className="p-4 bg-white rounded-lg border border-border shadow-xs">
-          <div className="text-xs font-medium text-slate-500">Past Events</div>
-          <div className="text-2xl font-bold text-slate-600 mt-1">{pastRegistrations.length}</div>
-        </div>
-        <div className="p-4 bg-white rounded-lg border border-border shadow-xs">
-          <div className="text-xs font-medium text-slate-500">Total Events</div>
-          <div className="text-2xl font-bold text-brand-600 mt-1">{registrations.length}</div>
-        </div>
-      </div>
-
-      {/* Filter Tabs */}
-      <div className="flex border-b border-border mt-8 gap-2 overflow-x-auto">
-        <button
-          onClick={() => setCurrentTab('all')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            currentTab === 'all'
-              ? 'border-brand-600 text-brand-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          All Events ({registrations.length})
-        </button>
-        <button
-          onClick={() => setCurrentTab('active')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            currentTab === 'active'
-              ? 'border-brand-600 text-brand-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Active ({activeRegistrations.length})
-        </button>
-        <button
-          onClick={() => setCurrentTab('withdrawn')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            currentTab === 'withdrawn'
-              ? 'border-brand-600 text-brand-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Withdrawn ({withdrawnRegistrations.length})
-        </button>
-        <button
-          onClick={() => setCurrentTab('past')}
-          className={`pb-3 px-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-            currentTab === 'past'
-              ? 'border-brand-600 text-brand-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          Past Events ({pastRegistrations.length})
-        </button>
+      <div aria-label="Filter registrations" role="group" className="mt-5 flex flex-wrap gap-1 border-b border-border pb-4">
+        {([
+          ['all', 'All events', registrations.length],
+          ['active', 'Active', activeRegistrations.length],
+          ['withdrawn', 'Withdrawn', withdrawnRegistrations.length],
+          ['past', 'Past events', pastRegistrations.length],
+        ] as const).map(([value, label, count]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={currentTab === value}
+            onClick={() => setCurrentTab(value)}
+            className={`rounded-md px-3 py-2 text-sm font-medium ${currentTab === value ? 'bg-brand-100 text-brand-900' : 'text-slate-600 hover:bg-white'}`}
+          >
+            {label}{!isLoading && !errorMessage && ` (${count})`}
+          </button>
+        ))}
       </div>
 
       {/* Content Area */}
       <div className="mt-8 space-y-8">
-        {isLoading ? (
-          <div className="space-y-6">
+        {errorMessage ? null : isLoading ? (
+          <div role="status" aria-label="Loading your events" className="space-y-6">
             {[1, 2].map((i) => (
               <Card key={i} className="p-6 space-y-4 animate-pulse">
                 <Skeleton className="h-6 w-1/3 rounded" />
@@ -325,35 +267,33 @@ export function StudentDashboardPage({
             ))}
           </div>
         ) : displayedRegistrations.length === 0 ? (
-          <Card className="text-center py-16 px-6 max-w-xl mx-auto shadow-xs border-dashed border-2">
+          <Card className="text-center py-14 px-6 border-border">
             <div className="h-14 w-14 rounded-full bg-brand-50 flex items-center justify-center mx-auto text-brand-600 mb-4">
               <Trophy className="h-7 w-7" />
             </div>
             <CardTitle className="text-xl font-bold text-slate-900">
               {registrations.length === 0
-                ? 'No Event Registrations Yet'
+                ? 'No registrations yet'
                 : `No ${currentTab === 'active' ? 'Active' : currentTab === 'withdrawn' ? 'Withdrawn' : 'Past'} Events Found`}
             </CardTitle>
             <p className="mt-2 text-sm text-slate-500 leading-relaxed">
               {registrations.length === 0
-                ? 'You have not registered for any hackathons or technical events. Browse our directory of upcoming events to compete, innovate, and showcase your skills.'
+                ? 'Find a public event and register. Your event details and updates will appear here.'
                 : currentTab === 'active'
-                ? 'You are not currently enrolled in any upcoming events. Explore our public directory to find hackathons and workshops.'
+                ? 'Browse public events to find one to join.'
                 : currentTab === 'withdrawn'
                 ? 'You do not have any withdrawn registrations.'
-                : 'No past completed events found.'}
+                : 'Finished events will appear here.'}
             </p>
             <div className="mt-6">
               {registrations.length === 0 || currentTab === 'active' ? (
-                <Link to="/events">
-                  <Button size="md" className="gap-2">
-                    <span>Browse Upcoming Events</span>
+                <Link to="/events" className={buttonStyles({})}>
+                    <span>Browse public events</span>
                     <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </Link>
+                  </Link>
               ) : (
                 <Button size="md" variant="outline" onClick={() => setCurrentTab('all')}>
-                  <span>View All Registrations</span>
+                  <span>View all registrations</span>
                 </Button>
               )}
             </div>
@@ -368,7 +308,7 @@ export function StudentDashboardPage({
             return (
               <Card key={event.id} className="overflow-hidden border-border shadow-xs hover:border-slate-300 transition-colors">
                 {/* Event Header Banner */}
-                <CardHeader className="bg-surface-subtle border-b border-border py-4">
+                <CardHeader className="border-b border-border bg-white py-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -382,7 +322,7 @@ export function StudentDashboardPage({
                           variant={isRegistered ? 'success' : 'neutral'}
                           className="text-xs font-medium"
                         >
-                          {isRegistered ? 'Confirmed Registration' : 'Withdrawn'}
+                          {isRegistered ? 'Registered' : 'Withdrawn'}
                         </Badge>
                         <Badge
                           variant={isPast ? 'neutral' : event.status === 'in_progress' ? 'brand' : 'neutral'}
@@ -411,12 +351,10 @@ export function StudentDashboardPage({
                     </div>
 
                     <div className="flex items-center gap-2 self-start sm:self-center">
-                      <Link to={`/events/${event.id}`}>
-                        <Button variant="outline" size="sm" className="gap-1.5">
-                          <span>View Event Page</span>
+                      <Link to={`/events/${event.id}`} className={buttonStyles({ size: 'sm', variant: "outline", className: "gap-1.5" })}>
+                          <span>View event</span>
                           <ExternalLink className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
+                        </Link>
                     </div>
                   </div>
                 </CardHeader>
@@ -442,11 +380,9 @@ export function StudentDashboardPage({
                   </div>
 
                   {!isRegistered && (
-                    <Link to={`/events/${event.id}`}>
-                      <Button size="sm" variant="outline" className="text-xs h-7 text-brand-600 border-brand-300 hover:bg-brand-50">
-                        Re-register for Event
-                      </Button>
-                    </Link>
+                    <Link to={`/events/${event.id}`} className={buttonStyles({ size: 'sm', variant: "outline", className: "text-xs h-7 text-brand-600 border-brand-300 hover:bg-brand-50" })}>
+                          Register again
+                        </Link>
                   )}
                 </div>
 
@@ -456,7 +392,7 @@ export function StudentDashboardPage({
                     <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-xs space-y-1">
                       <div className="flex items-center gap-2 font-bold text-emerald-900">
                         <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                        <span>Instructions for Registered Participants</span>
+                        <span>Joining instructions</span>
                       </div>
                       <p className="text-emerald-800 whitespace-pre-line pl-6 leading-relaxed">
                         {registration.participantInstructions}
@@ -468,14 +404,14 @@ export function StudentDashboardPage({
                     <div className="flex items-center gap-2.5">
                       <Calendar className="h-4 w-4 text-slate-400 shrink-0" />
                       <div>
-                        <div className="font-semibold text-slate-900">Event Start</div>
+                        <div className="font-semibold text-slate-900">Starts</div>
                         <div>{formatDate(event.startAt, event.timezone)}</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2.5">
                       <Clock className="h-4 w-4 text-slate-400 shrink-0" />
                       <div>
-                        <div className="font-semibold text-slate-900">Event End</div>
+                        <div className="font-semibold text-slate-900">Ends</div>
                         <div>{formatDate(event.endAt, event.timezone)}</div>
                       </div>
                     </div>
@@ -487,7 +423,7 @@ export function StudentDashboardPage({
                       )}
                       <div>
                         <div className="font-semibold text-slate-900">Location</div>
-                        <div className="capitalize">{event.locationType} {event.location ? `— ${event.location}` : ''}</div>
+                        <div className="capitalize">{event.locationType.replace(/_/g, ' ')} {event.location ? `— ${event.location}` : ''}</div>
                       </div>
                     </div>
                   </div>
@@ -539,11 +475,9 @@ export function StudentDashboardPage({
                       ) : (
                         <div className="text-xs text-slate-500 flex items-center justify-between bg-slate-50 p-3 rounded">
                           <span>You have registered as an individual participant and have not joined a team yet.</span>
-                          <Link to={`/events/${event.id}`}>
-                            <Button variant="outline" size="sm" className="text-xs">
-                              Manage Team
-                            </Button>
-                          </Link>
+                          <Link to={`/events/${event.id}`} className={buttonStyles({ size: 'sm', variant: "outline", className: "text-xs" })}>
+                          Manage Team
+                        </Link>
                         </div>
                       )}
                     </div>
@@ -555,7 +489,7 @@ export function StudentDashboardPage({
                       <div className="flex items-center gap-2">
                         <GitBranch className="h-4 w-4 text-brand-600" />
                         <h3 className="text-sm font-bold text-slate-900">
-                          Rounds & Deliverables
+                          Rounds and submissions
                         </h3>
                       </div>
 
@@ -582,7 +516,7 @@ export function StudentDashboardPage({
                                     {round.name}
                                   </span>
                                   <Badge variant="neutral" className="capitalize text-[11px]">
-                                    {round.status}
+                                    {round.status.replace(/_/g, ' ')}
                                   </Badge>
                                 </div>
 
@@ -593,7 +527,7 @@ export function StudentDashboardPage({
                                     className="text-xs flex items-center gap-1 font-semibold"
                                   >
                                     <CheckCircle2 className="h-3 w-3" />
-                                    <span className="capitalize">{roundAdvancement.status}</span>
+                                    <span className="capitalize">{roundAdvancement.status.replace(/_/g, ' ')}</span>
                                     {roundAdvancement.qualificationRank && (
                                       <span>(Rank #{roundAdvancement.qualificationRank})</span>
                                     )}
@@ -653,12 +587,10 @@ export function StudentDashboardPage({
                                   </div>
                                 )}
 
-                                <Link to={`/events/${event.id}`}>
-                                  <Button variant="ghost" size="sm" className="text-xs text-brand-600 hover:text-brand-700">
-                                    <span>{roundSubmission ? 'Edit Submission' : 'Submit Project'}</span>
+                                <Link to={`/events/${event.id}`} className={buttonStyles({ size: 'sm', variant: "ghost", className: "text-xs text-brand-600 hover:text-brand-700" })}>
+                          <span>{roundSubmission ? 'Edit Submission' : 'Submit Project'}</span>
                                     <ChevronRight className="h-3.5 w-3.5 ml-1" />
-                                  </Button>
-                                </Link>
+                        </Link>
                               </div>
 
                               {/* Scheduled Evaluation Appointment */}
@@ -677,7 +609,7 @@ export function StudentDashboardPage({
                                 </div>
                               ) : (
                                 <div className="ml-7 pt-2 border-t border-border text-xs text-slate-500 italic">
-                                  Form or join a team to view scheduled round evaluation appointments.
+                                  Join a team to see its judging appointments.
                                 </div>
                               )}
                             </div>
@@ -693,15 +625,13 @@ export function StudentDashboardPage({
                       <div className="flex items-center gap-2.5 text-amber-900 font-medium">
                         <Award className="h-5 w-5 text-amber-600 shrink-0" />
                         <div>
-                          <div className="font-bold text-sm">Competition Results are Published!</div>
-                          <div>Official scoring and rankings have been finalized by event judges and organisers.</div>
+                          <div className="font-bold text-sm">Results are available</div>
+                          <div>See the scores and rankings published by the organisers.</div>
                         </div>
                       </div>
-                      <Link to={`/events/${event.id}`}>
-                        <Button size="sm" variant="outline" className="bg-white border-amber-300 text-amber-900 hover:bg-amber-50">
-                          View Results Leaderboard
-                        </Button>
-                      </Link>
+                      <Link to={`/events/${event.id}`} className={buttonStyles({ size: 'sm', variant: "outline", className: "bg-white border-amber-300 text-amber-900 hover:bg-amber-50" })}>
+                          View results
+                        </Link>
                     </div>
                   )}
                 </CardContent>

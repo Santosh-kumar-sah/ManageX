@@ -32,11 +32,14 @@ describe('Phase 10 — Accessibility Primitives Suite (UI-005)', () => {
   it('3. FormField connects label to input and announces errors with role="alert"', () => {
     const html = renderToStaticMarkup(
       <FormField label="Email Address" htmlFor="email-input" error="Email is required">
-        <Input id="email-input" />
+        <Input id="email-input" aria-describedby="email-policy" />
       </FormField>
     );
 
     expect(html).toContain('for="email-input"');
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('aria-describedby="email-policy email-input-message"');
+    expect(html).toContain('id="email-input-message"');
     expect(html).toContain('Email Address');
     expect(html).toContain('role="alert"');
     expect(html).toContain('Email is required');
@@ -56,10 +59,11 @@ describe('Phase 10 — Accessibility Primitives Suite (UI-005)', () => {
 
     expect(html).toContain('role="dialog"');
     expect(html).toContain('aria-modal="true"');
-    expect(html).toContain('aria-labelledby="dialog-title"');
-    expect(html).toContain('aria-describedby="dialog-description"');
-    expect(html).toContain('id="dialog-title"');
-    expect(html).toContain('id="dialog-description"');
+    for (const attr of ['aria-labelledby', 'aria-describedby']) {
+      const id = html.match(new RegExp(attr + '="([^"]+)"'))?.[1];
+      expect(id).toBeTruthy();
+      expect(html).toContain('id="' + id + '"');
+    }
     expect(html).toContain('aria-label="Close dialog"');
   });
 

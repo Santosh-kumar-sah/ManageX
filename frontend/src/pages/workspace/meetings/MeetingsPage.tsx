@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Breadcrumbs } from '@/components/ui/Breadcrumbs';
 import { Card, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonStyles } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { Alert } from '@/components/ui/Alert';
@@ -55,6 +55,22 @@ interface MeetingsPageProps {
   initialTab?: 'meetings' | 'action-items' | 'analytics';
   initialActionItems?: MeetingActionItem[];
   initialAnalytics?: MeetingAnalyticsData | null;
+}
+
+function formatSchedule(startAt: string, endAt: string, timezone: string) {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      month: 'short', day: '2-digit', timeZone: timezone || 'UTC',
+    }).formatToParts(start);
+    const range = new Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium', timeStyle: 'short', timeZone: timezone || 'UTC',
+    }).formatRange(start, end);
+    return { month: parts.find(part => part.type === 'month')?.value, day: parts.find(part => part.type === 'day')?.value, range };
+  } catch {
+    return { month: '', day: '', range: [startAt, endAt].filter(Boolean).join(' – ') };
+  }
 }
 
 export function MeetingsPage({
@@ -272,18 +288,6 @@ export function MeetingsPage({
     );
   });
 
-  const formatMeetingDate = (isoString: string, timezone: string) => {
-    try {
-      return new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone || 'UTC',
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }).format(new Date(isoString));
-    } catch {
-      return new Date(isoString).toLocaleString();
-    }
-  };
-
   return (
     <div className="space-y-6">
       <Breadcrumbs
@@ -297,9 +301,9 @@ export function MeetingsPage({
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-5">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Meetings & MOM</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Meetings</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Schedule, track, and organize structured meetings with decisions and action items.
+            Find your next meeting or follow up on a decision.
           </p>
         </div>
 
@@ -316,7 +320,7 @@ export function MeetingsPage({
       </div>
 
       {/* Top-Level Navigation Tabs */}
-      <div className="flex border-b border-border gap-6">
+      <div role="group" aria-label="Meeting views" className="flex flex-wrap border-b border-border gap-x-5 gap-y-2">
         <button
           type="button"
           onClick={() => setActiveTab('meetings')}
@@ -325,6 +329,7 @@ export function MeetingsPage({
               ? 'border-brand-600 text-brand-600 font-semibold'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
+          aria-pressed={activeTab === 'meetings'}
           data-testid="tab-meetings"
         >
           <Calendar className="h-4 w-4" />
@@ -338,6 +343,7 @@ export function MeetingsPage({
               ? 'border-brand-600 text-brand-600 font-semibold'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
+          aria-pressed={activeTab === 'action-items'}
           data-testid="tab-action-items"
         >
           <CheckSquare className="h-4 w-4" />
@@ -351,6 +357,7 @@ export function MeetingsPage({
               ? 'border-brand-600 text-brand-600 font-semibold'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
           }`}
+          aria-pressed={activeTab === 'analytics'}
           data-testid="tab-analytics"
         >
           <BarChart2 className="h-4 w-4" />
@@ -369,11 +376,7 @@ export function MeetingsPage({
               <p className="text-xs text-slate-600 max-w-md mx-auto">{accessDenied}</p>
             </div>
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Link to="/app">
-                <Button size="sm" variant="outline">
-                  Return to Workspace
-                </Button>
-              </Link>
+              <Link to="/app" className={buttonStyles({ variant: 'outline', size: 'sm' })}>Return to workspace</Link>
             </div>
           </CardContent>
         </Card>
@@ -381,26 +384,28 @@ export function MeetingsPage({
         <>
           {errorMsg && (
             <Alert variant="error" title="Error Loading Meetings">
-              {errorMsg}
+              {errorMsg} <button type="button" className="workspace-text-link" onClick={fetchMeetings}>Try again</button>
             </Alert>
           )}
 
           {/* Filter and Search Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-lg border border-border shadow-xs">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 py-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search meetings by title..."
+            aria-label="Search meetings by title"
+            placeholder="Search meetings"
             className="pl-9"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Timeframe Filter Tabs */}
-          <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs">
+          <div role="group" aria-label="Meeting dates" className="inline-flex flex-wrap rounded-md border border-slate-200 bg-slate-50 p-0.5 text-sm">
             <button
+              aria-pressed={timeframeFilter === 'upcoming'}
               onClick={() => setTimeframeFilter('upcoming')}
               className={`rounded px-3 py-1.5 font-medium transition-all ${
                 timeframeFilter === 'upcoming'
@@ -411,6 +416,7 @@ export function MeetingsPage({
               Upcoming
             </button>
             <button
+              aria-pressed={timeframeFilter === 'past'}
               onClick={() => setTimeframeFilter('past')}
               className={`rounded px-3 py-1.5 font-medium transition-all ${
                 timeframeFilter === 'past'
@@ -421,6 +427,7 @@ export function MeetingsPage({
               Past
             </button>
             <button
+              aria-pressed={timeframeFilter === 'all'}
               onClick={() => setTimeframeFilter('all')}
               className={`rounded px-3 py-1.5 font-medium transition-all ${
                 timeframeFilter === 'all'
@@ -434,6 +441,7 @@ export function MeetingsPage({
 
           {/* Status Dropdown */}
           <select
+            aria-label="Meeting status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -450,7 +458,7 @@ export function MeetingsPage({
 
       {/* Meetings List */}
       {isLoading ? (
-        <div className="space-y-4">
+        <div role="status" aria-label="Loading meetings" className="space-y-4">
           {[1, 2, 3].map((n) => (
             <div
               key={n}
@@ -458,7 +466,7 @@ export function MeetingsPage({
             />
           ))}
         </div>
-      ) : meetings.length === 0 ? (
+      ) : errorMsg ? null : meetings.length === 0 ? (
         <Card className="border-dashed text-center py-12">
           <CardContent className="space-y-3">
             <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
@@ -467,8 +475,8 @@ export function MeetingsPage({
             <CardTitle className="text-base text-slate-800">No meetings found</CardTitle>
             <CardDescription className="max-w-md mx-auto text-slate-500">
               {searchQuery || timeframeFilter !== 'all' || statusFilter !== 'all'
-                ? 'No meetings match your selected filters. Try clearing your search or filters.'
-                : 'Get started by scheduling your first team or project meeting.'}
+                ? 'Try a different date range, status or meeting title.'
+                : canCreateMeeting ? 'Schedule a meeting to add it here.' : 'Meetings you can view will appear here.'}
             </CardDescription>
             {canCreateMeeting && !searchQuery && (
               <Button
@@ -484,105 +492,38 @@ export function MeetingsPage({
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {meetings.map((meeting) => (
-            <Card
-              key={meeting.id}
-              className="hover:border-slate-300 transition-all shadow-xs overflow-hidden"
-            >
-              <CardContent className="p-5">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="space-y-2 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={MEETING_STATUS_VARIANTS[meeting.status]}>
-                        {MEETING_STATUS_LABELS[meeting.status] || meeting.status}
-                      </Badge>
-
-                      {isMeetingOverdue(meeting.status, meeting.endAt, timeTick) && (
-                        <Badge variant="warning" className="flex items-center gap-1" data-testid="overdue-badge">
-                          Overdue
-                        </Badge>
-                      )}
-
-                      {meeting.visibility === 'attendees_only' && (
-                        <Badge variant="warning" className="flex items-center gap-1">
-                          <Lock className="h-3 w-3" />
-                          Attendees Only
-                        </Badge>
-                      )}
-
-                      <span className="text-xs text-slate-500 flex items-center gap-1 font-mono">
-                        <Clock className="h-3 w-3" />
-                        {getTimezoneLabel(meeting.timezone)}
-                      </span>
-                    </div>
-
-                    <h2 className="text-lg font-semibold text-slate-900 hover:text-brand-600">
-                      <Link to={`/app/organisations/${effectiveOrgId}/meetings/${meeting.id}`}>
-                        {meeting.title}
-                      </Link>
-                    </h2>
-
-                    {meeting.description && (
-                      <p className="text-sm text-slate-600 line-clamp-1">
-                        {meeting.description}
-                      </p>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 pt-1">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                        {formatMeetingDate(meeting.startAt, meeting.timezone)} -{' '}
-                        {formatMeetingDate(meeting.endAt, meeting.timezone)}
-                      </span>
-
-                      {meeting.locationType === 'virtual' && (
-                        <span className="flex items-center gap-1 text-brand-600">
-                          <Video className="h-3.5 w-3.5" />
-                          Virtual
-                        </span>
-                      )}
-
-                      {meeting.locationType === 'in_person' && (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                          {meeting.location || 'In-Person'}
-                        </span>
-                      )}
-
-                      {meeting.locationType === 'hybrid' && (
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                          Hybrid ({meeting.location || 'Physical + Virtual'})
-                        </span>
-                      )}
-
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3.5 w-3.5 text-slate-400" />
-                        {meeting.attendeeCount ?? 1} attendee{meeting.attendeeCount === 1 ? '' : 's'}
-                      </span>
-
-                      <span className="flex items-center gap-1">
-                        <ListOrdered className="h-3.5 w-3.5 text-slate-400" />
-                        {meeting.agendaCount ?? 0} agenda item{meeting.agendaCount === 1 ? '' : 's'}
-                      </span>
-                    </div>
+        <ul className="meeting-programme" aria-label="Meeting schedule">
+          {meetings.map(meeting => {
+            const { month, day, range } = formatSchedule(meeting.startAt, meeting.endAt, meeting.timezone);
+            const href = `/app/organisations/${effectiveOrgId}/meetings/${meeting.id}`;
+            return (
+              <li key={meeting.id}>
+                <span className="meeting-date" aria-hidden="true"><small>{month}</small><b>{day}</b></span>
+                <div className="min-w-0 space-y-2">
+                  <h2 className="text-lg font-semibold tracking-tight text-slate-900"><Link className="hover:text-brand-700 hover:underline" to={href}>{meeting.title}</Link></h2>
+                  <div className="meeting-meta">
+                    <span><Clock size={15} aria-hidden="true" />{range}</span>
+                    <span>{getTimezoneLabel(meeting.timezone)}</span>
                   </div>
-
-                  <div className="flex items-center gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                    <Link
-                      to={`/app/organisations/${effectiveOrgId}/meetings/${meeting.id}`}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                      Details
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
+                  <div className="meeting-meta">
+                    {meeting.locationType === 'virtual' && <span><Video size={15} aria-hidden="true" />Virtual</span>}
+                    {meeting.locationType === 'in_person' && <span><MapPin size={15} aria-hidden="true" />{meeting.location || 'In person'}</span>}
+                    {meeting.locationType === 'hybrid' && <span><MapPin size={15} aria-hidden="true" />Hybrid{meeting.location ? ' · ' + meeting.location : ''}</span>}
+                    {meeting.attendeeCount != null && <span><Users size={15} aria-hidden="true" />{meeting.attendeeCount} {meeting.attendeeCount === 1 ? 'attendee' : 'attendees'}</span>}
+                    {meeting.agendaCount != null && <span><ListOrdered size={15} aria-hidden="true" />{meeting.agendaCount} agenda {meeting.agendaCount === 1 ? 'item' : 'items'}</span>}
+                  </div>
+                  {meeting.description && <p className="line-clamp-2 text-sm text-slate-600">{meeting.description}</p>}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={MEETING_STATUS_VARIANTS[meeting.status]}>{MEETING_STATUS_LABELS[meeting.status] || meeting.status}</Badge>
+                    {isMeetingOverdue(meeting.status, meeting.endAt, timeTick) && <Badge variant="warning" data-testid="overdue-badge">Overdue</Badge>}
+                    {meeting.visibility === 'attendees_only' && <Badge variant="neutral"><Lock size={12} className="mr-1" />Attendees only</Badge>}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                <Link className="meeting-details workspace-text-link text-sm" to={href} aria-label={`Details for ${meeting.title}`}>Details</Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {/* Schedule Meeting Modal */}
@@ -597,20 +538,20 @@ export function MeetingsPage({
         />
       )}
         </>
-      ) : (
+      ) : activeTab === 'action-items' ? (
         /* My Action Items View */
         <>
           {actionItemError && (
-            <Alert variant="error" title="Error Loading Action Items">
-              {actionItemError}
+            <Alert variant="error" title="Could not load your action items">
+              {actionItemError} <button type="button" className="workspace-text-link" onClick={fetchActionItems}>Try again</button>
             </Alert>
           )}
 
           {/* Filter and Search Bar for Action Items */}
-          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 bg-white p-4 rounded-lg border border-border shadow-xs">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 py-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <Input
+              <Input aria-label="Search action items or meetings"
                 value={actionItemSearch}
                 onChange={(e) => setActionItemSearch(e.target.value)}
                 placeholder="Search action items or meetings..."
@@ -620,8 +561,9 @@ export function MeetingsPage({
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Timeframe Filter Tabs */}
-              <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs">
+              <div role="group" aria-label="Action item due dates" className="inline-flex flex-wrap rounded-md border border-slate-200 bg-slate-50 p-0.5 text-sm">
                 <button
+                  aria-pressed={actionItemTimeframe === 'all'}
                   onClick={() => setActionItemTimeframe('all')}
                   className={`rounded px-3 py-1.5 font-medium transition-all ${
                     actionItemTimeframe === 'all'
@@ -632,6 +574,7 @@ export function MeetingsPage({
                   All
                 </button>
                 <button
+                  aria-pressed={actionItemTimeframe === 'overdue'}
                   onClick={() => setActionItemTimeframe('overdue')}
                   className={`rounded px-3 py-1.5 font-medium transition-all ${
                     actionItemTimeframe === 'overdue'
@@ -642,6 +585,7 @@ export function MeetingsPage({
                   Overdue
                 </button>
                 <button
+                  aria-pressed={actionItemTimeframe === 'due_soon'}
                   onClick={() => setActionItemTimeframe('due_soon')}
                   className={`rounded px-3 py-1.5 font-medium transition-all ${
                     actionItemTimeframe === 'due_soon'
@@ -652,6 +596,7 @@ export function MeetingsPage({
                   Due Soon
                 </button>
                 <button
+                  aria-pressed={actionItemTimeframe === 'completed'}
                   onClick={() => setActionItemTimeframe('completed')}
                   className={`rounded px-3 py-1.5 font-medium transition-all ${
                     actionItemTimeframe === 'completed'
@@ -664,7 +609,7 @@ export function MeetingsPage({
               </div>
 
               {/* Status Dropdown */}
-              <select
+              <select aria-label="Action item status"
                 value={actionItemStatus}
                 onChange={(e) => setActionItemStatus(e.target.value)}
                 className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -677,7 +622,7 @@ export function MeetingsPage({
               </select>
 
               {/* Priority Dropdown */}
-              <select
+              <select aria-label="Action item priority"
                 value={actionItemPriority}
                 onChange={(e) => setActionItemPriority(e.target.value)}
                 className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -701,7 +646,7 @@ export function MeetingsPage({
                 />
               ))}
             </div>
-          ) : filteredActionItems.length === 0 ? (
+          ) : actionItemError ? null : filteredActionItems.length === 0 ? (
             <Card className="border-dashed text-center py-12">
               <CardContent className="space-y-3">
                 <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
@@ -849,7 +794,7 @@ export function MeetingsPage({
             </div>
           )}
         </>
-      )}
+      ) : null}
 
       {/* Tab 3: Analytics Dashboard */}
       {activeTab === 'analytics' && (
@@ -857,17 +802,18 @@ export function MeetingsPage({
           {/* Controls Header: Timeframe Selector */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Meeting Analytics & Performance</h2>
-              <p className="text-xs text-slate-500">Real-time metrics on organisation meeting lifecycle, RSVP engagement, and action items.</p>
+              <h2 className="text-lg font-semibold text-slate-900">Meeting analytics</h2>
+              <p className="text-xs text-slate-500">Review meeting outcomes, attendance and follow-up work.</p>
             </div>
 
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 self-start sm:self-auto">
+            <div role="group" aria-label="Analytics date range" className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-surface-subtle p-1">
               <button
                 type="button"
+                aria-pressed={analyticsTimeframe === 'all'}
                 onClick={() => setAnalyticsTimeframe('all')}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   analyticsTimeframe === 'all'
-                    ? 'bg-white text-indigo-700 shadow-2xs font-semibold'
+                    ? 'bg-white text-brand-700 shadow-2xs font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
                 data-testid="analytics-timeframe-all"
@@ -876,10 +822,11 @@ export function MeetingsPage({
               </button>
               <button
                 type="button"
+                aria-pressed={analyticsTimeframe === '30d'}
                 onClick={() => setAnalyticsTimeframe('30d')}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   analyticsTimeframe === '30d'
-                    ? 'bg-white text-indigo-700 shadow-2xs font-semibold'
+                    ? 'bg-white text-brand-700 shadow-2xs font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
                 data-testid="analytics-timeframe-30d"
@@ -888,10 +835,11 @@ export function MeetingsPage({
               </button>
               <button
                 type="button"
+                aria-pressed={analyticsTimeframe === '90d'}
                 onClick={() => setAnalyticsTimeframe('90d')}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   analyticsTimeframe === '90d'
-                    ? 'bg-white text-indigo-700 shadow-2xs font-semibold'
+                    ? 'bg-white text-brand-700 shadow-2xs font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
                 data-testid="analytics-timeframe-90d"
@@ -902,12 +850,12 @@ export function MeetingsPage({
           </div>
 
           {isLoadingAnalytics ? (
-            <div className="p-12 text-center text-slate-500 text-sm">
+            <div role="status" className="p-12 text-center text-slate-500 text-sm">
               Loading analytics...
             </div>
           ) : analyticsError ? (
             <Alert variant="error" title="Failed to Load Analytics">
-              {analyticsError}
+              {analyticsError} <button type="button" className="workspace-text-link" onClick={() => fetchAnalytics(analyticsTimeframe)}>Try again</button>
             </Alert>
           ) : !analyticsData || analyticsData.summary.totalMeetings === 0 ? (
             <Card className="border-dashed border-2 border-slate-200 p-12 text-center max-w-lg mx-auto">
@@ -917,7 +865,7 @@ export function MeetingsPage({
                 </div>
                 <h3 className="text-base font-semibold text-slate-800">No meeting activity found</h3>
                 <p className="text-sm text-slate-500">
-                  There are no recorded meetings in this organisation for the selected timeframe. As meetings are scheduled and held, completion rates and actionable outcomes will automatically populate here.
+                  Try a longer date range to see previous meetings.
                 </p>
               </CardContent>
             </Card>
@@ -962,7 +910,7 @@ export function MeetingsPage({
                   <CardContent className="p-5 space-y-2">
                     <div className="flex items-center justify-between text-slate-500">
                       <span className="text-xs font-medium uppercase tracking-wider">RSVP Acceptance Rate</span>
-                      <Users className="h-4 w-4 text-indigo-500" />
+                      <Users className="h-4 w-4 text-brand-500" />
                     </div>
                     <div className="text-2xl font-bold text-slate-900" data-testid="metric-attendance-rate">
                       {analyticsData.attendance.acceptanceRate}%
@@ -1032,7 +980,7 @@ export function MeetingsPage({
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-2 text-slate-700">
-                          <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                          <span className="h-2.5 w-2.5 rounded-full bg-brand-500" />
                           Scheduled
                         </span>
                         <span className="font-medium text-slate-900">{analyticsData.summary.scheduledMeetings}</span>
@@ -1116,11 +1064,11 @@ export function MeetingsPage({
                   </CardContent>
                 </Card>
 
-                {/* Card C: Action Items Lifecycle */}
+                {/* Card C: Action item progress */}
                 <Card className="shadow-xs">
                   <CardContent className="p-6 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <h3 className="text-sm font-semibold text-slate-900">Action Items Lifecycle</h3>
+                      <h3 className="text-sm font-semibold text-slate-900">Action item progress</h3>
                       <span className="text-xs text-slate-500">
                         {analyticsData.actionItems.total} total item{analyticsData.actionItems.total === 1 ? '' : 's'}
                         {analyticsData.actionItems.cancelled > 0 &&
@@ -1138,7 +1086,7 @@ export function MeetingsPage({
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-2 text-slate-700">
-                          <Clock className="h-4 w-4 text-indigo-500" />
+                          <Clock className="h-4 w-4 text-brand-500" />
                           In Progress
                         </span>
                         <span className="font-medium text-slate-900">{analyticsData.actionItems.inProgress}</span>
@@ -1180,13 +1128,13 @@ export function MeetingsPage({
                 <Card className="shadow-xs">
                   <CardContent className="p-6 space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                      <h3 className="text-sm font-semibold text-slate-900">Structured MOM Artifacts</h3>
-                      <span className="text-xs text-slate-500">Outcomes & Insights</span>
+                      <h3 className="text-sm font-semibold text-slate-900">Discussion points and decisions</h3>
+
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 pt-2">
                       <div className="p-4 bg-slate-50 rounded-lg border border-slate-200/80 text-center space-y-1">
-                        <FileText className="h-5 w-5 text-indigo-600 mx-auto" />
+                        <FileText className="h-5 w-5 text-brand-600 mx-auto" />
                         <div className="text-2xl font-bold text-slate-900" data-testid="metric-discussion-points">
                           {analyticsData.mom.totalDiscussionPoints}
                         </div>
@@ -1202,9 +1150,7 @@ export function MeetingsPage({
                       </div>
                     </div>
 
-                    <p className="text-xs text-slate-500 pt-2 text-center">
-                      Structured minutes ensure accountability and institutional knowledge retention across all teams.
-                    </p>
+
                   </CardContent>
                 </Card>
               </div>

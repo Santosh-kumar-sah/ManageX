@@ -1,3 +1,5 @@
+import './events.css';
+import { sessionStatusLabels } from './sessionStatusLabels';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Alert } from '@/components/ui/Alert';
@@ -6,7 +8,6 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/Table';
 import { apiClient, ApiError } from '@/api/client';
 import { EvaluationSession, EvaluationSessionStatus } from '@/types/events';
 import {
@@ -83,16 +84,16 @@ export function JudgeWorkspacePage() {
 
   if (!orgId || !eventId || !roundId) {
     return (
-      <Card className="mx-auto max-w-2xl p-8">
+      <Card className="mx-events mx-judge-intro">
         <CardHeader>
-          <CardTitle>Judge workspace</CardTitle>
+          <h1 className="mx-event-title">Judge workspace</h1>
           <CardDescription>
-            Open the evaluation workspace link provided by the event organiser after accepting your invitation.
+            Accept your judge invitation, then open the round link from your event organiser.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Alert variant="info">
-            Your accepted invitation is scoped to an evaluation panel. No organisation-wide access or event discovery is granted.
+            Your invitation gives you access to the sessions assigned to your panel. Ask the organiser for the round link if you need it again.
           </Alert>
         </CardContent>
       </Card>
@@ -100,14 +101,14 @@ export function JudgeWorkspacePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="mx-events space-y-6">
+      <header className="mx-event-heading">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Judge workspace</h1>
-          <p className="mt-1 text-sm text-slate-500">Your assigned evaluation sessions only.</p>
+          <h1 className="mx-event-title">Judge workspace</h1>
+          <p className="mt-1 text-sm text-slate-500">Open your assigned sessions to review entries and record scores.</p>
         </div>
         <Button variant="outline" size="sm" onClick={loadSessions} disabled={isLoading}>Refresh</Button>
-      </div>
+      </header>
 
       {errorMessage && (
         <Alert variant="error" title="Unable to load sessions">
@@ -124,12 +125,12 @@ export function JudgeWorkspacePage() {
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-24 w-full" />
         </Card>
-      ) : sessions.length === 0 ? (
+      ) : errorMessage ? null : sessions.length === 0 ? (
         <EmptyState title="No assigned evaluation sessions" description="Assigned sessions will appear here when the organiser publishes or updates the evaluation schedule." />
       ) : (
         <>
           <SessionGroup
-            title="Upcoming and active"
+            title="Upcoming sessions"
             sessions={sessionGroups.upcoming}
             onSelectSession={setScoringSession}
           />
@@ -138,17 +139,17 @@ export function JudgeWorkspacePage() {
             sessions={sessionGroups.past}
             onSelectSession={setScoringSession}
           />
-          <JudgeScoringDialog
-            isOpen={Boolean(scoringSession)}
-            onClose={() => setScoringSession(null)}
-            orgId={orgId}
-            eventId={eventId}
-            roundId={roundId}
-            session={scoringSession}
-            onScoresSubmitted={loadSessions}
-          />
         </>
       )}
+      <JudgeScoringDialog
+        isOpen={Boolean(scoringSession)}
+        onClose={() => setScoringSession(null)}
+        orgId={orgId}
+        eventId={eventId}
+        roundId={roundId}
+        session={scoringSession}
+        onScoresSubmitted={loadSessions}
+      />
     </div>
   );
 }
@@ -166,65 +167,45 @@ function SessionGroup({
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>Only sessions assigned to your accepted evaluation panel are shown.</CardDescription>
+
       </CardHeader>
       <CardContent>
         {sessions.length === 0 ? (
           <EmptyState title={`No ${title.toLowerCase()}`} description="There are no sessions in this group." />
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Team</TableHead>
-                  <TableHead>Panel</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Meeting</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sessions.map((session) => (
-                  <TableRow key={session.id}>
-                    <TableCell className="font-medium">{session.teamName}</TableCell>
-                    <TableCell>{session.panelName}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {formatDate(session.startsAt)}
-                      <br />
-                      <span className="text-xs text-slate-500">to {formatDate(session.endsAt)}</span>
-                    </TableCell>
-                    <TableCell><Badge variant={statusVariant(session.status)}>{session.status}</Badge></TableCell>
-                    <TableCell>
-                      {session.meetingUrl ? (
-                        <a href={session.meetingUrl} target="_blank" rel="noopener noreferrer" className="text-brand-600 hover:underline">
-                          Open meeting
-                        </a>
-                      ) : (
-                        <span className="text-xs text-slate-500">
-                          Available {session.meetingLinkAvailableAt ? formatDate(session.meetingLinkAvailableAt) : 'when released'}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {session.status === 'cancelled' || session.status === 'no_show' ? (
-                        <span className="text-xs text-slate-400 italic">No evaluation</span>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant={session.status === 'completed' ? 'outline' : 'primary'}
-                          onClick={() => onSelectSession(session)}
-                          aria-label={`Score submission for ${session.teamName}`}
-                        >
-                          {session.status === 'completed' ? 'Review scores' : 'Score submission'}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <ul className="mx-judge-sessions">
+            {sessions.map(session => (
+              <li key={session.id}>
+                <div>
+                  <h3>{session.teamName}</h3>
+                  <p>{session.panelName}</p>
+                </div>
+                <div>
+                  <time dateTime={session.startsAt}>{formatDate(session.startsAt)}</time>
+                  <p>to <time dateTime={session.endsAt}>{formatDate(session.endsAt)}</time></p>
+                </div>
+                <div>
+                  <Badge variant={statusVariant(session.status)}>{sessionStatusLabels[session.status]}</Badge>
+                  {session.meetingUrl ? (
+                    <a href={session.meetingUrl} target="_blank" rel="noopener noreferrer" className="mx-event-link">
+                      Open meeting
+                    </a>
+                  ) : (
+                    <p>Meeting link available {session.meetingLinkAvailableAt ? formatDate(session.meetingLinkAvailableAt) : 'when released'}</p>
+                  )}
+                </div>
+                {session.status === 'cancelled' || session.status === 'no_show' ? (
+                  <span className="text-sm text-slate-500">No evaluation</span>
+                ) : (
+                  <Button size="sm" variant={session.status === 'completed' ? 'outline' : 'primary'}
+                    onClick={() => onSelectSession(session)}
+                    aria-label={`${session.status === 'completed' ? 'Review scores' : 'Score submission'} for ${session.teamName}`}>
+                    {session.status === 'completed' ? 'Review scores' : 'Score submission'}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </CardContent>
     </Card>

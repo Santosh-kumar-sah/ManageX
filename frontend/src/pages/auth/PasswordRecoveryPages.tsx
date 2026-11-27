@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
+import { Card, CardHeader, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
 import { Button } from '@/components/ui/Button';
@@ -36,55 +36,50 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-card">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Password Recovery</CardTitle>
-          <CardDescription>
-            Enter your account email to receive a password recovery link.
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {errorMessage && (
-              <Alert variant="error" title="Error">
-                {errorMessage}
-              </Alert>
-            )}
+    <Card className="mx-auth-panel">
+      <CardHeader className="mx-auth-heading">
+        <h1 className="mx-auth-title">Forgot your password?</h1>
+        <CardDescription>
+          Enter your email to request a password reset.
+        </CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="mx-auth-fields space-y-4">
+          {errorMessage && (
+            <Alert variant="error" title="Error">
+              {errorMessage}
+            </Alert>
+          )}
 
-            {submitted ? (
-              <Alert variant="success" title="Recovery Requested">
-                If an account exists for {email}, instructions to reset your password have been dispatched.
-              </Alert>
-            ) : (
-              <FormField label="Email address" htmlFor="email" required>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  disabled={isLoading}
-                />
-              </FormField>
-            )}
-          </CardContent>
-          <CardFooter className="flex flex-col gap-3">
-            {!submitted && (
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Sending Link...' : 'Send Recovery Link'}
-              </Button>
-            )}
-            <Link to="/auth/login" className="w-full">
-              <Button variant="ghost" className="w-full text-xs">
-                Back to Sign In
-              </Button>
-            </Link>
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+          {submitted ? (
+            <Alert variant="success" title="Request received">
+              If {email} belongs to a ManageX account, check its inbox for instructions.
+            </Alert>
+          ) : (
+            <FormField label="Email address" htmlFor="email" required>
+              <Input
+                id="email"
+                autoComplete="email"
+                type="email"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={isLoading}
+              />
+            </FormField>
+          )}
+        </CardContent>
+        <CardFooter className="mx-auth-actions flex flex-col gap-3">
+          {!submitted && (
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Requesting…' : 'Request reset link'}
+            </Button>
+          )}
+          <Link to="/auth/login" className="mx-auth-link w-full">Back to sign in</Link>
+        </CardFooter>
+      </form>
+    </Card>
   );
 }
 
@@ -121,74 +116,68 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-card">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
-          <CardDescription>
-            Choose a new strong password for your ManageX account.
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {errorMessage && (
-              <Alert variant="error" title="Reset Failed">
-                {errorMessage}
-              </Alert>
-            )}
+    <Card className="mx-auth-panel">
+      <CardHeader className="mx-auth-heading">
+        <h1 className="mx-auth-title">Choose a new password</h1>
+        <CardDescription>
+          Use a password you don’t use for other accounts.
+        </CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="mx-auth-fields space-y-4">
+          {errorMessage && (
+            <Alert variant="error" title="Couldn’t reset password">
+              {errorMessage}
+            </Alert>
+          )}
 
-            {submitted ? (
-              <Alert variant="success" title="Password Reset Complete">
-                Your password has been updated. All previous sessions have been invalidated.
-              </Alert>
-            ) : (
-              <>
-                {!tokenParam && (
-                  <FormField label="Reset Token" htmlFor="token" required>
-                    <Input
-                      id="token"
-                      placeholder="Paste your reset token"
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                      required
-                      disabled={isLoading}
-                    />
-                  </FormField>
-                )}
-                <FormField
-                  label="New Password"
-                  htmlFor="password"
-                  helperText="Must be at least 10 characters with upper, lower, number, and special character."
-                  required
-                >
+          {submitted ? (
+            <Alert variant="success" title="Password updated">
+              Sign in again with your new password on any devices you use.
+            </Alert>
+          ) : (
+            <>
+              {!tokenParam && (
+                <FormField label="Reset code" htmlFor="token" required>
                   <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    id="token"
+                    placeholder="Paste the code from your reset link"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
                     required
                     disabled={isLoading}
                   />
                 </FormField>
-              </>
-            )}
-          </CardContent>
-          <CardFooter className="flex flex-col gap-3">
-            {!submitted ? (
-              <Button type="submit" className="w-full" disabled={isLoading || !password || !token}>
-                {isLoading ? 'Resetting Password...' : 'Reset Password'}
-              </Button>
-            ) : (
-              <Link to="/auth/login" className="w-full">
-                <Button className="w-full">
-                  Sign In with New Password
-                </Button>
-              </Link>
-            )}
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+              )}
+              <FormField
+                label="New password"
+                htmlFor="password"
+                helperText="Use at least 10 characters, including an uppercase letter, a lowercase letter, a number and a symbol."
+                required
+              >
+                <Input
+                  id="password"
+                  autoComplete="new-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
+              </FormField>
+            </>
+          )}
+        </CardContent>
+        <CardFooter className="mx-auth-actions flex flex-col gap-3">
+          {!submitted ? (
+            <Button type="submit" className="w-full" disabled={isLoading || !password || !token}>
+              {isLoading ? 'Saving…' : 'Save new password'}
+            </Button>
+          ) : (
+            <Link to="/auth/login" className="mx-auth-link mx-auth-link-solid w-full">Sign in with your new password</Link>
+          )}
+        </CardFooter>
+      </form>
+    </Card>
   );
 }
-

@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Alert } from '@/components/ui/Alert';
-import { X, FolderPlus } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import { ProjectItem, ProjectPriority, ProjectStatus } from '@/types/projects';
 
@@ -145,33 +144,10 @@ export function CreateProjectDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <Card className="w-full max-w-lg bg-white shadow-xl animate-in fade-in zoom-in-95 duration-150">
-        <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
-          <div className="flex items-center space-x-2">
-            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
-              <FolderPlus className="w-5 h-5" />
-            </div>
-            <div>
-              <CardTitle className="text-base font-semibold text-slate-900">
-                Create New Project
-              </CardTitle>
-              <CardDescription className="text-xs text-slate-500">
-                Configure project parameters, priority, and assign an eligible owner.
-              </CardDescription>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 p-1 rounded-md hover:bg-slate-50 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </CardHeader>
+    <Dialog isOpen={isOpen} onClose={() => !isSubmitting && onClose()} title="Create project" className="project-dialog">
 
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4 pt-4">
+          <div className="space-y-4 pt-4">
             {errorMsg && (
               <Alert variant="error" className="text-xs py-2">
                 {errorMsg}
@@ -179,13 +155,13 @@ export function CreateProjectDialog({
             )}
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="project-field-name" className="block text-xs font-medium text-slate-700 mb-1">
                 Project Name <span className="text-rose-500">*</span>
               </label>
-              <Input
+              <Input id="project-field-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Platform Micro-Frontend Migration"
+                placeholder="e.g. Volunteer onboarding"
                 required
                 maxLength={255}
                 autoFocus
@@ -193,27 +169,27 @@ export function CreateProjectDialog({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="project-field-description" className="block text-xs font-medium text-slate-700 mb-1">
                 Description (Optional)
               </label>
-              <textarea
+              <textarea id="project-field-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Briefly describe the objectives, scope, and technical roadmap..."
+                placeholder="What is the team working toward?"
                 rows={3}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
+                <label htmlFor="project-field-status" className="block text-xs font-medium text-slate-700 mb-1">
                   Initial Status
                 </label>
-                <select
+                <select id="project-field-status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 >
                   <option value="planning">Planning</option>
                   <option value="active">Active</option>
@@ -221,13 +197,13 @@ export function CreateProjectDialog({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
+                <label htmlFor="project-field-priority" className="block text-xs font-medium text-slate-700 mb-1">
                   Priority
                 </label>
-                <select
+                <select id="project-field-priority"
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as ProjectPriority)}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -238,33 +214,33 @@ export function CreateProjectDialog({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Project Owner / Manager
+              <label htmlFor="project-field-ownerId" className="block text-xs font-medium text-slate-700 mb-1">
+                Project owner
               </label>
-              <select
+              <select id="project-field-ownerId"
                 value={ownerId}
                 onChange={(e) => setOwnerId(e.target.value)}
                 disabled={isLoadingMembers || members.length === 0}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400"
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50 disabled:text-slate-400"
               >
-                {members.length === 0 && <option value="">Loading members...</option>}
+                {members.length === 0 && <option value="">{isLoadingMembers ? 'Loading members…' : 'Use default project owner'}</option>}
                 {members.map((m) => (
                   <option key={m.userId} value={m.userId}>
                     {m.fullName} ({m.email})
                   </option>
                 ))}
               </select>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Owner will automatically be added as a project manager member.
+              <p className="text-xs text-slate-500 mt-0.5">
+                The owner also becomes a project manager.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
+                <label htmlFor="project-field-startDate" className="block text-xs font-medium text-slate-700 mb-1">
                   Start Date (Optional)
                 </label>
-                <Input
+                <Input id="project-field-startDate"
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
@@ -272,10 +248,10 @@ export function CreateProjectDialog({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Target Completion (Optional)
+                <label htmlFor="project-field-targetDate" className="block text-xs font-medium text-slate-700 mb-1">
+                  Target date (optional)
                 </label>
-                <Input
+                <Input id="project-field-targetDate"
                   type="date"
                   value={targetDate}
                   onChange={(e) => setTargetDate(e.target.value)}
@@ -284,16 +260,16 @@ export function CreateProjectDialog({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
+              <label htmlFor="project-field-labelsInput" className="block text-xs font-medium text-slate-700 mb-1">
                 Labels (Optional, comma-separated)
               </label>
-              <Input
+              <Input id="project-field-labelsInput"
                 value={labelsInput}
                 onChange={(e) => setLabelsInput(e.target.value)}
-                placeholder="e.g. frontend, performance, q4"
+                placeholder="e.g. onboarding, volunteers"
               />
             </div>
-          </CardContent>
+          </div>
 
           <div className="flex items-center justify-end space-x-2 p-4 border-t border-slate-100 bg-slate-50/50 rounded-b-xl">
             <Button
@@ -315,7 +291,6 @@ export function CreateProjectDialog({
             </Button>
           </div>
         </form>
-      </Card>
-    </div>
+    </Dialog>
   );
 }

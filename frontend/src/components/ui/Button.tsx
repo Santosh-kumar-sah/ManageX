@@ -8,28 +8,31 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   isLoading?: boolean;
 }
 
+const variants = {
+  primary: 'bg-slate-900 text-white hover:bg-brand-800 active:bg-brand-900',
+  secondary: 'bg-brand-50 text-brand-800 hover:bg-brand-100 active:bg-brand-200',
+  outline: 'border border-border-strong bg-white text-slate-800 hover:bg-slate-50 active:bg-slate-100',
+  ghost: 'text-slate-700 hover:bg-slate-100 hover:text-slate-900',
+  destructive: 'bg-red-700 text-white hover:bg-red-800 active:bg-red-900',
+};
+
+const sizes = {
+  sm: 'min-h-8 px-3 py-1 text-sm gap-1.5',
+  md: 'min-h-10 px-4 py-2 text-sm gap-2',
+  lg: 'min-h-12 px-6 py-3 text-base gap-2.5',
+};
+
+export function buttonStyles({ variant = 'primary', size = 'md', className }: Pick<ButtonProps, 'variant' | 'size' | 'className'> = {}) {
+  return cn('inline-flex items-center justify-center rounded-md font-semibold leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none',
+    variants[variant], sizes[size], className);
+}
+
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', isLoading = false, disabled, children, ...props }, ref) => {
-    const baseStyles = 'inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 select-none';
-
-    const variants = {
-      primary: 'bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-800 focus-visible:ring-brand-500 shadow-sm',
-      secondary: 'bg-slate-100 text-slate-800 hover:bg-slate-200 active:bg-slate-300 focus-visible:ring-slate-400',
-      outline: 'border border-border bg-white text-slate-700 hover:bg-slate-50 active:bg-slate-100 focus-visible:ring-brand-500 shadow-subtle',
-      ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 focus-visible:ring-slate-400',
-      destructive: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 focus-visible:ring-red-500 shadow-sm',
-    };
-
-    const sizes = {
-      sm: 'h-8 px-3 text-xs rounded-md gap-1.5',
-      md: 'h-9 px-4 text-sm rounded-md gap-2',
-      lg: 'h-11 px-6 text-base rounded-lg gap-2.5',
-    };
-
+  ({ className, variant, size, isLoading = false, disabled, children, ...props }, ref) => {
     return (
       <button
         ref={ref}
-        className={cn(baseStyles, variants[variant], sizes[size], className)}
+        className={buttonStyles({ variant, size, className })}
         disabled={disabled || isLoading}
         aria-busy={isLoading ? true : undefined}
         aria-disabled={disabled || isLoading ? true : undefined}

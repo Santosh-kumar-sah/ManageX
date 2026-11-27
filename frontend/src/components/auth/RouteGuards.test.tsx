@@ -40,7 +40,7 @@ describe('RouteGuards — Role & Auth Protection', () => {
       const element = RequireAuth();
       const html = renderToStaticMarkup(element);
 
-      expect(html).toContain('Verifying session...');
+      expect(html).toContain('Checking your sign-in…');
     });
 
     it('2. Returns Navigate to /auth/login with location state for unauthenticated requests', () => {
@@ -99,7 +99,7 @@ describe('RouteGuards — Role & Auth Protection', () => {
       const element = RequirePlatformAdmin();
       const html = renderToStaticMarkup(element);
 
-      expect(html).toContain('Verifying platform authorization...');
+      expect(html).toContain('Checking access to administration…');
     });
 
     it('2. Redirects unauthenticated users to /auth/login', () => {
@@ -182,7 +182,7 @@ describe('RouteGuards — Role & Auth Protection', () => {
 
       const element = RequireOrgAccess();
       const html = renderToStaticMarkup(element);
-      expect(html).toContain('Verifying organisation access...');
+      expect(html).toContain('Checking workspace access…');
     });
 
     it('2. Redirects unauthenticated users to /auth/login', () => {
@@ -229,10 +229,10 @@ describe('RouteGuards — Role & Auth Protection', () => {
       const element = RequireOrgAccess();
       const html = renderToStaticMarkup(<MemoryRouter>{element}</MemoryRouter>);
 
-      expect(html).toContain('Organisation Access Restricted');
-      expect(html).toContain('Participant / Student account without an active organisation membership');
-      expect(html).toContain('Participant Dashboard');
-      expect(html).toContain('Browse Public Events');
+      expect(html).toContain('This workspace is for members');
+      expect(html).toContain('Your participant account gives you access to your events');
+      expect(html).toContain('My events');
+      expect(html).toContain('Browse public events');
     });
 
     it('4. Blocks non-member user who belongs to other orgs with return to workspace CTA', () => {
@@ -266,9 +266,9 @@ describe('RouteGuards — Role & Auth Protection', () => {
       const element = RequireOrgAccess();
       const html = renderToStaticMarkup(<MemoryRouter>{element}</MemoryRouter>);
 
-      expect(html).toContain('Organisation Access Restricted');
+      expect(html).toContain('This workspace is for members');
       expect(html).toContain('You do not have active membership in this organisation');
-      expect(html).toContain('Return to Your Workspace');
+      expect(html).toContain('Return to your workspace');
     });
 
     it('5. Renders Outlet when user is an active member of the route organisation', () => {

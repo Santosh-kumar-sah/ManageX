@@ -1,302 +1,148 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Search,
-  Calendar,
-  Clock,
-  MapPin,
-  Globe,
-  Trophy,
-  Users,
-  Building2,
-  ArrowRight,
-} from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/Card';
+import { ArrowUpRight, CalendarDays, MapPin, Search } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Alert } from '@/components/ui/Alert';
 import { apiClient, ApiError } from '@/api/client';
-import { EventItem } from '@/types/events';
+import type { EventItem } from '@/types/events';
+
+const eventTypes = [
+  { value: 'all', label: 'All events' },
+  { value: 'hackathon', label: 'Hackathons' },
+  { value: 'general_event', label: 'General events' },
+] as const;
+
+function eventTime(iso: string, timezone: string, options: Intl.DateTimeFormatOptions) {
+  if (!iso) return 'To be announced';
+  try {
+    return new Intl.DateTimeFormat(undefined, { ...options, timeZone: timezone || 'UTC' }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+function EventListing({ event }: { event: EventItem }) {
+  const host = typeof event.organisation === 'string' ? event.organisation : event.organisation?.name;
+  const format = event.locationType === 'virtual' ? 'Online' : event.locationType === 'hybrid' ? 'Hybrid' : 'In person';
+  const dateOptions: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' };
+
+  return (
+    <li className="relative grid gap-x-6 gap-y-3 border-b border-border py-6 last:border-b-0 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto] sm:py-7">
+      <div className="hidden w-[4.5rem] self-start rounded-lg border border-brand-100 bg-brand-50 py-2 text-center text-brand-800 sm:block" aria-hidden="true">
+        <span className="block text-xs font-semibold">{eventTime(event.startAt, event.timezone, { month: 'short' })}</span>
+        <span className="block text-3xl font-semibold tracking-tight">{eventTime(event.startAt, event.timezone, { day: 'numeric' })}</span>
+      </div>
+      <div className="min-w-0">
+        <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="font-semibold text-brand-700">{event.eventType === 'hackathon' ? 'Hackathon' : 'General Event'}</span>
+          <span className="inline-flex items-center gap-1 text-slate-600"><MapPin className="h-3.5 w-3.5" aria-hidden="true" />{format}</span>
+        </div>
+        <h2 className="break-words text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
+          <Link to={`/events/${event.id}`} className="rounded-sm hover:text-brand-700 after:absolute after:inset-0">{event.title}</Link>
+        </h2>
+        {host && <p className="mt-1 text-sm text-slate-600">Hosted by {host}</p>}
+        {event.description && <p className="mt-2 max-w-3xl line-clamp-2 text-sm leading-relaxed text-slate-600">{event.description}</p>}
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-700">
+          <span>Starts <time dateTime={event.startAt}>{eventTime(event.startAt, event.timezone, dateOptions)}</time></span>
+          <span>Ends <time dateTime={event.endAt}>{eventTime(event.endAt, event.timezone, dateOptions)}</time></span>
+          <span>{event.timezone || 'UTC'}</span>
+          {event.capacity != null && <span>Capacity: {event.capacity}</span>}
+        </div>
+      </div>
+      <ArrowUpRight className="hidden h-5 w-5 self-center text-brand-700 sm:block" aria-hidden="true" />
+    </li>
+  );
+}
 
 export function EventsPortalHomePage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<'all' | 'hackathon' | 'general_event'>('all');
+  const [selectedType, setSelectedType] = useState<typeof eventTypes[number]['value']>('all');
+  const latestRequest = useRef(0);
 
-  const fetchEvents = useCallback(async (search?: string) => {
+  const fetchEvents = useCallback(async (search: string) => {
+    const requestId = ++latestRequest.current;
+    setIsLoading(true);
+    setErrorMessage(null);
     try {
-      setIsLoading(true);
-      setErrorMessage(null);
-      const queryParams = new URLSearchParams();
-      if (search && search.trim()) {
-        queryParams.set('search', search.trim());
-      }
-      queryParams.set('limit', '50');
-
-      const url = `/events?${queryParams.toString()}`;
-      const res = await apiClient<{ events: EventItem[] }>(url);
-      setEvents(res.data?.events || []);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setErrorMessage(err.message);
-      } else {
-        setErrorMessage('Failed to load events. Please try again.');
+      const params = new URLSearchParams();
+      if (search.trim()) params.set('search', search.trim());
+      params.set('limit', '50');
+      const result = await apiClient<{ events: EventItem[] }>(`/events?${params}`);
+      if (requestId === latestRequest.current) setEvents(result.data?.events || []);
+    } catch (error) {
+      if (requestId === latestRequest.current) {
+        setErrorMessage(error instanceof ApiError ? error.message : 'We could not load the events. Please try again.');
       }
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRequest.current) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchEvents(searchQuery);
-    }, 300);
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => { void fetchEvents(searchQuery); }, 300);
+    return () => {
+      clearTimeout(timer);
+      latestRequest.current++;
+    };
   }, [searchQuery, fetchEvents]);
 
-  const filteredEvents = events.filter((evt) => {
-    if (selectedType === 'all') return true;
-    return evt.eventType === selectedType;
-  });
-
-  function formatDate(isoString: string | null, timezone?: string) {
-    if (!isoString) return 'TBA';
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: timezone || 'UTC',
-      });
-    } catch {
-      return isoString;
-    }
-  }
+  const filteredEvents = selectedType === 'all' ? events : events.filter((event) => event.eventType === selectedType);
+  const hasFilters = searchQuery.trim() !== '' || selectedType !== 'all';
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] pb-16">
-      {/* Hero Section */}
-      <section className="bg-white border-b border-border py-12 md:py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200 text-xs font-semibold mb-4">
-              <Trophy className="h-3.5 w-3.5" />
-              <span>ManageX Event Portal</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-              Events & Hackathons
-            </h1>
-            <p className="mt-3 text-base sm:text-lg text-slate-600 leading-relaxed">
-              Discover, register, and compete in multi-round hackathons and collegiate technical events hosted on the ManageX enterprise platform.
-            </p>
-          </div>
-
-          {/* Search & Filter Bar */}
-          <div className="mt-8 flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
-            <div className="relative flex-1 max-w-lg">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                type="text"
-                placeholder="Search events by title or keywords..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-surface-subtle"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 border border-border rounded-lg p-1 bg-surface-subtle self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setSelectedType('all')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  selectedType === 'all'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                All Events
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedType('hackathon')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  selectedType === 'hackathon'
-                    ? 'bg-white text-brand-600 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Hackathons
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedType('general_event')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                  selectedType === 'general_event'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                General Events
-              </button>
-            </div>
-          </div>
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-8 sm:py-16">
+      <header className="relative mb-7 grid items-center overflow-hidden rounded-xl border border-border bg-white sm:grid-cols-[1.4fr_1fr]">
+        <div className="px-5 py-8 sm:px-9 sm:py-12"><h1 className="text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">Events &amp; hackathons</h1>
+        <p className="mt-3 max-w-xl text-base leading-relaxed text-slate-600">Find a public event, check the dates and see how to take part.</p></div>
+        <picture className="hidden self-stretch bg-brand-50 sm:block">
+          <img src="/art/events-small.webp" srcSet="/art/events-small.webp 720w, /art/events.webp 1440w" sizes="(min-width: 1024px) 460px, 40vw" alt="" className="h-full max-h-60 w-full object-cover" />
+        </picture>
+      </header>
+      <div className="flex flex-col gap-4 border-y border-border py-4 md:flex-row md:items-center md:justify-between">
+        <div className="relative w-full md:max-w-sm">
+          <label className="sr-only" htmlFor="public-event-search">Search public events</label>
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" aria-hidden="true" />
+          <Input id="public-event-search" type="search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search events" className="h-11 bg-white pl-9" />
         </div>
-      </section>
-
-      {/* Main Content Grid */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10">
-        {errorMessage && (
-          <Alert variant="error" className="mb-6">
-            <div className="flex items-center justify-between">
-              <span>{errorMessage}</span>
-              <Button size="sm" variant="outline" onClick={() => fetchEvents(searchQuery)}>
-                Retry
-              </Button>
-            </div>
-          </Alert>
-        )}
-
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Card key={i} className="animate-pulse p-6 space-y-4">
-                <Skeleton className="h-6 w-3/4 rounded" />
-                <Skeleton className="h-4 w-1/2 rounded" />
-                <div className="space-y-2 pt-4">
-                  <Skeleton className="h-4 w-full rounded" />
-                  <Skeleton className="h-4 w-5/6 rounded" />
-                </div>
-                <Skeleton className="h-10 w-full rounded mt-4" />
-              </Card>
-            ))}
-          </div>
-        ) : filteredEvents.length === 0 ? (
-          <div className="text-center py-16 bg-white border border-border rounded-xl p-8 max-w-xl mx-auto shadow-xs">
-            <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400 mb-4">
-              <Trophy className="h-6 w-6" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-900">No events found</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              {searchQuery
-                ? `No published events matching "${searchQuery}". Try a different search keyword.`
-                : 'There are currently no public events published. Check back soon!'}
-            </p>
-            {searchQuery && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => setSearchQuery('')}
-              >
-                Clear Search
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredEvents.map((evt) => {
-              const isHackathon = evt.eventType === 'hackathon';
-              return (
-                <Card
-                  key={evt.id}
-                  className="flex flex-col justify-between hover:shadow-card-hover transition-shadow border-border"
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <Badge
-                        variant={isHackathon ? 'brand' : 'neutral'}
-                        className="capitalize text-xs font-semibold"
-                      >
-                        {isHackathon ? 'Hackathon' : 'General Event'}
-                      </Badge>
-                      <span className="text-xs text-slate-500 font-medium capitalize flex items-center gap-1">
-                        {evt.locationType === 'virtual' ? (
-                          <>
-                            <Globe className="h-3 w-3 text-slate-400" />
-                            <span>Virtual</span>
-                          </>
-                        ) : evt.locationType === 'in_person' ? (
-                          <>
-                            <MapPin className="h-3 w-3 text-slate-400" />
-                            <span>In Person</span>
-                          </>
-                        ) : (
-                          <>
-                            <Globe className="h-3 w-3 text-slate-400" />
-                            <span>Hybrid</span>
-                          </>
-                        )}
-                      </span>
-                    </div>
-
-                    <CardTitle className="text-lg font-bold text-slate-900 line-clamp-2">
-                      <Link
-                        to={`/events/${evt.id}`}
-                        className="hover:text-brand-600 transition-colors"
-                      >
-                        {evt.title}
-                      </Link>
-                    </CardTitle>
-
-                    {evt.organisation && (
-                      <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
-                        <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                        <span>
-                          Hosted by{' '}
-                          {typeof evt.organisation === 'object' && evt.organisation
-                            ? (evt.organisation as { name?: string }).name || ''
-                            : String(evt.organisation)}
-                        </span>
-                      </p>
-                    )}
-                  </CardHeader>
-
-                  <CardContent className="space-y-3 flex-1 text-xs text-slate-600">
-                    {evt.description && (
-                      <p className="line-clamp-2 text-slate-500 leading-relaxed">
-                        {evt.description}
-                      </p>
-                    )}
-
-                    <div className="space-y-1.5 pt-2 border-t border-border text-slate-600">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span>Starts: {formatDate(evt.startAt, evt.timezone)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                        <span>Ends: {formatDate(evt.endAt, evt.timezone)}</span>
-                      </div>
-                      {evt.capacity && (
-                        <div className="flex items-center gap-2">
-                          <Users className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <span>Capacity: {evt.capacity} participants</span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-
-                  <CardFooter className="pt-3 border-t border-border">
-                    <Link to={`/events/${evt.id}`} className="w-full">
-                      <Button variant="outline" className="w-full justify-between group">
-                        <span>View Details & Register</span>
-                        <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
-                      </Button>
-                    </Link>
-                  </CardFooter>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+        <div aria-label="Filter by event type" role="group" className="flex flex-wrap gap-1">
+          {eventTypes.map(({ value, label }) => (
+            <button key={value} type="button" aria-pressed={selectedType === value} onClick={() => setSelectedType(value)}
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${selectedType === value ? 'bg-brand-100 text-brand-900' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+      {errorMessage ? (
+        <Alert variant="error" className="mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{errorMessage}</span><Button size="sm" variant="outline" onClick={() => fetchEvents(searchQuery)}>Try again</Button>
+          </div>
+        </Alert>
+      ) : isLoading ? (
+        <div role="status" className="space-y-4 py-6">
+          <span className="sr-only">Loading events</span>
+          {[0, 1, 2].map((row) => <Skeleton key={row} className="h-20 w-full rounded-lg" />)}
+        </div>
+      ) : filteredEvents.length ? (
+        <ul aria-label="Public events" className="mt-2 bg-white px-4 sm:px-6">
+          {filteredEvents.map((event) => <EventListing key={event.id} event={event} />)}
+        </ul>
+      ) : (
+        <section className="mt-6 rounded-xl border border-border bg-white px-5 py-12 text-center sm:py-16">
+          <CalendarDays className="mx-auto mb-4 h-8 w-8 text-brand-700" aria-hidden="true" />
+          <h2 className="text-xl font-semibold text-slate-900">{hasFilters ? 'No matching events' : 'No public events yet'}</h2>
+          <p className="mt-2 text-sm text-slate-600">{hasFilters ? 'Try a different event name or reset your filters.' : 'Events will appear here when organisers publish them.'}</p>
+          {hasFilters && (
+            <Button className="mt-5" variant="outline" onClick={() => { setSearchQuery(''); setSelectedType('all'); }}>Reset filters</Button>
+          )}
+        </section>
+      )}
     </div>
   );
 }

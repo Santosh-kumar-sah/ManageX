@@ -207,10 +207,10 @@ export function ScheduleMeetingDialog({
         {errorMsg && <Alert variant="error">{errorMsg}</Alert>}
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label htmlFor="schedule-meeting-dialog-title" className="block text-sm font-medium text-slate-700 mb-1">
             Meeting Title <span className="text-red-500">*</span>
           </label>
-          <Input
+          <Input id="schedule-meeting-dialog-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Weekly Engineering Sync"
@@ -220,10 +220,10 @@ export function ScheduleMeetingDialog({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label htmlFor="schedule-meeting-dialog-description" className="block text-sm font-medium text-slate-700 mb-1">
             Description
           </label>
-          <textarea
+          <textarea id="schedule-meeting-dialog-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
@@ -235,10 +235,10 @@ export function ScheduleMeetingDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="schedule-meeting-dialog-date-times-start" className="block text-sm font-medium text-slate-700 mb-1">
               Start Date & Time <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="schedule-meeting-dialog-date-times-start"
               type="datetime-local"
               value={dateTimes.start}
               onChange={(e) =>
@@ -248,10 +248,10 @@ export function ScheduleMeetingDialog({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="schedule-meeting-dialog-date-times-end" className="block text-sm font-medium text-slate-700 mb-1">
               End Date & Time <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id="schedule-meeting-dialog-date-times-end"
               type="datetime-local"
               value={dateTimes.end}
               onChange={(e) =>
@@ -264,10 +264,10 @@ export function ScheduleMeetingDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="schedule-meeting-dialog-timezone" className="block text-sm font-medium text-slate-700 mb-1">
               Timezone <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="schedule-meeting-dialog-timezone"
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -284,10 +284,10 @@ export function ScheduleMeetingDialog({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="schedule-meeting-dialog-visibility" className="block text-sm font-medium text-slate-700 mb-1">
               Visibility <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="schedule-meeting-dialog-visibility"
               value={visibility}
               onChange={(e) => setVisibility(e.target.value as MeetingVisibility)}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -300,10 +300,10 @@ export function ScheduleMeetingDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className={(locationType === 'in_person' || locationType === 'hybrid') ? 'md:col-span-1' : 'col-span-full'}>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="schedule-meeting-dialog-location-type" className="block text-sm font-medium text-slate-700 mb-1">
               Location Type <span className="text-red-500">*</span>
             </label>
-            <select
+            <select id="schedule-meeting-dialog-location-type"
               value={locationType}
               onChange={(e) => setLocationType(e.target.value as MeetingLocationType)}
               className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
@@ -316,10 +316,10 @@ export function ScheduleMeetingDialog({
 
           {(locationType === 'in_person' || locationType === 'hybrid') && (
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="schedule-meeting-dialog-location" className="block text-sm font-medium text-slate-700 mb-1">
                 Physical Location <span className="text-red-500">*</span>
               </label>
-              <Input
+              <Input id="schedule-meeting-dialog-location"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="e.g. Conference Room A, HQ"
@@ -342,7 +342,7 @@ export function ScheduleMeetingDialog({
                   onClick={() => setConferenceProvider('google_meet')}
                   className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-all ${
                     conferenceProvider === 'google_meet' && isGoogleConnected
-                      ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600 text-slate-900'
+                      ? 'border-brand-600 bg-brand-50/50 ring-1 ring-brand-600 text-slate-900'
                       : isGoogleConnected
                       ? 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
                       : 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed text-slate-400'
@@ -352,7 +352,7 @@ export function ScheduleMeetingDialog({
                   <Video
                     className={`h-4 w-4 mt-0.5 shrink-0 ${
                       conferenceProvider === 'google_meet' && isGoogleConnected
-                        ? 'text-indigo-600'
+                        ? 'text-brand-600'
                         : 'text-slate-400'
                     }`}
                   />
@@ -378,7 +378,7 @@ export function ScheduleMeetingDialog({
                   onClick={() => setConferenceProvider('manual')}
                   className={`flex items-start gap-2.5 p-3 rounded-lg border text-left transition-all ${
                     conferenceProvider === 'manual'
-                      ? 'border-indigo-600 bg-indigo-50/50 ring-1 ring-indigo-600 text-slate-900'
+                      ? 'border-brand-600 bg-brand-50/50 ring-1 ring-brand-600 text-slate-900'
                       : 'border-slate-200 bg-white hover:border-slate-300 text-slate-700'
                   }`}
                   data-testid="provider-manual-option"
@@ -398,24 +398,24 @@ export function ScheduleMeetingDialog({
 
             {conferenceProvider === 'google_meet' && isGoogleConnected ? (
               <div
-                className="p-3 bg-indigo-50/60 rounded-md border border-indigo-100 text-xs text-indigo-900 space-y-1"
+                className="p-3 bg-brand-50/60 rounded-md border border-brand-100 text-xs text-brand-900 space-y-1"
                 data-testid="google-meet-provisioning-notice"
               >
                 <p className="font-medium flex items-center gap-1.5">
-                  <Video className="h-3.5 w-3.5 text-indigo-600" />
-                  Automatic Meeting Provisioning
+                  <Video className="h-3.5 w-3.5 text-brand-600" />
+                  Google Meet link
                 </p>
-                <p className="text-indigo-700">
-                  ManageX will provision a video conference container on the organisation's Google Calendar.
-                  Attendee emails are not shared with Google; participants join securely through ManageX.
+                <p className="text-brand-700">
+                  A Google Meet link will be created using your organisation’s Google Calendar.
+                  Participants can join from the meeting page. Their email addresses stay out of the Google Calendar guest list.
                 </p>
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="schedule-meeting-dialog-virtual-url" className="block text-sm font-medium text-slate-700 mb-1">
                   Virtual Meeting URL <span className="text-red-500">*</span>
                 </label>
-                <Input
+                <Input id="schedule-meeting-dialog-virtual-url"
                   type="url"
                   value={virtualUrl}
                   onChange={(e) => setVirtualUrl(e.target.value)}

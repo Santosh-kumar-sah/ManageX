@@ -358,7 +358,7 @@ describe('JudgeWorkspacePage & Scoring UI — Phase 4F Focused Suite', () => {
     // 10a. Fails closed when missing evaluation scope
     const unauthenticatedHtml = renderWorkspace('/app/judge/evaluations');
     expect(unauthenticatedHtml).toContain('Judge workspace');
-    expect(unauthenticatedHtml).toContain('No organisation-wide access or event discovery is granted');
+    expect(unauthenticatedHtml).toContain('Your invitation gives you access to the sessions assigned to your panel');
 
     // 10b. Renders assigned-session loading state when scope is provided
     const scopedHtml = renderWorkspace('/app/judge/evaluations/org-1/event-1/round-1');

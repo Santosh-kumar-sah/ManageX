@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
+import { Card, CardHeader, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { FormField } from '@/components/ui/FormField';
 import { Button } from '@/components/ui/Button';
@@ -59,7 +59,7 @@ export function LoginPage() {
       if (err instanceof ApiError) {
         setErrorMessage(err.message);
       } else {
-        setErrorMessage('Unable to connect to authentication service. Please try again.');
+        setErrorMessage('Unable to sign in right now. Please try again.');
       }
     } finally {
       setIsLoading(false);
@@ -67,65 +67,64 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-card">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Sign In to ManageX</CardTitle>
-          <CardDescription>
-            Enter your email and password to access your account.
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            {errorMessage && (
-              <Alert variant="error" title="Sign In Failed">
-                {errorMessage}
-              </Alert>
-            )}
+    <Card className="mx-auth-panel">
+      <CardHeader className="mx-auth-heading">
+        <h1 className="mx-auth-title">Sign In to ManageX</h1>
+        <CardDescription>
+          Access your events and workspaces.
+        </CardDescription>
+      </CardHeader>
+      <form onSubmit={handleSubmit}>
+        <CardContent className="mx-auth-fields space-y-4">
+          {errorMessage && (
+            <Alert variant="error" title="Couldn’t sign in">
+              {errorMessage}
+            </Alert>
+          )}
 
-            <FormField label="Email address" htmlFor="email" required>
-              <Input
-                id="email"
-                type="email"
-                placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </FormField>
+          <FormField label="Email address" htmlFor="email" required>
+            <Input
+              id="email"
+              autoComplete="email"
+              type="email"
+              placeholder="name@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </FormField>
 
-            <FormField label="Password" htmlFor="password" required>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={isLoading}
-              />
-            </FormField>
+          <FormField label="Password" htmlFor="password" required>
+            <Input
+              id="password"
+              autoComplete="current-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+          </FormField>
 
-            <div className="flex items-center justify-end text-xs">
-              <Link to="/auth/forgot-password" className="text-brand-600 hover:text-brand-700 font-medium">
-                Forgot password?
-              </Link>
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Signing In...' : 'Sign In'}
-            </Button>
-            <div className="text-xs text-center text-slate-500">
-              Don't have an account?{' '}
-              <Link to="/auth/register" className="text-brand-600 hover:text-brand-700 font-semibold">
-                Register
-              </Link>
-            </div>
-          </CardFooter>
-        </form>
-      </Card>
-    </div>
+          <div className="flex items-center justify-end text-sm">
+            <Link to="/auth/forgot-password" className="text-brand-600 hover:text-brand-700 font-medium">
+              Forgot password?
+            </Link>
+          </div>
+        </CardContent>
+        <CardFooter className="mx-auth-actions flex flex-col gap-3">
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? 'Signing in…' : 'Sign in'}
+          </Button>
+          <div className="text-sm text-center text-slate-500">
+            Don't have an account?{' '}
+            <Link to="/auth/register" className="text-brand-600 hover:text-brand-700 font-semibold">
+              Register
+            </Link>
+          </div>
+        </CardFooter>
+      </form>
+    </Card>
   );
 }
-

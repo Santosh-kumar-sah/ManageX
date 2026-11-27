@@ -34,12 +34,12 @@ describe('Event Portal & Student Experience Suite', () => {
       expect(html).toContain('Events');
       // Contains platform home link
       expect(html).toContain('href="/"');
-      expect(html).toContain('Platform Home');
-      // Unauthenticated state shows Sign In
-      expect(html).toContain('Sign In');
+      expect(html).toContain('ManageX home');
+      // Unauthenticated state shows Sign in
+      expect(html).toContain('Sign in');
     });
 
-    it('2. Authenticated participant sees profile greeting, dashboard link, and Log Out', () => {
+    it('2. Authenticated participant sees profile greeting, dashboard link, and Sign out', () => {
       vi.spyOn(AuthModule, 'useAuth').mockReturnValue({
         user: {
           id: 'user-std-1',
@@ -62,13 +62,13 @@ describe('Event Portal & Student Experience Suite', () => {
 
       // Should show user identity
       expect(html).toContain('Alex Student');
-      // Should show My Dashboard navigation
+      // Should show My events navigation
       expect(html).toContain('href="/events/dashboard"');
-      expect(html).toContain('My Dashboard');
-      // Should show Log Out
-      expect(html).toContain('Log Out');
-      // Should NOT show Sign In or Get Started
-      expect(html).not.toContain('>Sign In<');
+      expect(html).toContain('My events');
+      // Should show Sign out
+      expect(html).toContain('Sign out');
+      // Should NOT show Sign in or Get Started
+      expect(html).not.toContain('>Sign in<');
     });
   });
 
@@ -101,10 +101,10 @@ describe('Event Portal & Student Experience Suite', () => {
         </MemoryRouter>
       );
 
-      expect(html).toContain('Participant Dashboard');
+      expect(html).toContain('My events');
       expect(html).toContain('Alex Student');
-      expect(html).toContain('No Event Registrations Yet');
-      expect(html).toContain('Browse Upcoming Events');
+      expect(html).toContain('No registrations yet');
+      expect(html).toContain('Browse public events');
     });
   });
 
@@ -116,10 +116,13 @@ describe('Event Portal & Student Experience Suite', () => {
         </MemoryRouter>
       );
 
-      expect(html).toContain('Events &amp; Hackathons');
-      expect(html).toContain('Search events by title or keywords...');
+      expect(html).toContain('Events &amp; hackathons');
+      expect(html).toContain('Search public events');
+      expect(html).toContain('for="public-event-search"');
+      expect(html).toContain('aria-pressed="true"');
+      expect(html).toContain('role="status"');
       expect(html).toContain('Hackathons');
-      expect(html).toContain('General Events');
+      expect(html).toContain('General events');
     });
   });
 });

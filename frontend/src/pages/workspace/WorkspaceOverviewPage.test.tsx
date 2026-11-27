@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
+import { WorkspaceToolsContext } from './workspaceTools';
 import { WorkspaceOverviewPage } from './WorkspaceOverviewPage';
 
 // Mock useOrg hook to test with active organisation context
@@ -85,28 +86,38 @@ describe('Stage 2 — Workspace Overview & Dashboard UX', () => {
     expect(html).not.toContain('View Placeholder Shell');
   });
 
-  it('4. Uses dynamic organisation routes rather than hardcoded demo-org', () => {
+  it('links to enabled workspace tools and marks unavailable tools without a link', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
-        <WorkspaceOverviewPage />
+        <WorkspaceToolsContext.Provider value={{ orgId: 'org-test-123', canOpenSettings: true, tools: [
+          { slug: 'events', isEnabled: true, isPlatformAvailable: true },
+          { slug: 'meetings', isEnabled: false, isPlatformAvailable: true },
+          { slug: 'projects', isEnabled: true, isPlatformAvailable: false },
+        ] }}>
+          <WorkspaceOverviewPage />
+        </WorkspaceToolsContext.Provider>
       </MemoryRouter>
     );
-
-    expect(html).not.toContain('demo-org');
-    expect(html).toContain('/app/organisations/org-test-123/events');
-    expect(html).toContain('/app/organisations/org-test-123/meetings');
-    expect(html).toContain('/app/organisations/org-test-123/projects');
+    expect(html).toContain('href="/app/organisations/org-test-123/events"');
+    expect(html).toContain('href="/app/organisations/org-test-123/modules"');
+    expect(html).not.toContain('href="/app/organisations/org-test-123/meetings"');
+    expect(html).not.toContain('href="/app/organisations/org-test-123/projects"');
+    expect(html).toContain('Projects &amp; Tasks');
   });
 
-  it('5. Renders honest, customer-friendly empty state for activity', () => {
+  it('shows loading while real tools are unknown, including after switching organisations', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
-        <WorkspaceOverviewPage />
+        <WorkspaceToolsContext.Provider value={{ orgId: 'previous-org', tools: [
+          { slug: 'meetings', isEnabled: true, isPlatformAvailable: true },
+        ] }}>
+          <WorkspaceOverviewPage />
+        </WorkspaceToolsContext.Provider>
       </MemoryRouter>
     );
-
-    expect(html).toContain('No recent activity logged yet');
-    expect(html).not.toContain('subsequent phases');
+    expect(html).toContain('Loading workspace tools');
+    expect(html).not.toContain('href="/app/organisations/org-test-123/meetings"');
+    expect(html).not.toContain('No recent activity logged yet');
   });
 
   it('6. Renders truthful zero-organisation empty state with Create Organisation for regular users', async () => {
@@ -127,9 +138,9 @@ describe('Stage 2 — Workspace Overview & Dashboard UX', () => {
       </MemoryRouter>
     );
 
-    expect(html).toContain('No Organisation Workspace');
-    expect(html).toContain('You do not currently belong to any organisation workspace.');
-    expect(html).toContain('Create Organisation');
+    expect(html).toContain('Personal workspace');
+    expect(html).toContain('href="/events/dashboard"');
+    expect(html).toContain('Create organisation');
     expect(html).not.toContain('hackathon participant');
   });
 
@@ -168,8 +179,8 @@ describe('Stage 2 — Workspace Overview & Dashboard UX', () => {
       </MemoryRouter>
     );
 
-    expect(html).toContain('Platform Administrator Workspace');
-    expect(html).toContain('Open Operator Console');
-    expect(html).toContain('Create Organisation');
+    expect(html).toContain('Platform workspace');
+    expect(html).toContain('Open platform administration');
+    expect(html).toContain('Create organisation');
   });
 });

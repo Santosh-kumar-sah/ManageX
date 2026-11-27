@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
+import { useEffect, useState } from 'react';
+import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Alert } from '@/components/ui/Alert';
-import { X, CheckSquare } from 'lucide-react';
 import { apiClient, ApiError } from '@/api/client';
 import {
   TaskItem,
@@ -43,6 +42,10 @@ export function CreateTaskDialog({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isOpen) setStatus(initialStatus);
+  }, [isOpen, initialStatus]);
 
   if (!isOpen) return null;
 
@@ -104,38 +107,9 @@ export function CreateTaskDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-task-title"
-    >
-      <Card className="w-full max-w-lg shadow-xl border-neutral-200">
-        <CardHeader className="flex flex-row items-center justify-between border-b border-neutral-100 pb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-              <CheckSquare className="w-5 h-5" />
-            </div>
-            <div>
-              <CardTitle id="create-task-title" className="text-lg">
-                Create New Task
-              </CardTitle>
-              <CardDescription>
-                Add a task to the project backlog or assign it to a team member.
-              </CardDescription>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-neutral-400 hover:text-neutral-600 p-1 rounded-md transition-colors"
-            aria-label="Close dialog"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </CardHeader>
+    <Dialog isOpen={isOpen} onClose={() => !isSubmitting && onClose()} title="Create task" className="project-dialog">
 
-        <CardContent className="pt-5">
+        <div className="pt-5">
           {errorMsg && (
             <div className="mb-4">
               <Alert variant="error" title="Task Creation Failed">
@@ -178,7 +152,7 @@ export function CreateTaskDialog({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Technical details, acceptance criteria, or implementation notes..."
                 disabled={isSubmitting}
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-50"
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:opacity-50"
               />
             </div>
 
@@ -195,7 +169,7 @@ export function CreateTaskDialog({
                   value={status}
                   onChange={(e) => setStatus(e.target.value as TaskStatus)}
                   disabled={isSubmitting}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
                 >
                   {(['backlog', 'todo', 'in_progress', 'blocked'] as TaskStatus[]).map((st) => (
                     <option key={st} value={st}>
@@ -217,7 +191,7 @@ export function CreateTaskDialog({
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as TaskPriority)}
                   disabled={isSubmitting}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                  className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
                 >
                   {(['low', 'medium', 'high', 'urgent'] as TaskPriority[]).map((p) => (
                     <option key={p} value={p}>
@@ -240,7 +214,7 @@ export function CreateTaskDialog({
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
                 disabled={isSubmitting}
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white"
               >
                 <option value="">Unassigned</option>
                 {projectMembers.map((m) => (
@@ -250,7 +224,7 @@ export function CreateTaskDialog({
                 ))}
               </select>
               <p className="mt-1 text-xs text-neutral-500">
-                Only active project members can be assigned tasks (PRJ-004).
+                Choose someone from the project team.
               </p>
             </div>
 
@@ -302,8 +276,7 @@ export function CreateTaskDialog({
               </Button>
             </div>
           </form>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+    </Dialog>
   );
 }

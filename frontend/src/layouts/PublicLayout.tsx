@@ -1,195 +1,139 @@
-import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Layers, LogOut } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import { Avatar } from '@/components/ui/Avatar';
-import { ColdStartBanner } from '@/components/ui/ColdStartBanner';
+﻿import { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigationType } from 'react-router-dom';
+import { ChevronDown, Menu, X } from 'lucide-react';
 import { useAuth } from '@/api/AuthContext';
 import { useOrg } from '@/api/OrgContext';
+import { Avatar } from '@/components/ui/Avatar';
+import { Brand } from '@/components/ui/Brand';
+import { ColdStartBanner } from '@/components/ui/ColdStartBanner';
+import './PublicLayout.css';
 
-export function PublicLayout() {
+const publicLinks = [
+  { label: 'Product', to: '/modules' },
+  { label: 'Events', to: '/events' },
+  { label: 'Security & privacy', to: '/security' },
+];
+
+function PublicHeader() {
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
   const { organisations } = useOrg();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const header = useRef<HTMLElement>(null);
+  const signedIn = isAuthenticated && user;
+  const returnState = { from: { pathname: location.pathname } };
 
-  const navLinks = [
-    { label: 'Overview', href: '/' },
-    { label: 'Modules', href: '/modules' },
-    { label: 'Security & Privacy', href: '/security' },
-  ];
+  useEffect(() => {
+    if (!menuOpen) return;
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (event.target instanceof Node && !header.current?.contains(event.target)) setMenuOpen(false);
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        menuButton.current?.focus();
+      }
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [menuOpen]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface-subtle">
-      <ColdStartBanner />
-
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 border-b border-border bg-white/95 backdrop-blur-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2.5 text-slate-900 font-bold text-lg tracking-tight">
-              <div className="h-8 w-8 rounded-lg bg-brand-600 flex items-center justify-center text-white shadow-sm">
-                <Layers className="h-5 w-5" />
-              </div>
-              <span>ManageX</span>
-            </Link>
-
-            <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-              {navLinks.map((link) => {
-                const isActive =
-                  link.href === '/'
-                    ? location.pathname === '/'
-                    : location.pathname.startsWith(link.href);
-                return (
-                  <Link
-                    key={link.href}
-                    to={link.href}
-                    className={`transition-colors ${
-                      isActive ? 'text-brand-600 font-semibold' : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {link.label}
-                  </Link>
-                );
-              })}
+    <header className="mx-public-header" ref={header}
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setMenuOpen(false);
+      }}>
+      <div className="mx-public-bar mx-public-width">
+        <Link to="/" aria-label="ManageX home" className="mx-public-brand"><Brand /></Link>
+        <nav aria-label="Main navigation" className="mx-public-nav">
+          {publicLinks.map(({ to, label }) => <NavLink key={to} to={to}>{label}</NavLink>)}
+        </nav>
+        <div className="mx-public-access">
+          {!signedIn && <Link to="/auth/login" state={returnState} className="mx-sign-in">Sign in</Link>}
+          <button type="button" className={signedIn ? 'mx-account-toggle' : 'mx-mobile-toggle'} ref={menuButton}
+            aria-controls="public-navigation-menu" aria-expanded={menuOpen}
+            aria-label={signedIn ? 'Account and navigation' : 'Navigation menu'}
+            onClick={() => setMenuOpen(open => !open)}>
+            {signedIn ? (
+              <>
+                <Avatar name={user.fullName || user.email} size="sm" />
+                <span className="mx-account-name">{user.fullName || user.email}</span>
+                <ChevronDown size={16} aria-hidden="true" />
+              </>
+            ) : menuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+          </button>
+          <div className="mx-public-menu" id="public-navigation-menu" hidden={!menuOpen}>
+            <nav className="mx-mobile-nav" aria-label="Mobile navigation">
+              {publicLinks.map(({ to, label }) => <NavLink key={to} to={to}>{label}</NavLink>)}
             </nav>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {isAuthenticated && user ? (
-              <div className="flex items-center gap-3">
-                <Link
-                  to={organisations.length > 0 ? '/app' : '/events/dashboard'}
-                  className="flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors"
-                >
-                  <Avatar name={user.fullName || user.email} size="sm" />
-                  <span className="font-semibold text-slate-900 hidden sm:inline">
-                    {user.fullName || user.email}
-                  </span>
-                </Link>
-                {organisations.length > 0 ? (
-                  <>
-                    <Link to="/app">
-                      <Button variant="outline" size="sm">
-                        Workspace
-                      </Button>
-                    </Link>
-                    <Link to="/events/dashboard">
-                      <Button variant="ghost" size="sm" className="hidden sm:inline-flex text-xs text-slate-600">
-                        Participant Dashboard
-                      </Button>
-                    </Link>
-                  </>
-                ) : (
-                  <Link to="/events/dashboard">
-                    <Button variant="outline" size="sm">
-                      Participant Dashboard
-                    </Button>
-                  </Link>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => logout('/')}
-                  className="text-slate-600 hover:text-red-600 gap-1.5"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline">Log Out</span>
-                </Button>
+            {signedIn ? (
+              <div className="mx-account-links">
+                {organisations.length > 0 && <Link to="/app">Workspace</Link>}
+                <Link to="/events/dashboard">My events</Link>
+                <button type="button" onClick={() => logout('/')}>Sign out</button>
               </div>
-            ) : (
-              <div className="flex items-center gap-2.5">
-                <Link to="/auth/login" state={{ from: { pathname: location.pathname } }}>
-                  <Button variant="ghost" size="sm">
-                    Sign In
-                  </Button>
-                </Link>
-                <Link to="/auth/register" state={{ from: { pathname: location.pathname } }}>
-                  <Button size="sm">
-                    Get Started
-                  </Button>
-                </Link>
-              </div>
-            )}
+            ) : <Link to="/auth/register" state={returnState}>Create account</Link>}
           </div>
         </div>
-      </header>
+      </div>
+    </header>
+  );
+}
 
-      {/* Content Area */}
-      <main className="flex-1">
+export function PublicLayout() {
+  const location = useLocation();
+  const navigationType = useNavigationType();
+  const accountPage = location.pathname.startsWith('/auth/') || location.pathname.startsWith('/invitations/');
+  const showAccountArt = location.pathname === '/auth/login' || location.pathname === '/auth/register';
+
+  useEffect(() => {
+    if (location.hash) {
+      const target = document.getElementById(location.hash.slice(1));
+      if (target) {
+        target.scrollIntoView({ block: 'start' });
+        if (target.hasAttribute('tabindex')) target.focus({ preventScroll: true });
+      }
+    } else if (navigationType !== 'POP') {
+      window.scrollTo(0, 0);
+    }
+  }, [location.key, location.hash, navigationType]);
+
+  return (
+    <div className="mx-public-shell">
+      <a className="mx-skip" href="#public-content">Skip to content</a>
+      <ColdStartBanner />
+      <PublicHeader key={location.key} />
+      <main id="public-content" tabIndex={-1} className="mx-public-main">
+        {accountPage ? (
+          <div className={showAccountArt ? 'mx-auth-layout mx-auth-with-art' : 'mx-auth-layout'}>
+            <Outlet />
+          </div>
+        ) : (
         <Outlet />
+        )}
       </main>
-
-      {/* Enterprise Footer */}
-      <footer className="border-t border-border bg-white text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div className="space-y-3 md:col-span-1">
-              <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
-                <div className="h-6 w-6 rounded-md bg-brand-600 flex items-center justify-center text-white text-xs font-bold">
-                  M
-                </div>
-                <span>ManageX Platform</span>
-              </div>
-              <p className="text-slate-500 leading-relaxed text-xs">
-                Unified operations and workspace management for teams, educational institutions, and growing organizations.
-              </p>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Core Modules</h4>
-              <ul className="space-y-2">
-                <li>
-                  <Link to="/modules" className="hover:text-brand-600 transition-colors">Events & Hackathons</Link>
-                </li>
-                <li>
-                  <Link to="/modules" className="hover:text-brand-600 transition-colors">Meetings & Minutes</Link>
-                </li>
-                <li>
-                  <Link to="/modules" className="hover:text-brand-600 transition-colors">Projects & Tasks</Link>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Platform & Trust</h4>
-              <ul className="space-y-2">
-                <li>
-                  <Link to="/security" className="hover:text-brand-600 transition-colors">Security Architecture</Link>
-                </li>
-                <li>
-                  <Link to="/security" className="hover:text-brand-600 transition-colors">Workspace Isolation</Link>
-                </li>
-                <li>
-                  <Link to="/security" className="hover:text-brand-600 transition-colors">Role-Based Access</Link>
-                </li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3">Access</h4>
-              <ul className="space-y-2">
-                <li>
-                  <Link to="/events" className="hover:text-brand-600 transition-colors">Browse Public Events</Link>
-                </li>
-                <li>
-                  <Link to="/auth/login" className="hover:text-brand-600 transition-colors">Sign In to Workspace</Link>
-                </li>
-                <li>
-                  <Link to="/auth/register" className="hover:text-brand-600 transition-colors">Create Free Account</Link>
-                </li>
-                <li>
-                  <Link to="/app" className="hover:text-brand-600 transition-colors">Go to Workspace</Link>
-                </li>
-              </ul>
-            </div>
+      <footer className="mx-public-footer">
+        <div className="mx-public-width mx-footer-content">
+          <div className="mx-footer-brand">
+            <Link to="/" aria-label="ManageX home"><Brand /></Link>
+            <small>© {new Date().getFullYear()} ManageX</small>
           </div>
-
-          <div className="border-t border-border mt-10 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-400">
-            <p>© {new Date().getFullYear()} ManageX Platform. All rights reserved.</p>
-            <p className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
-              <span>All Systems Operational • Organisation-level access controls</span>
-            </p>
-          </div>
+          <nav aria-label="Product links">
+            <Link to="/modules#events">Events &amp; hackathons</Link>
+            <Link to="/modules#meetings">Meetings</Link>
+            <Link to="/modules#projects">Projects &amp; tasks</Link>
+          </nav>
+          <nav aria-label="Account and privacy links">
+            <Link to="/events">Browse public events</Link>
+            <Link to="/security">Security &amp; privacy</Link>
+            <Link to="/auth/register">Create account</Link>
+            <Link to="/app">Open workspace</Link>
+          </nav>
         </div>
       </footer>
     </div>
